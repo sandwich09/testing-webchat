@@ -1,0 +1,5 @@
+# Not a monorepo: this file only holds pnpm settings.
+# pnpm 10 skips dependency install scripts by default. pnpm reports
+# esbuild, @prisma/engines and prisma; none is needed (esbuild ships its binary as an
+# optional dependency, and the Prisma CLI fetches its engines when a command needs them).
+onlyBuiltDependencies: []
