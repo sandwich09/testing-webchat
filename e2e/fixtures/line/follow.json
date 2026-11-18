@@ -1,0 +1,22 @@
+{
+  "destination": "{{destination}}",
+  "events": [
+    {
+      "type": "follow",
+      "mode": "active",
+      "timestamp": "{{timestamp}}",
+      "source": {
+        "type": "user",
+        "userId": "{{userId}}"
+      },
+      "webhookEventId": "{{webhookEventId}}",
+      "deliveryContext": {
+        "isRedelivery": false
+      },
+      "replyToken": "{{replyToken}}",
+      "follow": {
+        "isUnblocked": false
+      }
+    }
+  ]
+}

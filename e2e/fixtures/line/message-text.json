@@ -1,0 +1,25 @@
+{
+  "destination": "{{destination}}",
+  "events": [
+    {
+      "type": "message",
+      "mode": "active",
+      "timestamp": "{{timestamp}}",
+      "source": {
+        "type": "user",
+        "userId": "{{userId}}"
+      },
+      "webhookEventId": "{{webhookEventId}}",
+      "deliveryContext": {
+        "isRedelivery": false
+      },
+      "replyToken": "{{replyToken}}",
+      "message": {
+        "id": "{{messageId}}",
+        "type": "text",
+        "quoteToken": "stub-quote-token",
+        "text": "{{text}}"
+      }
+    }
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "destination": "{{destination}}",
+  "events": [
+    {
+      "type": "message",
+      "mode": "active",
+      "timestamp": "{{timestamp}}",
+      "source": {
+        "type": "user",
+        "userId": "{{userId}}"
+      },
+      "webhookEventId": "{{webhookEventId}}",
+      "deliveryContext": {
+        "isRedelivery": false
+      },
+      "replyToken": "{{replyToken}}",
+      "message": {
+        "id": "{{messageId}}",
+        "type": "text",
+        "quoteToken": "stub-quote-token",
+        "text": "{{text}}"
+      }
+    },
+    {
+      "type": "message",
+      "mode": "active",
+      "timestamp": "{{timestamp}}",
+      "source": {
+        "type": "user",
+        "userId": "{{userId}}"
+      },
+      "webhookEventId": "{{webhookEventId2}}",
+      "deliveryContext": {
+        "isRedelivery": false
+      },
+      "replyToken": "{{replyToken}}",
+      "message": {
+        "type": "text",
+        "quoteToken": "stub-quote-token",
+        "text": "{{text}}"
+      }
+    },
+    {
+      "type": "message",
+      "mode": "active",
+      "timestamp": "{{timestamp}}",
+      "source": {
+        "type": "user",
+        "userId": "{{userId}}"
+      },
+      "webhookEventId": "{{webhookEventId3}}",
+      "deliveryContext": {
+        "isRedelivery": false
+      },
+      "replyToken": "{{replyToken}}",
+      "message": {
+        "id": "{{messageId2}}",
+        "type": "sticker",
+        "quoteToken": "stub-quote-token",
+        "packageId": "446",
+        "stickerId": "1988",
+        "stickerResourceType": "STATIC",
+        "keywords": ["happy"]
+      }
+    }
+  ]
+}
