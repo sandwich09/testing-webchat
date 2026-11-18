@@ -1,0 +1,273 @@
+/* Welcome page. Token colours come from app/globals.css (frontend.md "Design system"). The
+   brand gradient stops and the button gradient are written out here: they are allowed only on
+   this page. Layout numbers: docs/specs/ui-screens.md 2.2 and 2.5. */
+
+.cover {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: 16px;
+  overflow: hidden;
+  background: var(--brand-gradient);
+  font-family: var(--font-sans), 'Noto Sans Thai', system-ui, sans-serif;
+  color: var(--color-fg);
+}
+
+.circle {
+  position: absolute;
+  border-radius: 50%;
+  background: #fff;
+  pointer-events: none;
+}
+.circleA {
+  width: 420px;
+  height: 420px;
+  top: -120px;
+  left: -140px;
+  opacity: 0.12;
+}
+.circleB {
+  width: 260px;
+  height: 260px;
+  right: -80px;
+  bottom: -60px;
+  opacity: 0.1;
+}
+.circleC {
+  width: 140px;
+  height: 140px;
+  top: 12%;
+  right: 8%;
+  opacity: 0.16;
+}
+.circleD {
+  width: 90px;
+  height: 90px;
+  bottom: 14%;
+  left: 10%;
+  opacity: 0.14;
+}
+
+.card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 440px;
+  padding: 28px 20px;
+  border-radius: 26px;
+  background: var(--color-surface);
+  box-shadow: 0 24px 60px rgba(25, 19, 39, 0.18);
+  text-align: center;
+}
+
+.badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  /* Half-strength bubble-out keeps accent-strong text above 4.5:1 contrast. */
+  background: color-mix(in srgb, var(--color-bubble-out) 50%, var(--color-surface));
+  color: var(--color-accent-strong);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.title {
+  margin: 16px 0 0;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--color-fg);
+}
+
+.subtitle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 16px;
+  font-weight: 100;
+  line-height: 1.5;
+}
+
+.subtitleText {
+  /* The trailing letter-spacing is balanced with the same padding on the left. */
+  padding-left: 0.34em;
+  letter-spacing: 0.34em;
+  background-image:
+    linear-gradient(
+      105deg,
+      rgba(255, 255, 255, 0) 40%,
+      rgba(255, 255, 255, 0.85) 50%,
+      rgba(255, 255, 255, 0) 60%
+    ),
+    var(--brand-gradient-text);
+  background-size:
+    250% 100%,
+    100% 100%;
+  background-repeat: no-repeat;
+  background-position:
+    150% 0,
+    0 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  /* One pass of light across the letters, after a short wait. */
+  animation: sheen 1.6s ease-out 300ms 1 both;
+}
+
+@keyframes sheen {
+  from {
+    background-position:
+      150% 0,
+      0 0;
+  }
+  to {
+    background-position:
+      -50% 0,
+      0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .subtitleText {
+    animation: none;
+  }
+}
+
+.hairline {
+  width: 28px;
+  height: 1px;
+  flex: none;
+}
+.hairlineLeft {
+  background: linear-gradient(90deg, transparent, var(--color-line));
+}
+.hairlineRight {
+  background: linear-gradient(90deg, var(--color-line), transparent);
+}
+
+.form {
+  margin-top: 32px;
+}
+
+.field {
+  position: relative;
+}
+
+.input {
+  display: block;
+  width: 100%;
+  height: 50px;
+  padding: 0 52px 0 16px;
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  background: var(--color-rail);
+  color: var(--color-fg);
+  font: inherit;
+  font-size: 16px;
+  text-align: left;
+}
+.input::placeholder {
+  color: var(--color-muted);
+}
+.input[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+.input:focus-visible,
+.toggle:focus-visible,
+.submit:focus-visible {
+  outline: 2px solid var(--color-accent-strong);
+  outline-offset: 2px;
+}
+
+.toggle {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+.toggle:hover {
+  background: var(--color-selected);
+}
+
+.error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  /* Fixed height so the button does not jump when the message appears. */
+  height: 22px;
+  margin-top: 6px;
+  color: var(--color-danger);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.error > svg {
+  flex: none;
+}
+
+.submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 50px;
+  margin-top: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--brand-gradient-action);
+  color: #fff;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.submit:hover {
+  filter: brightness(1.06);
+}
+.submit[aria-busy='true'] {
+  cursor: progress;
+}
+
+.spinner {
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (min-width: 720px) {
+  .card {
+    padding: 40px;
+  }
+  .input {
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 719.98px) {
+  /* A phone keeps the card near the top so the keyboard does not cover the button. */
+  .cover {
+    place-items: start center;
+    padding-top: 64px;
+  }
+  .circleA {
+    width: 260px;
+    height: 260px;
+  }
+}

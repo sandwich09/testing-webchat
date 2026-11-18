@@ -1,0 +1,105 @@
+/* Design tokens come from docs/architecture/frontend.md ("Design system"); the colours are written
+   here and nowhere else in the code. The font family is NOT declared here: `next/font/local` sets
+   `--font-sans` on <html> (src/common/fonts/fonts.ts) and Tailwind's default `font-sans` reads it. */
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@theme {
+  --color-page: #f3f1f5;
+  --color-surface: #ffffff;
+  --color-rail: #faf8fb;
+  --color-selected: #f7eef3;
+  --color-line: #ece6eb;
+  --color-fg: #191327;
+  --color-muted: #6a6375;
+  --color-accent: #f0055a;
+  --color-accent-strong: #d6094f;
+  --color-chat: #f5f3f7;
+  --color-bubble-out: #ffe0ea;
+  --color-warn: #b04d05;
+  --color-danger: #c62828;
+  --color-success: #0b7a43;
+
+  /* shadcn/ui variable names mapped onto the tokens above (project-setup 6.5). shadcn's own
+     `accent` and `muted` are deliberately not mapped: those names are design tokens here. */
+  --color-background: var(--color-surface);
+  --color-foreground: var(--color-fg);
+  --color-primary: var(--color-accent-strong);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--color-surface);
+  --color-secondary-foreground: var(--color-fg);
+  --color-destructive: var(--color-danger);
+  --color-muted-foreground: var(--color-muted);
+  --color-border: var(--color-line);
+  --color-input: var(--color-line);
+  --color-ring: var(--color-accent);
+  --color-popover: var(--color-surface);
+  --color-popover-foreground: var(--color-fg);
+
+  /* Type scale of ui-screens 1.2: size, then line height. Only weights 100, 400 and 700 exist. */
+  --text-body: 15px;
+  --text-body--line-height: 1.55;
+  --text-name: 15px;
+  --text-name--line-height: 1.5;
+  --text-sub: 14px;
+  --text-sub--line-height: 1.5;
+  --text-meta: 12px;
+  --text-meta--line-height: 1.5;
+  --text-title: 20px;
+  --text-title--line-height: 1.4;
+  --text-section: 16px;
+  --text-section--line-height: 1.5;
+
+  /* Screen ranges (layout.constants.ts BP_NARROW and BP_WIDE): `medium:` from 720px, `wide:` from 1040px. */
+  --breakpoint-medium: 720px;
+  --breakpoint-wide: 1040px;
+}
+
+/* The brand gradient. frontend.md allows it in four places only: the welcome page background, the
+   logo, the welcome "enter" button and the decorative "application" text. */
+:root {
+  --brand-gradient: linear-gradient(100deg, #ff8a1f 0%, #ff3d45 42%, #f0055a 72%, #c90b5e 100%);
+  --brand-gradient-action: linear-gradient(90deg, #e01e37, #d0084e);
+  --brand-gradient-text: linear-gradient(90deg, #e01e37, #c90b5e);
+}
+
+@layer base {
+  html {
+    /* Never let the browser fake a bold or light face for weights the font does not ship. */
+    font-synthesis: none;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  * {
+    border-color: var(--color-line);
+  }
+
+  body {
+    background-color: var(--color-page);
+    color: var(--color-fg);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent-strong);
+    outline-offset: 2px;
+  }
+
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']) {
+    cursor: pointer;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
