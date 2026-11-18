@@ -1,0 +1,254 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/adapters/prisma/generated"
+  moduleFormat = "esm"
+  runtime      = "nodejs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum PoliteParticle {
+  kha
+  khrap
+}
+
+enum FollowStatus {
+  following
+  unfollowed
+}
+
+enum AiState {
+  idle
+  replying
+}
+
+enum HandoffReason {
+  customer_sent_image
+  customer_sent_video
+  customer_sent_non_text
+  budget_reached
+  ai_not_in_knowledge
+  ai_needs_human_action
+  ai_unsafe_or_offtopic
+  ai_other
+  ai_failed
+  ai_timeout
+}
+
+enum MessageDirection {
+  inbound
+  outbound
+  internal
+}
+
+enum MessageAuthor {
+  customer
+  admin
+  ai
+  system
+}
+
+enum MessageType {
+  text
+  image
+  video
+  sticker
+  other
+  event
+}
+
+enum OtherKind {
+  audio
+  file
+  location
+  unknown
+}
+
+enum MediaStatus {
+  pending
+  ready
+  failed
+  too_large
+}
+
+enum DeliveryStatus {
+  pending
+  sent
+  failed
+}
+
+enum KbStatus {
+  processing
+  ready
+  failed
+}
+
+enum AiUsageKind {
+  reply
+  ingest
+  guard
+}
+
+enum AiOutcome {
+  ok
+  handoff
+  refused
+  failed
+  cancelled
+  blocked
+}
+
+model Settings {
+  id                   Int            @id @default(1)
+  lineChannelSecretEnc String?
+  lineAccessTokenEnc   String?
+  lineBotName          String?
+  lineBasicId          String?
+  aiEnabled            Boolean        @default(false)
+  aiProvider           String         @default("claude")
+  aiModel              String         @default("claude-opus-5-5")
+  aiDailyBudgetUsd     Decimal        @default(2) @db.Decimal(18, 9)
+  aiPoliteParticle     PoliteParticle @default(kha)
+  aiInstructions       String         @default("")
+  guardEnabled         Boolean        @default(false)
+  guardTopics          String[]       @default([])
+  guardRefusalText     String         @default("คุยได้เฉพาะหัวข้อที่กำหนดไว้นะคะ")
+  lastWebhookAt        DateTime?      @db.Timestamptz(3)
+  lastLineError        String?
+  lastLineErrorAt      DateTime?      @db.Timestamptz(3)
+  lastAiError          String?
+  lastAiErrorAt        DateTime?      @db.Timestamptz(3)
+  updatedAt            DateTime       @db.Timestamptz(3)
+}
+
+model Contact {
+  id                  String         @id @db.Uuid
+  lineUserId          String         @unique
+  displayName         String?
+  pictureUrl          String?
+  followStatus        FollowStatus   @default(following)
+  followedAt          DateTime?      @db.Timestamptz(3)
+  aiEnabled           Boolean        @default(false)
+  needsAdmin          Boolean        @default(false)
+  needsAdminReason    HandoffReason?
+  aiState             AiState        @default(idle)
+  aiStateAt           DateTime?      @db.Timestamptz(3)
+  unreadCount         Int            @default(0)
+  lastMessageAt       DateTime?      @db.Timestamptz(3)
+  lastMessagePreview  String?
+  lastMessageBy       MessageAuthor?
+  lastMessageType     MessageType?
+  replyToken          String?
+  replyTokenExpiresAt DateTime?      @db.Timestamptz(3)
+  createdAt           DateTime       @db.Timestamptz(3)
+  updatedSeq          BigInt         @default(0)
+
+  messages Message[]
+  aiUsages AiUsage[]
+
+  @@index([lastMessageAt(sort: Desc)])
+  @@index([needsAdmin])
+  @@index([unreadCount])
+  @@index([updatedSeq])
+}
+
+model Message {
+  id               String           @id @db.Uuid
+  seq              BigInt           @unique @default(dbgenerated("nextval('change_seq')"))
+  updatedSeq       BigInt           @default(0)
+  contactId        String           @db.Uuid
+  direction        MessageDirection
+  author           MessageAuthor
+  type             MessageType
+  otherKind        OtherKind?
+  eventCode        String?
+  text             String?
+  mediaUrl         String?
+  previewUrl       String?
+  mediaStatus      MediaStatus?
+  stickerPackageId String?
+  stickerId        String?
+  lineMessageId    String?          @unique
+  deliveryStatus   DeliveryStatus?
+  deliveryError    String?
+  retryKey         String?          @db.Uuid
+  createdAt        DateTime         @db.Timestamptz(3)
+  sentAt           DateTime?        @db.Timestamptz(3)
+
+  contact  Contact   @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  aiUsages AiUsage[]
+
+  @@index([contactId, seq])
+  @@index([contactId, updatedSeq])
+}
+
+model WebhookEvent {
+  id             String   @id @db.Uuid
+  webhookEventId String   @unique
+  type           String
+  receivedAt     DateTime @db.Timestamptz(3)
+}
+
+model KbDocument {
+  id            String   @id @db.Uuid
+  fileName      String
+  sizeBytes     Int
+  sha256        String   @unique @db.Char(64)
+  pageCount     Int?
+  tokenCount    Int?
+  extractedText String?
+  status        KbStatus
+  error         String?
+  createdAt     DateTime @db.Timestamptz(3)
+  updatedAt     DateTime @db.Timestamptz(3)
+
+  aiUsages AiUsage[]
+
+  @@index([status])
+}
+
+model AiUsage {
+  id               String      @id @db.Uuid
+  kind             AiUsageKind
+  contactId        String?     @db.Uuid
+  messageId        String?     @db.Uuid
+  documentId       String?     @db.Uuid
+  provider         String
+  model            String
+  inputTokens      Int
+  outputTokens     Int
+  cacheReadTokens  Int         @default(0)
+  cacheWriteTokens Int         @default(0)
+  costUsd          Decimal     @db.Decimal(18, 9)
+  outcome          AiOutcome
+  error            String?
+  createdAt        DateTime    @db.Timestamptz(3)
+
+  contact  Contact?    @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  message  Message?    @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  document KbDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([contactId, createdAt])
+}
+
+model CannedReply {
+  id        String   @id @db.Uuid
+  title     String
+  text      String
+  sortOrder Int
+  createdAt DateTime @db.Timestamptz(3)
+  updatedAt DateTime @db.Timestamptz(3)
+
+  @@index([sortOrder])
+}
+
+model RateLimitBucket {
+  key         String   @id
+  windowStart DateTime @db.Timestamptz(3)
+  count       Int
+
+  @@index([windowStart])
+}
