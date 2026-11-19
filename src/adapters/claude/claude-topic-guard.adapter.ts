@@ -5,6 +5,7 @@ import { buildGuardClassifierPrompt, GUARD_TIMEOUT_MS, ok } from '@/core/domain'
 import type { TopicGuard, TopicGuardRequest } from '@/core/ports';
 import { CLAUDE_GUARD_MAX_RETRIES } from './claude.constants';
 import {
+  callOptions,
   type ClaudeAdapterOptions,
   createClaudeClient,
   mapClaudeError,
@@ -75,9 +76,10 @@ export const createClaudeTopicGuard = (options: ClaudeAdapterOptions): TopicGuar
   return {
     async classify(req) {
       try {
-        const message = await client.messages.create(buildGuardParams(req), {
-          timeout: req.timeoutMs,
-        });
+        const message = await client.messages.create(
+          buildGuardParams(req),
+          callOptions({ timeoutMs: req.timeoutMs, maxRetries: CLAUDE_GUARD_MAX_RETRIES }),
+        );
         // readMessage checks stop_reason before it reads any content.
         const { stop, text, usage, servedModel } = readMessage(message);
         return ok({

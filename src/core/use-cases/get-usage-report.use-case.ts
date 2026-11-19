@@ -15,6 +15,8 @@ export interface UsageReport {
   replyCount: number;
   /** null when there is no reply with outcome ok. */
   averageCostPerReply: NanoUsd | null;
+  /** Calls of every kind sent without an answer (ai.no_response): may be billed, cost unknown. */
+  noResponseCount: number;
 }
 
 export type GetUsageReportInput = { month: string };
@@ -30,10 +32,11 @@ export const makeGetUsageReport: (
   ({ usage }, config) =>
   async ({ month }) => {
     const range = requireBangkokMonthRange(month);
-    const [rows, ingest, guard] = await Promise.all([
+    const [rows, ingest, guard, noResponseCount] = await Promise.all([
       usage.reportByContact(range),
       usage.ingestSummary(range),
       usage.guardSummary(range),
+      usage.countNoResponse(range),
     ]);
 
     const replyCost = rows.reduce((sum, r) => sum + r.cost, 0n);
@@ -47,5 +50,6 @@ export const makeGetUsageReport: (
       totalCost: (replyCost + ingest.cost + guard.cost) as NanoUsd, // brand: sum of NanoUsd values
       replyCount: rows.reduce((sum, r) => sum + r.replyCount, 0),
       averageCostPerReply: okCount > 0 ? ((replyCost / BigInt(okCount)) as NanoUsd) : null, // brand: ratio of NanoUsd to a count
+      noResponseCount,
     });
   };

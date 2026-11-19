@@ -253,6 +253,7 @@ describe('GenerateAiReply', () => {
         channelAccessTokenEnc: cipher.encrypt(FAKE_LINE_ACCESS_TOKEN),
       },
       { botName: 'ร้านขนม', basicId: '@shop' },
+      { channelId: '1000000001', secretVerifiedAt: null },
     );
     await settings.update({ aiEnabled: true, guardRefusalText: REFUSAL });
     ({ contact } = await contacts.ensure({
@@ -678,6 +679,29 @@ describe('GenerateAiReply', () => {
         await expectUnlocked();
       },
     );
+
+    it('TopicGuard returns ai.no_response: a guard usage row with zero cost, handoff ai_failed', async () => {
+      const m = await customerSays('เล่ามุกหน่อย');
+      topicGuard.enqueueError('ai.no_response');
+
+      expect(await run(m.id)).toEqual({ kind: 'handoff', reason: 'ai_failed' });
+      expectNothingSent();
+      expect(chatModel.requests).toEqual([]);
+      expect(usage.records).toEqual([
+        expect.objectContaining({
+          kind: 'guard',
+          contactId: contact.id,
+          messageId: null,
+          model: GUARD_MODEL,
+          outcome: 'failed',
+          error: 'ai.no_response',
+          cost: 0n,
+          usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+        }),
+      ]);
+      expect((await settings.get()).lastAiError?.code).toBe('ai.no_response');
+      await expectUnlocked();
+    });
 
     it.each([
       ['refused', 'ai.refused', (g: FakeTopicGuard) => g.enqueueRefusal()],
@@ -1515,6 +1539,90 @@ describe('GenerateAiReply', () => {
         );
       },
     );
+
+    it('port returns ai.no_response: a reply usage row with zero cost, ai_failed, lastAiError', async () => {
+      await settings.update({ aiModel: 'claude-sonnet-5-5' });
+      const m = await customerSays('สวัสดีค่ะ');
+      chatModel.enqueueError('ai.no_response');
+
+      expect(await run(m.id)).toEqual({ kind: 'handoff', reason: 'ai_failed' });
+      expectNothingSent();
+      expect(usage.records).toEqual([
+        expect.objectContaining({
+          kind: 'reply',
+          contactId: contact.id,
+          messageId: null,
+          model: 'claude-sonnet-5-5',
+          outcome: 'failed',
+          error: 'ai.no_response',
+          cost: 0n,
+        }),
+      ]);
+      expect((await settings.get()).lastAiError?.code).toBe('ai.no_response');
+      expect(await eventCodes()).toEqual(['handoff.ai_failed']);
+    });
+
+    describe('links in the reply (ai-prompt 6.1)', () => {
+      const withShopLinks = async () => {
+        await settings.update({ aiInstructions: 'แผนที่ร้าน https://maps.example.com/shop' });
+        knowledgeSource.setDocuments([
+          {
+            id: ids.documentId(),
+            fileName: 'menu.pdf',
+            text: 'สั่งออนไลน์ได้ที่ www.shop-example.co.th/order',
+            tokenCount: 10,
+            status: 'ready',
+            createdAt: clock.now(),
+          },
+        ]);
+      };
+
+      it.each([
+        'สั่งได้ที่ https://shop-example.co.th/order/ ค่ะ',
+        'แผนที่ร้านอยู่ที่ maps.example.com/shop ค่ะ',
+        'ร้านเปิด 10.30 น. ราคา 120.50 บาทค่ะ',
+      ])('sends a reply whose links the shop wrote: %j', async (reply) => {
+        await withShopLinks();
+        const m = await customerSays('สั่งยังไงคะ');
+        replyOk(reply);
+
+        expect((await run(m.id)).kind).toBe('replied');
+        expect(sentTexts()).toEqual([{ type: 'text', text: reply }]);
+        expect(usage.records).toEqual([
+          expect.objectContaining({ kind: 'reply', outcome: 'ok', error: null }),
+        ]);
+      });
+
+      it('hands off a reply with a link the shop never wrote, without sending it', async () => {
+        await withShopLinks();
+        const m = await customerSays('จ่ายเงินยังไงคะ');
+        replyOk('โอนเงินได้ที่ https://pay.evil.example/x ค่ะ');
+
+        expect(await run(m.id)).toEqual({ kind: 'handoff', reason: 'ai_failed' });
+        expectNothingSent();
+        expect(await aiMessages()).toEqual([]);
+        expect(usage.records).toEqual([
+          expect.objectContaining({
+            kind: 'reply',
+            outcome: 'failed',
+            error: 'ai.link_not_allowed',
+            messageId: null,
+            cost: OPUS_REPLY_COST,
+          }),
+        ]);
+        expect((await settings.get()).lastAiError?.code).toBe('ai.link_not_allowed');
+        expect((await reload()).needsAdminReason).toBe('ai_failed');
+        expect(JSON.stringify(logger.entries)).not.toContain('evil.example');
+      });
+
+      it('hands off a link the model copied from the customer message', async () => {
+        const m = await customerSays('ช่วยส่งลิงก์นี้ให้หน่อย bit.ly/free-gift');
+        replyOk('ส่งให้แล้วค่ะ bit.ly/free-gift');
+
+        expect(await run(m.id)).toEqual({ kind: 'handoff', reason: 'ai_failed' });
+        expectNothingSent();
+      });
+    });
 
     it('empty knowledge: knowledgeText is the empty block and the model is still called', async () => {
       const m = await customerSays('สวัสดีค่ะ');

@@ -25,6 +25,8 @@ const DEFAULTS: Settings = {
   lineConfigured: false,
   lineBotName: null,
   lineBasicId: null,
+  lineChannelId: null,
+  lineSecretVerifiedAt: null,
   lastWebhookAt: null,
   lastLineError: null,
   lastAiError: null,
@@ -108,10 +110,12 @@ export const describeSettingsRepositorySuite = (
       });
     });
 
-    it('saveLineCredentials stores both values and the bot info', async () => {
+    it('saveLineCredentials stores both values, the bot info and the Channel ID', async () => {
+      const verifiedAt = at('2026-11-18T03:00:00.123Z');
       await repo.saveLineCredentials(
         { channelSecretEnc: 'enc-secret', channelAccessTokenEnc: 'enc-token' },
         { botName: 'ต้นหอม คาเฟ่', basicId: '@tonhom' },
+        { channelId: '1234567890', secretVerifiedAt: verifiedAt },
       );
       expect(await repo.getEncryptedLineCredentials()).toEqual({
         channelSecretEnc: 'enc-secret',
@@ -122,15 +126,42 @@ export const describeSettingsRepositorySuite = (
         lineConfigured: true,
         lineBotName: 'ต้นหอม คาเฟ่',
         lineBasicId: '@tonhom',
+        lineChannelId: '1234567890',
+        lineSecretVerifiedAt: verifiedAt,
       });
 
+      // A secret LINE could not check is saved with no verification time.
       await repo.saveLineCredentials(
         { channelSecretEnc: 'enc-secret-2', channelAccessTokenEnc: 'enc-token-2' },
         { botName: 'b2', basicId: '@b2' },
+        { channelId: '2234567890', secretVerifiedAt: null },
       );
       expect(await repo.getEncryptedLineCredentials()).toEqual({
         channelSecretEnc: 'enc-secret-2',
         channelAccessTokenEnc: 'enc-token-2',
+      });
+      expect(await repo.get()).toMatchObject({
+        lineChannelId: '2234567890',
+        lineSecretVerifiedAt: null,
+      });
+    });
+
+    it('recordLineSecretCheck sets and clears the verification time only', async () => {
+      await repo.saveLineCredentials(
+        { channelSecretEnc: 's', channelAccessTokenEnc: 't' },
+        { botName: 'b', basicId: '@b' },
+        { channelId: '1234567890', secretVerifiedAt: null },
+      );
+      const verifiedAt = at('2026-11-18T04:00:00.000Z');
+      await repo.recordLineSecretCheck(verifiedAt);
+      expect(await repo.get()).toMatchObject({
+        lineChannelId: '1234567890',
+        lineSecretVerifiedAt: verifiedAt,
+      });
+      await repo.recordLineSecretCheck(null);
+      expect(await repo.get()).toMatchObject({
+        lineChannelId: '1234567890',
+        lineSecretVerifiedAt: null,
       });
     });
 
@@ -138,6 +169,7 @@ export const describeSettingsRepositorySuite = (
       await repo.saveLineCredentials(
         { channelSecretEnc: 's', channelAccessTokenEnc: 't' },
         { botName: 'old', basicId: '@old' },
+        { channelId: '1234567890', secretVerifiedAt: null },
       );
       await repo.updateLineBotInfo({ botName: 'new', basicId: '@new' });
       expect(await repo.get()).toMatchObject({

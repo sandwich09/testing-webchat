@@ -55,6 +55,7 @@ export type LogEvent =
   | 'access.unlock.succeeded'
   | 'access.unlock.failed'
   | 'access.unlock.rate_limited'
+  | 'access.unlock.client_ip_missing'
   // Webhook and LINE
   | 'line.webhook.received'
   | 'line.webhook.signature_invalid'
@@ -63,10 +64,13 @@ export type LogEvent =
   | 'line.webhook.event_duplicate'
   | 'line.webhook.event_unsupported'
   | 'line.webhook.event_failed'
+  | 'line.webhook.batch_unstored'
   | 'line.profile.fetch_failed'
   | 'line.send.succeeded'
   | 'line.send.failed'
   | 'line.send.reply_token_rejected'
+  | 'line.send.stuck_recovered'
+  | 'line.send.retry_expired'
   | 'line.loading.failed'
   | 'line.credentials.saved'
   | 'line.credentials.rejected'
@@ -75,6 +79,8 @@ export type LogEvent =
   // Media and uploads
   | 'media.store.succeeded'
   | 'media.store.failed'
+  | 'media.store.not_ready'
+  | 'media.store.stuck_recovered'
   | 'upload.ticket.issued'
   | 'upload.ticket.rejected'
   | 'upload.file.discarded'
@@ -99,6 +105,7 @@ export type LogEvent =
   | 'knowledge.ingest.started'
   | 'knowledge.ingest.succeeded'
   | 'knowledge.ingest.failed'
+  | 'knowledge.ingest.stuck_recovered'
   | 'knowledge.document.deleted'
   // Settings and canned replies
   | 'settings.values.updated'

@@ -131,7 +131,14 @@ describe('other mappers', () => {
   });
 
   it('maps LINE credentials, local storage keys and the usage month', () => {
-    expect(toSetLineCredentialsInput({ channelSecret: 's', channelAccessToken: 't' })).toEqual({
+    expect(
+      toSetLineCredentialsInput({
+        channelId: '1234567890',
+        channelSecret: 's',
+        channelAccessToken: 't',
+      }),
+    ).toEqual({
+      channelId: '1234567890',
       channelSecret: 's',
       channelAccessToken: 't',
     });

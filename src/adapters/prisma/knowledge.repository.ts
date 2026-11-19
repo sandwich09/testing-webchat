@@ -1,4 +1,4 @@
-import { err, ok } from '@/core/domain';
+import { err, ok, type DocumentId } from '@/core/domain';
 import type { KnowledgeRepository } from '@/core/ports';
 import type { PrismaClient } from './prisma-client';
 import { toKbDocument, toKbDocumentWithText } from './knowledge.mapper';
@@ -120,6 +120,17 @@ export function createKnowledgeRepository(client: PrismaClient): KnowledgeReposi
         },
       });
       return count === 1;
+    },
+
+    // Recovery of a row whose extraction was stopped with its function (data-model rule 13). One
+    // UPDATE: a concurrent caller waits for the row lock, then no longer sees `processing`.
+    async failStuckProcessing(staleBefore, now) {
+      const rows = await client.$queryRaw<{ id: string }[]>`
+        UPDATE "KbDocument"
+        SET "status" = 'failed', "error" = 'knowledge.extract_interrupted', "updatedAt" = ${now}::timestamptz
+        WHERE "status" = 'processing' AND "updatedAt" < ${staleBefore}::timestamptz
+        RETURNING "id"`;
+      return rows.map((r) => r.id as DocumentId); // brand: ids returned by the KbDocument table
     },
 
     async delete(id) {

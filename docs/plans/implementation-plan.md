@@ -1,6 +1,6 @@
 # แผนการสร้าง
 
-> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-18
+> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-19
 
 ## วิธีทำงาน
 
@@ -84,13 +84,26 @@
 - [x] ตรวจว่าเอกสารตรงกับโค้ด และเปลี่ยนสถานะ spec เป็น "สร้างแล้ว" (T-7.1)
 - [ ] Tag `v1.0.0` (lead)
 
+## ปิดช่องว่างของ pitfalls: ส่วนที่ทำงานตอนรัน
+
+ขอบเขตอยู่ในตาราง "ช่องว่างที่ยังเหลือ" ของ [pitfalls-and-prevention](../guidelines/pitfalls-and-prevention.md#ช่องว่างที่ยังเหลือ) และ spec ที่ลิงก์จากแต่ละข้อ
+
+- [x] S1 key ของ cookie ผูกกับ `ACCESS_CODE` ([access-gate](../specs/access-gate.md#พฤติกรรม))
+- [x] S2 IP จากค่าสุดท้ายของ `x-forwarded-for` และถังของคำขอที่ไม่มี IP ([ADR 0022](../adr/0022-client-ip-from-last-forwarded-hop.md)) ยังต้องตรวจบน Vercel ตามตารางด้านล่าง
+- [x] S3 production ปฏิเสธค่าที่ใช้เฉพาะการทดสอบ ([project-setup ข้อ 6.10](../architecture/project-setup.md#610-envexample))
+- [x] M3 คืนสภาพไฟล์ที่ค้างอ่าน สื่อขาเข้าที่ค้าง และการส่งที่ค้าง (migration `message_delivery_attempt_at`)
+- [x] A2 เวลาแย่ที่สุดของงานหลังตอบอยู่ใต้ `maxDuration` และ test ตรึงอสมการ ([project-setup ข้อ 10.4](../architecture/project-setup.md#104-adapter-และ-route))
+- [x] A3 บันทึกการเรียกที่ไม่ได้คำตอบ ([usage-cost](../specs/usage-cost.md#การเรียกที่ไม่ได้คำตอบ))
+- [x] A4 ไม่ส่งลิงก์ที่ร้านไม่ได้เขียน ([ai-prompt ข้อ 6.1](../specs/ai-prompt.md#61-ลิงก์ในคำตอบ))
+- [ ] L4 และขีดจำกัดของ LINE: ทดสอบด้วยมือตาม [line-oa-setup](../runbooks/line-oa-setup.md#ทดสอบด้วยมือเมื่อมี-line-oa-จริง) เมื่อมี LINE OA จริง (เจ้าของงาน)
+
 ## สิ่งที่ต้องยืนยันก่อนหรือระหว่างสร้าง
 
 ข้อเหล่านี้มาจากความเข้าใจตอนออกแบบและยังไม่ได้ตรวจกับเอกสารปัจจุบัน เมื่อยืนยันแล้วให้แก้เอกสารที่เกี่ยวข้องและขีดออก ค่าของ constant ที่กระทบอยู่ใน [project-setup](../architecture/project-setup.md#10-ค่าคงที่ของระบบ)
 
 | เรื่อง | กระทบ |
 | --- | --- |
-| เพดานขนาด request และเวลาของ function บน Vercel แผนฟรี (route PDF ต้องการ `KNOWLEDGE_MAX_DURATION_S`, webhook ใช้ `WEBHOOK_MAX_DURATION_S`) | `PDF_MAX_BYTES`, `PDF_MAX_PAGES`, `CLAUDE_EXTRACT_TIMEOUT_MS` ใน [project-setup](../architecture/project-setup.md) และ [knowledge-base](../specs/knowledge-base.md) |
+| เพดานขนาด request และเวลาของ function บน Vercel แผนฟรี: route PDF และ webhook ตั้ง `maxDuration` 300 วินาที (`KNOWLEDGE_MAX_DURATION_S`, `WEBHOOK_MAX_DURATION_S`) ซึ่งต้องมี Fluid compute เปิดอยู่ ตรวจใน Settings › Functions ของโปรเจกต์ และดูใน log ของ Vercel ว่า function ที่ทำงานนานไม่ถูกตัดก่อน 300 วินาที ถ้าแผนให้น้อยกว่านี้ ให้ลดค่าทั้งสองและแก้ค่าใน [project-setup ข้อ 10.4](../architecture/project-setup.md#104-adapter-และ-route) จน `timing-budget.spec.ts` ผ่าน | `PDF_MAX_BYTES`, `PDF_MAX_PAGES`, `CLAUDE_EXTRACT_TIMEOUT_MS`, `CLAUDE_REPLY_TIMEOUT_MS`, `AI_MAX_ROUNDS_PER_RUN` ใน [project-setup](../architecture/project-setup.md) และ [knowledge-base](../specs/knowledge-base.md) |
 | ระยะเวลาเก็บ log ของ Vercel แผนฟรี | ส่วนสถานะระบบ |
 | โควตาของ Vercel Blob แผนฟรี | เพดานวิดีโอ `VIDEO_MAX_BYTES` |
 | Node 24 บน Vercel และ PostgreSQL 17 บน Neon | รุ่นที่ล็อก |
@@ -102,15 +115,15 @@
 | ชื่อ header และรูปแบบของการสลับโมเดลสำรองฝั่ง server | Adapter ของ Claude |
 | ราคา input และ output ของโมเดลสำรอง `claude-opus-5`, `claude-opus-4-8`, `claude-sonnet-5` | ตารางราคาใน [usage-cost](../specs/usage-cost.md) |
 | จำนวนข้อความสูงสุดต่อคำขอ reply หรือ push ของ LINE | `LINE_MAX_PARTS_PER_REQUEST` ใน [domain-and-ports](../architecture/domain-and-ports.md) |
-| รูปแบบคำตอบของ LINE เมื่อ reply token ใช้ไม่ได้ | `MessagingGateway.reply` ใน [domain-and-ports](../architecture/domain-and-ports.md), stub |
-| คำตอบของ LINE เมื่อ retry key ถูกรับไปแล้ว (สมมติ 409) | `MessagingGateway.push`, [stubs-and-fixtures](../qa/stubs-and-fixtures.md) |
+| คำตอบของ LINE เมื่อ retry key ถูกรับไปแล้ว (สมมติ 409 พร้อม `x-line-accepted-request-id`) และ "ส่งอีกครั้ง" ไม่ทำให้ลูกค้าได้ข้อความซ้ำ ทดสอบด้วยมือตามข้อ 1 และ 3 ของ [line-oa-setup](../runbooks/line-oa-setup.md#ทดสอบด้วยมือเมื่อมี-line-oa-จริง) | `MessagingGateway.push`, [stubs-and-fixtures](../qa/stubs-and-fixtures.md), การคืนสภาพการส่งที่ค้าง (`line.send_interrupted`) |
+| ข้อความ error จริงของ LINE, อายุจริงของ reply token, loading, วิดีโอขาเข้าและขาออก, host ของรูปโปรไฟล์และสติกเกอร์, `mode: standby`, ความยาวข้อความและจำนวนข้อความต่อคำขอ ทดสอบด้วยมือตามข้อ 2 และ 4 ถึง 9 ของ [line-oa-setup](../runbooks/line-oa-setup.md#ทดสอบด้วยมือเมื่อมี-line-oa-จริง) | `REPLY_TOKEN_USABLE_MS`, `LINE_TEXT_MAX_CHARS`, `LINE_MAX_PARTS_PER_REQUEST`, `IMAGE_MAX_BYTES`, `VIDEO_MAX_BYTES`, `PREVIEW_MAX_BYTES` |
 | การแยกโควตา push เต็มออกจาก 429 ของ LINE | `line.quota_exceeded` กับ `line.rate_limited` |
-| Endpoint ภาพตัวอย่างและ transcoding ของวิดีโอขาเข้าของ LINE | `MessagingGateway.downloadContent`, stub |
+| Endpoint ภาพตัวอย่างของวิดีโอขาเข้าของ LINE และวิดีโอจริงที่ได้ 202 ก่อน transcode เสร็จ | `MessagingGateway.downloadContent`, `getContentStatus`, stub |
 | ความหมายของ `events[].mode` (`standby`) และ `message.contentProvider.type` ของ webhook | [api-contract](../architecture/api-contract.md#post-apilinewebhook) |
 | รูปแบบ URL รูปสติกเกอร์ของ LINE และ host ใน CSP (`profile.line-scdn.net`, `stickershop.line-scdn.net`) | `MessageDto.sticker.imageUrl`, CSP ใน [project-setup](../architecture/project-setup.md#62-nextconfigts), สติกเกอร์ใน seed |
-| LINE ไม่มี API ตรวจ Channel secret | `SetLineCredentials` ใน [use-cases](../architecture/use-cases.md) |
 | รูปแบบของ `webhookEventId` และ field ของ fixture (`mode`, `quoteToken`, `stickerResourceType`, `keywords`, `follow.isUnblocked`) | [stubs-and-fixtures](../qa/stubs-and-fixtures.md) |
-| IP ของผู้เรียกบน Vercel มาจาก `x-forwarded-for` ตัวแรก | `RequestContext.clientIp` และการจำกัดความถี่ |
+| Vercel เขียน `x-forwarded-for` เป็น IP ที่ edge เห็น โดยแทนที่หรือต่อท้ายค่าที่ผู้เรียกส่งมา ค่าสุดท้ายจึงเป็นของ Vercel เสมอ ([ADR 0022](../adr/0022-client-ip-from-last-forwarded-hop.md)) ตรวจบน production: (1) ส่งรหัสผิดหกครั้งไปที่ `POST /api/access/unlock` แต่ละครั้งใส่ header `x-forwarded-for: 198.51.100.<n>` คนละค่า ครั้งที่หกต้องได้ 429 (2) ส่งรหัสผิดหนึ่งครั้งจากเครือข่ายอื่น (เช่นมือถือ) ทันทีหลังข้อ 1 ต้องได้ 401 ไม่ใช่ 429 (3) log ไม่มี `access.unlock.client_ip_missing` | `clientIpOf` ใน `src/composition/http-request.ts`, `RequestContext.clientIp` และการจำกัดความถี่ |
+| Production ไม่มี environment variable ที่ใช้เฉพาะการทดสอบ: deploy ครั้งแรกต้องผ่านการตรวจของ `assertEnv` เมื่อ `VERCEL_ENV=production` | [deploy](../runbooks/deploy.md#2-vercel) ขั้นที่ 3 |
 | ขนาด pool ของ connection แบบ pooled ของ Neon (สมมติ 5) | `prisma-client.ts` ใน [data-model](../architecture/data-model.md) |
 | SDK ของ Claude: `output_config.format` กับ `client.beta.messages.create` และ `parse` ของ beta | Adapter ของ Claude |
 | SDK ของ Claude: ใช้ `fallbacks` ร่วมกับ structured output ได้ | Adapter ของ Claude |
@@ -137,6 +150,7 @@
 | Docker ในสภาพแวดล้อมพัฒนา | เปิด daemon ได้ และดึง `postgres:17-alpine` กับ `node:24-alpine` ได้ | 2026-11-18 |
 | สัญญาอนุญาตของ LINE Seed Sans TH | ไฟล์รุ่น 1.003 ที่เจ้าของงานส่งมาระบุ SIL Open Font License 1.1 ใน metadata ของฟอนต์ จึงเก็บใน repo ได้ ดู [ADR 0018](../adr/0018-use-line-seed-sans-th.md) | 2026-11-18 |
 | Anthropic มี embedding ของตัวเองหรือไม่ | ไม่มี เอกสารทางการแนะนำผู้ให้บริการอื่น | 2026-11-18 |
+| ข้อเท็จจริงของ Messaging API ที่ใช้ออกแบบการส่งและการตั้งค่า | (1) reply ที่ token หมดอายุหรือถูกใช้แล้วได้ 400 ที่ `message` ตรงกับ `Invalid reply token` ส่วน 400 ของ body ผิดรูปมี `details[].property` (2) `X-Line-Retry-Key` ใช้กับ push รับ UUID version 4 และ 5 และ LINE จำ key ไว้ 24 ชั่วโมง (3) ดาวน์โหลดวิดีโอได้ 202 ระหว่าง transcode และมี endpoint `content/transcoding` (4) ตรวจ Channel secret ได้ด้วย `POST /v2/oauth/accessToken` แบบ client credentials และเพิกถอนด้วย `POST /v2/oauth/revoke` (5) "Webhook redelivery" ส่งซ้ำเฉพาะเมื่อไม่ได้ 2xx พร้อม `isRedelivery: true` และ `webhookEventId` เดิม (6) แผนฟรี push ได้ราว 300 ข้อความต่อเดือน reply ไม่นับ ดู [ADR 0023](../adr/0023-retry-key-v5-window-and-reply-400.md) ข้อความ error จริงและ version 7 ของ retry key ยังทดสอบตาม [line-oa-setup](../runbooks/line-oa-setup.md#ทดสอบด้วยมือเมื่อมี-line-oa-จริง) | 2026-11-19 |
 | แพ็กเกจแปลง HEIC | `heic-to` 1.6.7 (LGPL-3.0) มี export `.`, `./csp`, `./next` ดู [ADR 0019](../adr/0019-heic-conversion-with-heic-to.md) | 2026-11-18 |
 | SDK ของ Claude: header ของ API key | `@anthropic-ai/sdk` 1.10.0 ส่ง API key เป็น `Authorization: Bearer <key>` ไม่ใช่ `x-api-key` (ยืนยันจาก type และโค้ดของ client ใน SDK) stub จึงรับทั้งสองแบบ ตาม [stubs-and-fixtures](../qa/stubs-and-fixtures.md#51-การตรวจ) | 2026-11-18 |
 | SDK ของ Claude: usage เมื่อมีการสลับโมเดลสำรอง | ใน type ของ SDK 1.10.0 `usage.iterations` มีหนึ่งรายการต่อทุกรอบที่ถูกคิดเงิน (รอบที่โมเดลปฏิเสธเป็นรายการ `message` และรอบที่ตอบจริงเป็น `fallback_message`) ส่วน `usage` ระดับบนสุดนับเฉพาะรอบที่ตอบจริง adapter จึงรายงานผลรวมของ `iterations` และ `model` ของข้อความสุดท้าย ตาม [ai-prompt ข้อ 5.3](../specs/ai-prompt.md#53-การอ่านคำตอบของ-api) และ [usage-cost](../specs/usage-cost.md) | 2026-11-18 |

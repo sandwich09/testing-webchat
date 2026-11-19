@@ -1,6 +1,6 @@
 # Domain และ Port
 
-> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-18
+> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-19
 
 เอกสารนี้เป็นสัญญาของแกนกลาง: type ของ domain, ฟังก์ชันล้วน และ interface ของทุก port ผู้เขียน use case, adapter จริง และ adapter ปลอม ต้องยึดลายเซ็นและความหมายในไฟล์นี้ตรงตัว
 
@@ -93,6 +93,8 @@ export type AiProvider = "claude";
 export type AiModelId = "claude-opus-5-5" | "claude-sonnet-5-5" | "claude-haiku-5-5";
 export type PoliteParticle = "ค่ะ" | "ครับ";
 export type SendChannel = "reply" | "push";
+/** สิ่งที่รู้เกี่ยวกับ Channel secret ที่เก็บไว้ ดู specs/admin-backoffice.md */
+export type LineSecretStatus = "verified" | "unchecked" | "no_channel_id";
 export type RateLimitAction = "unlock" | "send_message" | "upload_ticket" | "pdf_ingest" | "typing" | "guard_test";
 
 /** เหตุผลที่โมเดลเลือกเมื่อ needsAdmin เป็น true ตาม ai-prompt.md ข้อ 5 */
@@ -168,6 +170,7 @@ export interface Message {
   retryKey: string | null;          // ขาออก: เท่ากับ id
   createdAt: Date;
   sentAt: Date | null;
+  firstPushAt: Date | null;         // ขาออก: เวลาที่ push ครั้งแรกเริ่ม ไม่เลื่อนเมื่อส่งอีกครั้ง null เมื่อยังไม่เคย push
 }
 
 export interface Settings {
@@ -183,6 +186,8 @@ export interface Settings {
   lineConfigured: boolean;          // มี credential ที่เข้ารหัสไว้ทั้งสองค่า
   lineBotName: string | null;
   lineBasicId: string | null;
+  lineChannelId: string | null;     // ไม่ใช่ความลับ null เมื่อบันทึกก่อนมีช่อง Channel ID
+  lineSecretVerifiedAt: Date | null; // เวลาที่ LINE ยืนยันคู่ Channel ID กับ secret ล่าสุด
   lastWebhookAt: Date | null;
   lastLineError: { code: ErrorCode; at: Date } | null;
   lastAiError: { code: ErrorCode; at: Date } | null;
@@ -288,7 +293,7 @@ export type OutboundLinePart =
 
 ค่าทั้งหมดอยู่ใน `src/core/domain/constants.ts` ค่าของแต่ละตัวอยู่ในตาราง [ค่าคงที่ของระบบ](project-setup.md#10-ค่าคงที่ของระบบ) ที่เดียว ไฟล์นี้อ้างด้วยชื่อเท่านั้น ค่าที่มาจาก environment variable (`AI_DEBOUNCE_MS`, `AI_STUCK_AFTER_MS` ส่งผ่าน config, `RATE_LIMIT_SCALE`) ถูกส่งเข้ามาผ่าน `UseCaseConfig` ดู [use-cases](use-cases.md#การประกอบ)
 
-ชื่อที่แกนกลางใช้: `POLL_OVERLAP_SEQ`, `POLL_PAGE_LIMIT`, `AI_HISTORY_LIMIT`, `AI_REPLY_MAX_CHARS`, `AI_MAX_ROUNDS_PER_RUN`, `AI_STUCK_AFTER_MS`, `AI_MAX_TOKENS`, `AI_EXTRACT_MAX_TOKENS`, `LINE_LOADING_SECONDS`, `KNOWLEDGE_CAPACITY_TOKENS`, `PDF_MAX_BYTES`, `PDF_MAX_PAGES`, `IMAGE_MAX_BYTES`, `VIDEO_MAX_BYTES`, `PREVIEW_MAX_BYTES`, `UPLOAD_TICKET_TTL_MS`, `LINE_TEXT_MAX_CHARS`, `LINE_MAX_PARTS_PER_REQUEST`, `REPLY_TOKEN_USABLE_MS`, `ADMIN_TEXT_MAX_CHARS`, `PREVIEW_TEXT_MAX_CHARS`, `MESSAGE_PAGE_LIMIT`, `CONTACT_PAGE_LIMIT`, `CONTACT_SEARCH_MAX_CHARS`, `CANNED_REPLY_MAX_COUNT`, `CANNED_TITLE_MAX_CHARS`, `CANNED_TEXT_MAX_CHARS`, `AI_INSTRUCTIONS_MAX_CHARS`, `AI_DAILY_BUDGET_MAX_USD`, `ACCESS_COOKIE_TTL_MS`, `WEBHOOK_MAX_BODY_BYTES`, `JSON_MAX_BODY_BYTES`, `DEFAULT_AI_MODEL`, `DEFAULT_AI_DAILY_BUDGET_USD`, `DEFAULT_POLITE_PARTICLE`, ค่าของขอบเขตหัวข้อ `GUARD_MAX_TOPICS`, `GUARD_TOPIC_MAX_CHARS`, `GUARD_REFUSAL_MAX_CHARS`, `GUARD_TEST_MAX_CHARS`, `GUARD_MODEL`, `GUARD_MAX_TOKENS`, `GUARD_TIMEOUT_MS`, `GUARD_CONTEXT_TURNS`, `DEFAULT_GUARD_REFUSAL_TEXT` และค่าจำกัดความถี่ `RATE_LIMIT_UNLOCK`, `RATE_LIMIT_SEND_MESSAGE`, `RATE_LIMIT_UPLOAD_TICKET`, `RATE_LIMIT_PDF_INGEST`, `RATE_LIMIT_TYPING`, `RATE_LIMIT_GUARD_TEST`
+ชื่อที่แกนกลางใช้: `POLL_OVERLAP_SEQ`, `POLL_PAGE_LIMIT`, `AI_HISTORY_LIMIT`, `AI_REPLY_MAX_CHARS`, `AI_MAX_ROUNDS_PER_RUN`, `AI_STUCK_AFTER_MS`, `AI_MAX_TOKENS`, `AI_EXTRACT_MAX_TOKENS`, `LINE_LOADING_SECONDS`, `KNOWLEDGE_CAPACITY_TOKENS`, `PDF_MAX_BYTES`, `PDF_MAX_PAGES`, `IMAGE_MAX_BYTES`, `VIDEO_MAX_BYTES`, `PREVIEW_MAX_BYTES`, `UPLOAD_TICKET_TTL_MS`, `LINE_TEXT_MAX_CHARS`, `LINE_MAX_PARTS_PER_REQUEST`, `REPLY_TOKEN_USABLE_MS`, `LINE_RETRY_KEY_WINDOW_MS`, `LINE_CHANNEL_ID_MAX_CHARS`, `MEDIA_JOB_BUDGET_MS`, `MEDIA_CONTENT_CALL_WORST_MS`, `MEDIA_STATUS_CALL_WORST_MS`, `MEDIA_NOT_READY_POLL_MS`, `ADMIN_TEXT_MAX_CHARS`, `PREVIEW_TEXT_MAX_CHARS`, `MESSAGE_PAGE_LIMIT`, `CONTACT_PAGE_LIMIT`, `CONTACT_SEARCH_MAX_CHARS`, `CANNED_REPLY_MAX_COUNT`, `CANNED_TITLE_MAX_CHARS`, `CANNED_TEXT_MAX_CHARS`, `AI_INSTRUCTIONS_MAX_CHARS`, `AI_DAILY_BUDGET_MAX_USD`, `ACCESS_COOKIE_TTL_MS`, `WEBHOOK_MAX_BODY_BYTES`, `JSON_MAX_BODY_BYTES`, `DEFAULT_AI_MODEL`, `DEFAULT_AI_DAILY_BUDGET_USD`, `DEFAULT_POLITE_PARTICLE`, ค่าของขอบเขตหัวข้อ `GUARD_MAX_TOPICS`, `GUARD_TOPIC_MAX_CHARS`, `GUARD_REFUSAL_MAX_CHARS`, `GUARD_TEST_MAX_CHARS`, `GUARD_MODEL`, `GUARD_MAX_TOKENS`, `GUARD_TIMEOUT_MS`, `GUARD_CONTEXT_TURNS`, `DEFAULT_GUARD_REFUSAL_TEXT` และค่าจำกัดความถี่ `RATE_LIMIT_UNLOCK`, `RATE_LIMIT_SEND_MESSAGE`, `RATE_LIMIT_UPLOAD_TICKET`, `RATE_LIMIT_PDF_INGEST`, `RATE_LIMIT_TYPING`, `RATE_LIMIT_GUARD_TEST`
 
 ค่าจำกัดความถี่ประกาศเป็น `RATE_LIMIT_RULES: Record<RateLimitAction, { limit: number; windowMs: number; scaled: boolean }>` ซึ่งอ่านค่าจาก constant ข้างบน `scaled` เป็น false เฉพาะ `unlock`
 
@@ -336,6 +341,9 @@ export function shouldAiReply(input: AiReplyConditionsInput): AiReplyDecision;
 | `formatKnowledgeBase` | `(docs: { fileName: string; text: string }[]) => string` | บล็อก `<knowledge>` ตาม [ai-prompt ข้อ 2.3](../specs/ai-prompt.md#23-บล็อกคลังความรู้) รวมการ escape และบล็อกของคลังว่าง ต่อเอกสารตามลำดับที่ได้รับ |
 | `toHistoryTurns` | `(messages: Message[]) => ChatTurn[]` | ตาม [ai-prompt ข้อ 4](../specs/ai-prompt.md#4-ประวัติแชท): ข้าม `type = event` และข้อความขาออกที่ `deliveryStatus` เป็น `pending` หรือ `failed`, ลูกค้าเป็น `customer` ส่วนแอดมินกับ AI เป็น `shop`, สื่อแทนด้วยคำในวงเล็บเหลี่ยมตามตารางข้อ 4.2, รวมข้อความติดกันของฝั่งเดียวกันด้วยบรรทัดใหม่, ตัด turn ของ `shop` ที่อยู่หน้าสุดทิ้ง ผลต้องจบด้วย turn ของ `customer` ถ้าไม่จบ คืน array ว่าง |
 | `sanitizeAiReply` | `(text: string) => string \| null` | ทำความสะอาดตาม [ai-prompt ข้อ 6](../specs/ai-prompt.md#6-การทำความสะอาดคำตอบ) คืน null เมื่อผลว่าง หรือยาวเกิน `AI_REPLY_MAX_CHARS` |
+| `replyLinks` | `(reply: string) => string[]` | ลิงก์ในคำตอบตาม [ai-prompt ข้อ 6.1](../specs/ai-prompt.md#61-ลิงก์ในคำตอบ): URL ที่ขึ้นต้นด้วย `http://` หรือ `https://`, host ที่ขึ้นต้นด้วย `www.` และ domain ที่ตามด้วย path ไม่รวมเครื่องหมายวรรคตอนท้าย ไม่นับราคา เวลา และอีเมล ([`reply-links.logic.ts`](../../src/core/domain/reply-links.logic.ts)) |
+| `disallowedLinks` | `(reply: string, sources: readonly string[]) => string[]` | ลิงก์ของ `replyLinks(reply)` ที่ไม่มีใน `sources` (ข้อความคลังความรู้และคำแนะนำของร้าน) เทียบด้วย `normalizeLink`: ไม่สนใจ scheme, `www.`, ตัวพิมพ์ และ `/` ท้าย และนับ host ของลิงก์ที่ร้านเขียนว่าอนุญาตด้วย array ว่างคือส่งได้ |
+| `noResponseUsage` | `(r: Pick<AiUsageRecord, "id" \| "kind" \| "contactId" \| "documentId" \| "provider" \| "model" \| "createdAt">) => AiUsageRecord` | แถวของการเรียกที่ไม่ได้คำตอบ: `outcome = failed`, token และ `cost` เป็นศูนย์, `error = ai.no_response`, `messageId = null` ([`usage.logic.ts`](../../src/core/domain/usage.logic.ts)) คู่กับ `isNoResponse(code)` |
 | `formatPromptNow` | `(now: Date) => string` | ข้อความเวลาปัจจุบันตาม [ai-prompt ข้อ 3](../specs/ai-prompt.md#3-โครงของ-request) เขต `Asia/Bangkok` ปีพุทธศักราช เช่น `เวลาปัจจุบันที่ร้าน: วันพุธที่ 18 พฤศจิกายน 2569 14:32 (เวลาไทย)` |
 | `isAiStateStuck` | `(c: Pick<Contact, "aiState" \| "aiStateAt">, now: Date, stuckAfterMs: number) => boolean` | true เมื่อ `aiState = replying` และ `aiStateAt` เก่ากว่า `now - stuckAfterMs` หรือเป็น null |
 | `usageOutcomeOf` | `(r: ChatModelResponse) => { outcome: UsageOutcome; error: ErrorCode \| null; handoff: HandoffReason \| null }` | `refused` → (`refused`, `ai.refused`, `ai_failed`), `truncated` → (`failed`, `ai.truncated`, `ai_failed`), `completed` กับ output null → (`failed`, `ai.invalid_output`, `ai_failed`), output ที่ `needsAdmin` true → (`handoff`, null, `handoffReasonFromModel(output.handoffReason)`), นอกนั้น (`ok`, null, null) |
@@ -345,6 +353,9 @@ export function shouldAiReply(input: AiReplyConditionsInput): AiReplyDecision;
 | ฟังก์ชัน | ลายเซ็น | กฎ |
 | --- | --- | --- |
 | `replyTokenExpiry` | `(eventTimestamp: Date, isRedelivery: boolean) => Date \| null` | คืน null เมื่อเป็นการส่งซ้ำของ LINE ไม่เช่นนั้นคืน `eventTimestamp + REPLY_TOKEN_USABLE_MS` |
+| `retryKeyExpiresAt` | `(m: Pick<Message, "firstPushAt">) => Date \| null` | `firstPushAt + LINE_RETRY_KEY_WINDOW_MS` ไม่มี `firstPushAt` คืน null (LINE ยังไม่เคยเห็น key) |
+| `isRetryKeyExpired` | `(m: Pick<Message, "firstPushAt">, now: Date) => boolean` | true เมื่อ `now >= retryKeyExpiresAt(m)` ปลายหน้าต่างนับว่าผ่าน ไม่มีหน้าต่างคืน false |
+| `lineSecretStatus` | `(s: Pick<Settings, "lineChannelId" \| "lineSecretVerifiedAt">) => LineSecretStatus` | ไม่มี Channel ID → `no_channel_id`, มีแต่ `lineSecretVerifiedAt` เป็น null → `unchecked`, นอกนั้น `verified` |
 | `chooseSendChannel` | `(c: Pick<Contact, "replyToken" \| "replyTokenExpiresAt">, now: Date) => { channel: "reply"; replyToken: string } \| { channel: "push" }` | `reply` เมื่อมี token และ `now < replyTokenExpiresAt` นอกนั้น `push` |
 | `splitLineText` | `(text: string, limit = LINE_TEXT_MAX_CHARS) => string[]` | ถ้าไม่เกิน limit คืนก้อนเดียว ไม่เช่นนั้นตัดที่บรรทัดใหม่หรือช่องว่างสุดท้ายก่อน limit ถ้าไม่มี ตัดที่ขอบ grapheme ด้วย `Intl.Segmenter` เพื่อไม่แยกสระกับพยัญชนะไทย ไม่คืนก้อนว่าง ความยาวนับเป็น UTF-16 code unit จนกว่าจะยืนยันวิธีนับของ LINE |
 | `toOutboundParts` | `(m: Pick<Message, "type" \| "text" \| "mediaUrl" \| "previewUrl">) => OutboundLinePart[]` | text → `splitLineText` ต่อก้อน, image และ video → หนึ่งชิ้น ถ้าได้เกิน `LINE_MAX_PARTS_PER_REQUEST` เป็น bug เพราะ route จำกัดความยาวไว้แล้ว ให้ throw |
@@ -452,14 +463,24 @@ export interface MessagingGateway {
     { displayName: string; pictureUrl: string | null },
     "line.profile_unavailable" | "line.unauthorized" | "line.unavailable">>;
 
+  /** เฉพาะ HTTP 200 คือไฟล์ 2xx อื่น (202 ระหว่าง transcode) เป็น line.content_not_ready */
   downloadContent(
     token: LineAccessToken, lineMessageId: LineMessageId, variant: "original" | "preview", maxBytes: number,
   ): Promise<Result<
     { stream: ReadableStream<Uint8Array>; contentType: string | null; sizeBytes: number | null },
-    "line.content_unavailable" | "media.too_large" | "line.unauthorized" | "line.unavailable">>;
+    "line.content_unavailable" | "line.content_not_ready" | "media.too_large" | "line.unauthorized" | "line.unavailable">>;
+
+  /** LINE เตรียมไฟล์ของข้อความเสร็จหรือยัง เรียกครั้งเดียว ไม่ retry */
+  getContentStatus(token: LineAccessToken, lineMessageId: LineMessageId): Promise<Result<
+    "processing" | "succeeded" | "failed",
+    "line.content_unavailable" | "line.unauthorized" | "line.unavailable">>;
 
   showLoading(token: LineAccessToken, userId: LineUserId, seconds: number): Promise<Result<void,
     "line.loading_failed" | "line.unauthorized" | "line.unavailable">>;
+
+  /** ตรวจว่า secret เป็นของ Channel ID ด้วย token แบบ client credentials ที่เพิกถอนทันที ไม่คืน ไม่เก็บ ไม่ log */
+  verifyChannelSecret(channelId: string, channelSecret: string): Promise<Result<void,
+    "line.channel_secret_invalid" | "line.unavailable">>;
 
   /** ใช้ตรวจ access token ทั้งตอนบันทึกและตอนทดสอบการเชื่อมต่อ */
   getBotInfo(token: LineAccessToken): Promise<Result<
@@ -474,10 +495,12 @@ export interface MessagingGateway {
 | --- | --- |
 | `verifySignature` | signature ว่าง หรือ base64 ผิดรูป คืน false ไม่ throw ใช้ raw body ตรงตัว ไม่ parse ก่อน |
 | `parseEvents` | `events` ว่างคืน `ok([])` (ปุ่ม Verify ของ LINE) event ที่ field ที่ใช้ผิดรูปถูกแปลงเป็น `unsupported` ไม่ทำให้ทั้งก้อนล้ม คืน `webhook.payload_invalid` เฉพาะเมื่อ body ไม่ใช่ JSON หรือไม่มี array `events` ลำดับของผลตรงกับลำดับใน payload |
-| `reply` | ส่งทุกชิ้นในคำขอเดียว คืน `line.reply_token_invalid` เมื่อ LINE ปฏิเสธเพราะ token ใช้ไม่ได้หรือหมดอายุ (ต้องยืนยันรูปแบบคำตอบของ LINE) ซึ่งผู้เรียกจะเปลี่ยนเป็น push ได้อย่างปลอดภัย เครือข่ายล่มหรือ 5xx หลัง retry คืน `line.unavailable` ซึ่งหมายถึงไม่รู้ผล ผู้เรียกห้าม push ต่อเอง |
-| `push` | ใส่ header `X-Line-Retry-Key: retryKey` ทุกครั้งรวมทุก retry ถ้า LINE ตอบว่ารับคำขอนี้ไปแล้ว (สมมติว่าเป็น 409 ต้องยืนยัน) คืน `ok({ alreadyAccepted: true })` ตัวปลอมต้องจำ retryKey และไม่บันทึกการส่งซ้ำ แยก `line.quota_exceeded` ออกจาก `line.rate_limited` ด้วยข้อความของ LINE (ต้องยืนยัน) |
+| `reply` | ส่งทุกชิ้นในคำขอเดียว คืน `line.reply_token_invalid` เฉพาะเมื่อ LINE ตอบ 400 ที่ `message` ตรงกับ `/invalid reply token/i` (token หมดอายุหรือถูกใช้แล้ว) ซึ่งผู้เรียกจะเปลี่ยนเป็น push ได้อย่างปลอดภัย 400 อื่น (body ผิดรูป มี `details[].property`) คืน `line.reply_failed` ซึ่งผู้เรียกห้าม push payload เดิมต่อ เครือข่ายล่มหรือ 5xx หลัง retry คืน `line.unavailable` ซึ่งหมายถึงไม่รู้ผล ผู้เรียกห้าม push ต่อเอง |
+| `push` | ใส่ header `X-Line-Retry-Key` ทุกครั้งรวมทุก retry ค่าเป็น UUID version 5 (variant RFC 4122) จาก 16 byte แรกของ SHA-256 ของ `retryKey` ตัวจริงทำผ่าน `toLineRetryKey` ตัวปลอมจำ `retryKey` ตรงตัว ถ้า LINE ตอบว่ารับคำขอนี้ไปแล้ว (สมมติว่าเป็น 409 ต้องยืนยัน) คืน `ok({ alreadyAccepted: true })` ตัวปลอมต้องจำ retryKey และไม่บันทึกการส่งซ้ำ แยก `line.quota_exceeded` ออกจาก `line.rate_limited` ด้วยข้อความของ LINE (ต้องยืนยัน) |
 | `getProfile` | timeout `LINE_PROFILE_TIMEOUT_MS` และไม่ retry เพราะเรียกก่อนตอบ webhook 404 หรือ timeout คืน `line.profile_unavailable` |
-| `downloadContent` | ดึงจาก host ข้อมูลของ LINE ที่กำหนดตายตัวเท่านั้น ถ้า `Content-Length` เกิน `maxBytes` คืน `media.too_large` โดยไม่อ่าน body ถ้าไม่มี `Content-Length` stream ที่คืนต้อง error เมื่ออ่านเกิน `maxBytes` ด้วย error ที่มี `code: "media.too_large"` (ตัวจริงใช้ `LineContentTooLargeError` ตัวปลอมใช้ `FakeContentTooLargeError`) การขาดของ stream แบบอื่นต้องไม่มีรหัสนี้ 404 หรือ 410 คืน `line.content_unavailable` variant `preview` ใช้กับวิดีโอเท่านั้น (ต้องยืนยัน endpoint ภาพตัวอย่างของ LINE) |
+| `downloadContent` | ดึงจาก host ข้อมูลของ LINE ที่กำหนดตายตัวเท่านั้น เฉพาะ 200 คือไฟล์ 202 หรือ 2xx อื่นคืน `line.content_not_ready` โดยไม่อ่าน body ถ้า `Content-Length` เกิน `maxBytes` คืน `media.too_large` โดยไม่อ่าน body ถ้าไม่มี `Content-Length` stream ที่คืนต้อง error เมื่ออ่านเกิน `maxBytes` ด้วย error ที่มี `code: "media.too_large"` (ตัวจริงใช้ `LineContentTooLargeError` ตัวปลอมใช้ `FakeContentTooLargeError`) การขาดของ stream แบบอื่นต้องไม่มีรหัสนี้ 404 หรือ 410 คืน `line.content_unavailable` variant `preview` ใช้กับวิดีโอเท่านั้น (ต้องยืนยัน endpoint ภาพตัวอย่างของ LINE) |
+| `getContentStatus` | `GET /v2/bot/message/{id}/content/transcoding` ครั้งเดียวด้วย `LINE_REQUEST_TIMEOUT_MS` คืน `processing` ระหว่างที่ `downloadContent` ยังได้ `line.content_not_ready` แล้ว `succeeded` (ตัวปลอมและ harness นับคำตอบ "ยังไม่พร้อม" รวมกันทั้งสอง method) |
+| `verifyChannelSecret` | `POST /v2/oauth/accessToken` แบบ form (`grant_type=client_credentials`, `client_id`, `client_secret`) ไม่มี bearer และไม่ retry (แต่ละครั้งออก token) 200 แล้วเพิกถอนด้วย `POST /v2/oauth/revoke` ทันทีแบบ best effort คืน ok, 4xx ที่ไม่ใช่ 429 คืน `line.channel_secret_invalid`, 429, 5xx, timeout และเครือข่ายคืน `line.unavailable` (ตรวจไม่ได้) secret และ token ไม่อยู่ใน detail ของ error |
 | `showLoading` | ไม่ retry ผู้เรียกไม่ถือผลเป็นความล้มเหลว `seconds` ที่ LINE ไม่รับคืน `line.loading_failed` |
 | `getBotInfo` | 401 หรือ 403 คืน `line.credentials_invalid` |
 
@@ -508,13 +531,14 @@ export interface ChatModelResponse {
 
 export interface ChatModel {
   generateReply(req: ChatModelRequest): Promise<Result<ChatModelResponse,
-    "ai.unavailable" | "ai.rate_limited" | "ai.auth_failed" | "ai.bad_request">>;
+    "ai.unavailable" | "ai.no_response" | "ai.rate_limited" | "ai.auth_failed" | "ai.bad_request">>;
 }
 ```
 
 | ความหมายที่ตัวจริงและตัวปลอมต้องตรงกัน |
 | --- |
 | ทุกครั้งที่ API ตอบกลับมา (รวมการปฏิเสธและคำตอบที่ถูกตัด) คืน `ok` พร้อม `usage` เพื่อให้บันทึกต้นทุนได้ คืน error เฉพาะเมื่อไม่มีคำตอบจาก API |
+| `ai.no_response` คือคำขอที่อาจถึงผู้ให้บริการแล้วแต่ไม่ได้คำตอบ (timeout, ถูกตัดที่ `callDeadlineMs`, การเชื่อมต่อหลุด หรือ stream ขาด) ซึ่งอาจถูกคิดเงิน แกนกลางบันทึกแถว `AiUsage` ที่ยอดเป็นศูนย์ ([usage-cost](../specs/usage-cost.md#การเรียกที่ไม่ได้คำตอบ)) `ai.unavailable` คือ API ตอบ 5xx, 408, 409 หรือยังไม่ได้ส่งอะไรออกไป (การเชื่อมต่อถูกปฏิเสธ หา host ไม่เจอ) |
 | `output` ผ่านการตรวจ schema ตาม [ai-prompt ข้อ 5.2](../specs/ai-prompt.md#52-schema-ที่ระบบตรวจซ้ำ-zod-ใน-adapter) แล้ว: `reply` เป็นสตริง, `needsAdmin` เป็น boolean และ `handoffReason` เป็นค่าของ `ModelHandoffReason` หรือ null (เมื่อ `needsAdmin` เป็น true แต่ได้ null ให้เป็น `other`) ไม่มี field อื่น ตรวจความยาวและเนื้อหาต่อที่ `sanitizeAiReply` ในแกนกลาง |
 | `now` ถูกใส่เป็นข้อความระบบตัวสุดท้ายหลังประวัติ ไม่อยู่ใน `system` เพื่อไม่ให้ cache ของส่วนหน้าเปลี่ยน ตัวปลอมเก็บค่า `now` ที่ได้รับไว้ให้ test ตรวจ |
 | ไม่มีเครื่องมือให้โมเดลเรียก และไม่ stream |
@@ -538,10 +562,10 @@ export interface ExtractResponse {
 
 export interface DocumentExtractor {
   extract(req: ExtractRequest): Promise<Result<ExtractResponse,
-    "ai.unavailable" | "ai.rate_limited" | "ai.auth_failed" | "ai.bad_request">>;
+    "ai.unavailable" | "ai.no_response" | "ai.rate_limited" | "ai.auth_failed" | "ai.bad_request">>;
   /** นับ token ของข้อความด้วย tokenizer ของโมเดลนั้น */
   countTokens(model: AiModelId, text: string): Promise<Result<number,
-    "ai.unavailable" | "ai.rate_limited" | "ai.auth_failed" | "ai.bad_request">>;
+    "ai.unavailable" | "ai.no_response" | "ai.rate_limited" | "ai.auth_failed" | "ai.bad_request">>;
 }
 ```
 
@@ -551,6 +575,7 @@ export interface DocumentExtractor {
 | `text` ผ่านการจัดบรรทัดตาม ai-prompt ข้อ 7.3 แล้ว และเป็น null เมื่อว่างหรือเป็นคำ `EMPTY_DOCUMENT` โดย `stop` ยังเป็น `completed` |
 | คืน `ok` พร้อม `usage` ทุกครั้งที่ API ตอบ เหมือน `ChatModel` |
 | `countTokens` ไม่บันทึกต้นทุน (ต้องยืนยันว่า endpoint นับ token ไม่คิดเงิน) |
+| `extract` และ `countTokens` ใช้ความหมายของ `ai.no_response` และ `ai.unavailable` เดียวกับ `ChatModel` การเรียกทั้งสองจบไม่เกิน `callDeadlineMs` ของตัวเอง ([Adapter ของ Claude](#adapter-ของ-claude)) |
 
 ### TopicGuard
 
@@ -579,7 +604,7 @@ export interface TopicGuardResponse {
 
 export interface TopicGuard {
   classify(req: TopicGuardRequest): Promise<Result<TopicGuardResponse,
-    "ai.unavailable" | "ai.rate_limited" | "ai.auth_failed" | "ai.bad_request">>;
+    "ai.unavailable" | "ai.no_response" | "ai.rate_limited" | "ai.auth_failed" | "ai.bad_request">>;
 }
 ```
 
@@ -589,7 +614,7 @@ export interface TopicGuard {
 | --- |
 | ทุกครั้งที่ API ตอบกลับมา (รวมการปฏิเสธและคำตอบที่ถูกตัด) คืน `ok` พร้อม `usage` คืน error เฉพาะเมื่อไม่มีคำตอบจาก API |
 | `verdict` ผ่าน zod ตาม [ai-prompt ข้อ 9.3](../specs/ai-prompt.md#93-schema-ของผลการคัดกรอง) แล้ว: `allowed` เป็น boolean และ `matchedTopic` เป็นสตริงหรือ null ไม่มี field อื่น การเทียบ `matchedTopic` กับรายการหัวข้อทำใน `guardVerdictOf` ของแกนกลาง |
-| `timeoutMs` ใช้เป็น timeout ของคำขอนั้น retry ไม่เกิน `CLAUDE_GUARD_MAX_RETRIES` ครั้ง ไม่ stream ไม่มีเครื่องมือ |
+| `timeoutMs` ใช้เป็น timeout ของคำขอนั้น retry ไม่เกิน `CLAUDE_GUARD_MAX_RETRIES` ครั้ง และทั้งการเรียกจบไม่เกิน `callDeadlineMs({ timeoutMs, maxRetries: CLAUDE_GUARD_MAX_RETRIES })` ไม่ stream ไม่มีเครื่องมือ ความหมายของ `ai.no_response` เดียวกับ `ChatModel` |
 | ตัวปลอมรับผลที่ตั้งไว้ล่วงหน้าต่อคำขอ ค่าเริ่มต้นคือ `allowed: true` และเก็บคำขอที่ได้รับไว้ให้ test ตรวจ |
 
 ### KnowledgeSource
@@ -738,7 +763,7 @@ export interface ContactRepository {
 #### MessageRepository
 
 ```ts
-export type NewMessage = Omit<Message, "seq" | "updatedSeq">;
+export type NewMessage = Omit<Message, "seq" | "updatedSeq" | "firstPushAt">; // firstPushAt เริ่มเป็น null
 
 export interface MessageRepository {
   findById(id: MessageId): Promise<Message | null>;
@@ -750,12 +775,18 @@ export interface MessageRepository {
 
   markSent(id: MessageId, at: Date): Promise<Message>;
   markFailed(id: MessageId, code: ErrorCode): Promise<Message>;
-  /** compare-and-set: failed → pending ล้าง deliveryError คืน false ถ้าสถานะไม่ใช่ failed */
-  markPendingIfFailed(id: MessageId): Promise<boolean>;
+  /** compare-and-set: failed → pending ล้าง deliveryError และตั้งเวลาเริ่มของการส่งรอบนี้เป็น at คืน false ถ้าสถานะไม่ใช่ failed */
+  markPendingIfFailed(id: MessageId, at: Date): Promise<boolean>;
+  /** compare-and-set บน firstPushAt IS NULL: เวลาของ push ครั้งแรก ครั้งถัดไปไม่เปลี่ยนอะไร */
+  recordFirstPush(id: MessageId, at: Date): Promise<void>;
   /** compare-and-set บน mediaStatus = pending: ตั้ง ready พร้อม URL ทั้งสอง คืน false ถ้าไม่มีแถวหรือไม่ใช่ pending แล้ว */
   setMediaReady(id: MessageId, mediaUrl: string, previewUrl: string): Promise<boolean>;
   /** compare-and-set บน mediaStatus = pending เหมือน setMediaReady */
   setMediaStatus(id: MessageId, status: Exclude<MediaStatus, "ready" | "pending">): Promise<boolean>;
+  /** คำสั่งเดียว: สื่อของลูกค้าคนนั้นที่ยัง pending และ createdAt ก่อน staleBefore เป็น failed คืน id ที่แก้ */
+  failStuckMedia(contactId: ContactId, staleBefore: Date): Promise<MessageId[]>;
+  /** คำสั่งเดียว: ข้อความขาออกของลูกค้าคนนั้นที่ยัง pending และเริ่มส่งรอบนี้ก่อน staleBefore เป็น failed ด้วย line.send_interrupted คืน id ที่แก้ */
+  failStuckDeliveries(contactId: ContactId, staleBefore: Date): Promise<MessageId[]>;
 
   /** ข้อความขาเข้าล่าสุดของลูกค้าคนนั้นตาม seq */
   latestInbound(contactId: ContactId): Promise<Message | null>;
@@ -777,6 +808,9 @@ export interface MessageRepository {
 | `insert*IfAbsent` | ใช้ insert แบบข้ามเมื่อซ้ำ แล้วอ่านแถวที่มีอยู่ ไม่ดัก error ของ unique constraint ([ADR 0010](../adr/0010-reply-token-first-and-idempotency.md)) เรียกพร้อมกันได้ `inserted: true` คนเดียว |
 | `markSent`, `markFailed` | คืนแถวหลังแก้ แก้แถวที่ไม่มีอยู่เป็น bug ให้ throw |
 | `setMediaReady`, `setMediaStatus` | compare-and-set บน `mediaStatus = pending` (UPDATE ... WHERE id AND mediaStatus = pending) แก้ได้ครั้งเดียว เรียกพร้อมกันได้ `true` คนเดียว แถวที่ไม่ใช่ pending แล้วหรือไม่มีอยู่คืน false และไม่แก้อะไร ใช้ให้ `StoreInboundMedia` สองรอบของข้อความเดียวกันไม่ทับผลกัน |
+| `recordFirstPush` | UPDATE ... WHERE id AND `firstPushAt IS NULL` ครั้งแรกเท่านั้นที่ตั้งค่า การส่งอีกครั้งไม่เลื่อน ผู้เรียกพร้อมกันได้ค่าเดียว แถวที่ไม่มีไม่ใช่ error `RetryMessage` ใช้ค่านี้วัดหน้าต่างของ retry key |
+| `markPendingIfFailed` | ตั้งเวลาเริ่มของการส่งรอบนี้ (`Message.deliveryAttemptAt`) เป็น `at` ซึ่ง `failStuckDeliveries` ใช้วัด แถว pending ที่ insert ใหม่ใช้ `createdAt` เป็นเวลาเริ่ม ค่านี้ไม่อยู่ใน entity `Message` |
+| `failStuckMedia`, `failStuckDeliveries` | UPDATE ... RETURNING คำสั่งเดียว เงื่อนไขบนสถานะ `pending` และเวลา (`createdAt` ของสื่อ, `deliveryAttemptAt` หรือ `createdAt` ของการส่ง) น้อยกว่า `staleBefore` อย่างเคร่งครัด เฉพาะลูกค้าที่ระบุ แถวที่แก้ได้ `updatedSeq` ใหม่ เรียกพร้อมกันหลายผู้เรียกแต่ละ id กลับไปที่ผู้เรียกคนเดียว การส่งที่คืนสภาพแล้วคง `retryKey` เดิม จึงกด "ส่งอีกครั้ง" ได้ ([data-model กฎของ repository ข้อ 13](data-model.md#กฎของ-repository)) |
 | `listLatest`, `listBefore` | คืนเรียง seq น้อยไปมาก (เก่าไปใหม่) รวมข้อความชนิด event |
 | `listChangedAfter` | `updatedSeq > after` เรียง updatedSeq น้อยไปมาก |
 | `maxUpdatedSeq` | ไม่มีข้อความคืน `0n` |
@@ -793,7 +827,10 @@ export interface SettingsRepository {
     "aiEnabled" | "aiModel" | "aiDailyBudget" | "aiPoliteParticle" | "aiInstructions"
     | "guardEnabled" | "guardTopics" | "guardRefusalText">>): Promise<Settings>;
   getEncryptedLineCredentials(): Promise<EncryptedLineCredentials | null>;
-  saveLineCredentials(c: EncryptedLineCredentials, bot: { botName: string; basicId: string }): Promise<void>;
+  saveLineCredentials(c: EncryptedLineCredentials, bot: { botName: string; basicId: string },
+    channel: { channelId: string; secretVerifiedAt: Date | null }): Promise<void>;
+  /** ผลการตรวจ secret ภายหลัง: เวลาที่ LINE ยืนยัน หรือ null เมื่อ LINE ปฏิเสธคู่นี้ */
+  recordLineSecretCheck(verifiedAt: Date | null): Promise<void>;
   updateLineBotInfo(bot: { botName: string; basicId: string }): Promise<void>;
   recordWebhookReceived(at: Date): Promise<void>;
   recordLineError(e: { code: ErrorCode; at: Date } | null): Promise<void>;
@@ -821,6 +858,8 @@ export interface KnowledgeRepository {
     Promise<Result<KbDocument, "knowledge.duplicate" | "knowledge.not_found" | "knowledge.not_retryable">>;
   markReady(id: DocumentId, d: { text: string; pageCount: number | null; tokenCount: number; now: Date }): Promise<boolean>;
   markFailed(id: DocumentId, d: { code: ErrorCode; pageCount: number | null; tokenCount: number | null; now: Date }): Promise<boolean>;
+  /** คำสั่งเดียว: เอกสารที่ยัง processing และ updatedAt ก่อน staleBefore เป็น failed ด้วย knowledge.extract_interrupted และ updatedAt = now คืน id ที่แก้ */
+  failStuckProcessing(staleBefore: Date, now: Date): Promise<DocumentId[]>;
   delete(id: DocumentId): Promise<boolean>;
   sumReadyTokens(): Promise<number>;
 }
@@ -829,6 +868,7 @@ export interface KnowledgeRepository {
 - `create` และ `restartProcessing` คืน `knowledge.duplicate` เมื่อชน unique ของ sha256 (ใช้ insert แบบข้ามเมื่อซ้ำ)
 - `restartProcessing` เป็น compare-and-set บน `status = failed` (UPDATE ... WHERE id AND status = failed) ไม่มีแถวคืน `knowledge.not_found` มีแถวแต่ไม่ใช่ failed คืน `knowledge.not_retryable` และไม่แก้อะไร การลองใหม่สองครั้งพร้อมกันจึงสำเร็จครั้งเดียว อีกครั้งได้ `knowledge.not_retryable`
 - `markReady`, `markFailed`, `delete` คืน false เมื่อแถวไม่มีแล้ว เช่น ถูกลบระหว่างแปลง ผู้เรียกไม่ถือเป็นความผิดพลาด
+- `failStuckProcessing` เป็น UPDATE ... RETURNING คำสั่งเดียวบน `status = processing` และ `updatedAt < staleBefore` คงค่าไฟล์ไว้ "ลองใหม่" (`restartProcessing`) จึงใช้ได้ทันที เรียกพร้อมกันแต่ละ id กลับไปที่ผู้เรียกคนเดียว
 
 #### UsageRepository
 
@@ -854,13 +894,15 @@ export interface UsageRepository {
   guardSummary(range: DateRange): Promise<{ count: number; usage: TokenUsage; cost: NanoUsd }>;
   /** guardBlocked: kind = guard outcome = blocked, outputRejected: ทุก kind ที่ error เป็น ai.invalid_output หรือ ai.refused */
   countSafetyOutcomes(range: DateRange): Promise<{ guardBlocked: number; outputRejected: number }>;
+  /** แถวทุก kind ในช่วงที่ error เป็น ai.no_response */
+  countNoResponse(range: DateRange): Promise<number>;
   listForContact(contactId: ContactId, range: DateRange): Promise<AiUsageRecord[]>;
 }
 ```
 
 - `sumCost` รวมทุก kind และทุก outcome ใน `[from, to)` ตาม `createdAt` ไม่มีแถวคืน `0n`
 - `reportByContact` รวมเฉพาะแถว kind = reply (แถว guard แยกไปที่ `guardSummary`) เรียง cost มากไปน้อย, `listForContact` คืนทุก kind ของลูกค้านั้น เรียง createdAt ใหม่ไปเก่า
-- `guardSummary`, `ingestSummary` และ `countSafetyOutcomes` ไม่มีแถวคืนศูนย์ทุกค่า
+- `guardSummary`, `ingestSummary`, `countSafetyOutcomes` และ `countNoResponse` ไม่มีแถวคืนศูนย์ทุกค่า
 
 #### CannedReplyRepository
 
@@ -926,6 +968,11 @@ export interface AccessTokenSigner {
   verify(token: string, now: Date): boolean;
 }
 ```
+
+| ความหมายที่ตัวจริงและตัวปลอมต้องตรงกัน |
+| --- |
+| Key ของ signature ขึ้นกับทั้ง secret และรหัสเข้าใช้: token ที่ออกด้วย secret อื่น หรือด้วย secret เดียวกันแต่รหัสอื่น ตรวจไม่ผ่าน ส่วน instance ใหม่ที่สร้างด้วย secret และรหัสเดิม (เช่น หลัง deploy) ตรวจผ่าน ([access-gate](../specs/access-gate.md#พฤติกรรม) ข้อ 6) |
+| `checkCode` เทียบแบบเวลาคงที่ทุกความยาว รหัสไม่อยู่ใน token |
 
 ### ContentHasher (port ที่เพิ่ม)
 
@@ -1025,6 +1072,7 @@ export type LogEvent =
   | "access.unlock.succeeded"
   | "access.unlock.failed"
   | "access.unlock.rate_limited"
+  | "access.unlock.client_ip_missing" // warn: คำขอที่ไม่มี IP นับในถัง unlock_no_ip
   // Webhook และ LINE
   | "line.webhook.received"         // eventCount
   | "line.webhook.signature_invalid"
@@ -1033,18 +1081,23 @@ export type LogEvent =
   | "line.webhook.event_duplicate"
   | "line.webhook.event_unsupported" // lineEventType
   | "line.webhook.event_failed"
+  | "line.webhook.batch_unstored"   // error: eventCount, errorCode db.unavailable ทุก event ล้มและฐานข้อมูลล่ม ตอบ 503
   | "line.profile.fetch_failed"
   | "line.send.succeeded"           // channel, messageId
   | "line.send.failed"              // channel, errorCode
   | "line.send.reply_token_rejected"
+  | "line.send.stuck_recovered"     // warn: contactId, count (line.send_interrupted)
+  | "line.send.retry_expired"       // warn: messageId, contactId ส่งอีกครั้งหลังหน้าต่างของ retry key
   | "line.loading.failed"
-  | "line.credentials.saved"
-  | "line.credentials.rejected"
+  | "line.credentials.saved"        // outcome (verified หรือ unchecked), errorCode เมื่อตรวจ secret ไม่ได้
+  | "line.credentials.rejected"     // errorCode
   | "line.credentials.unreadable"
-  | "line.connection.tested"        // outcome
+  | "line.connection.tested"        // outcome (failed, verified, unchecked หรือ no_channel_id)
   // สื่อและอัปโหลด
   | "media.store.succeeded"
   | "media.store.failed"            // errorCode
+  | "media.store.not_ready"         // info: messageId, attempt ระหว่างรอ LINE เตรียมไฟล์
+  | "media.store.stuck_recovered"   // warn: contactId, count
   | "upload.ticket.issued"
   | "upload.ticket.rejected"
   | "upload.file.discarded"
@@ -1068,6 +1121,7 @@ export type LogEvent =
   | "knowledge.ingest.started"
   | "knowledge.ingest.succeeded"    // pageCount, tokenCount
   | "knowledge.ingest.failed"       // errorCode
+  | "knowledge.ingest.stuck_recovered" // warn: count (knowledge.extract_interrupted)
   | "knowledge.document.deleted"
   // ตั้งค่าและข้อความสำเร็จรูป
   | "settings.values.updated"
@@ -1095,6 +1149,23 @@ export type LogEvent =
 - คำขอแบบไม่ stream ใช้ `max_tokens` ได้ถึง 16000 ถ้าต้องการมากกว่านั้นต้อง stream แล้วเรียก `.finalMessage()` จาก `client.messages.stream(...)`
 - PDF ส่งเป็น content block `{ type: "document", source: { type: "base64", media_type: "application/pdf", data } }` วางก่อน text block ใน user message base64 ต้องไม่มีขึ้นบรรทัด API รับไม่เกิน 32 MB และ 600 หน้า ซึ่งเพดานของเรา (4 MB, 30 หน้า) ต่ำกว่า
 - นับ token: `client.messages.countTokens({ model, messages })` คืน `input_tokens`
+
+### เวลาสูงสุดของการเรียกหนึ่งครั้ง
+
+`timeout` ของ SDK ครอบเฉพาะการรอ header ของคำตอบในแต่ละ attempt (`fetchWithTimeout` ใน SDK รุ่นที่ติดตั้ง) stream ที่เริ่มแล้วจึงยาวได้ไม่จำกัด และ SDK รอตาม `Retry-After` ก่อน retry โดยไม่มีเพดาน adapter จึงส่ง `signal` ที่ตัดทั้งการเรียกที่ `callDeadlineMs` = `timeoutMs` × (1 + `maxRetries`) + `CLAUDE_RETRY_WAIT_MAX_MS` × `maxRetries` (`callOptions` ใน [`claude.mapper.ts`](../../src/adapters/claude/claude.mapper.ts)) ใช้กับการตอบแชท การคัดกรอง การแปลง PDF (รวม stream) และ count_tokens (timeout `CLAUDE_COUNT_TOKENS_TIMEOUT_MS`) ค่าอยู่ใน [project-setup ข้อ 10.4](project-setup.md#104-adapter-และ-route)
+
+### การแปลง error
+
+`mapClaudeError` แปลง error ของ SDK เป็นรหัสของ port ตามลำดับ:
+
+| Error | รหัส |
+| --- | --- |
+| `APIConnectionTimeoutError`, `APIUserAbortError` (ถูกตัดที่ `callDeadlineMs`), `APIConnectionError` อื่น และ stream ที่ขาด (`AnthropicError` ที่ไม่มี status) | `ai.no_response` คำขออาจถึงผู้ให้บริการแล้ว ([usage-cost](../specs/usage-cost.md#การเรียกที่ไม่ได้คำตอบ)) |
+| `APIConnectionError` ที่ `cause` มี `code` เป็น `ECONNREFUSED`, `ENOTFOUND`, `EAI_AGAIN`, `EHOSTUNREACH` หรือ `ENETUNREACH` | `ai.unavailable` ยังไม่ได้ส่งอะไรออกไป |
+| 429 | `ai.rate_limited` พร้อม `retryAfterSeconds` |
+| 401, 403 | `ai.auth_failed` |
+| 400 และ 4xx อื่น | `ai.bad_request` |
+| 5xx, 408, 409 | `ai.unavailable` |
 
 ### คำขอของ `ChatModel.generateReply`
 

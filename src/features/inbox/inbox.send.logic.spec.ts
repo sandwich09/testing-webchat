@@ -16,6 +16,7 @@ import {
   optimisticMessage,
   outgoingStatus,
   pendingSendOfUpload,
+  isRetryExpired,
   retryPlan,
   threadFromFirstPage,
   type ThreadState,
@@ -24,6 +25,8 @@ import {
 const ID = '019a0000-0000-7000-8000-000000000001';
 const CONTACT = 'contact-1';
 const NOW = '2026-11-18T07:30:00.000Z';
+/** The browser clock of the retryPlan cases. */
+const CLOCK = new Date('2026-11-19T05:00:00.000Z');
 
 const server = (over: Partial<MessageDto> & { id: string; seq: string }): MessageDto => ({
   updatedSeq: over.seq,
@@ -36,7 +39,7 @@ const server = (over: Partial<MessageDto> & { id: string; seq: string }): Messag
   sticker: null,
   otherKind: null,
   eventCode: null,
-  delivery: { status: 'sent', errorCode: null },
+  delivery: { status: 'sent', errorCode: null, retryExpiresAt: null },
   createdAt: '2026-11-18T07:00:00.000Z',
   sentAt: null,
   ...over,
@@ -91,7 +94,7 @@ describe('send body and optimistic bubble', () => {
       updatedSeq: null,
       author: 'admin',
       direction: 'outbound',
-      delivery: { status: 'pending', errorCode: null },
+      delivery: { status: 'pending', errorCode: null, retryExpiresAt: null },
       localState: 'sending',
       createdAt: NOW,
       text: 'สวัสดีค่ะ',
@@ -151,7 +154,7 @@ describe('send state machine (ui-screens 7.5)', () => {
       message: server({
         id: ID,
         seq: '7',
-        delivery: { status: 'failed', errorCode: 'line.push_failed' },
+        delivery: { status: 'failed', errorCode: 'line.push_failed', retryExpiresAt: null },
       }),
     });
     expect(row(items).localState).toBeUndefined();
@@ -220,12 +223,16 @@ describe('send state machine (ui-screens 7.5)', () => {
 
   it('failed with seq → sending through retry (the server knows the row)', () => {
     const failed = mergeThread(started(), [
-      server({ id: ID, seq: '7', delivery: { status: 'failed', errorCode: 'line.unavailable' } }),
+      server({
+        id: ID,
+        seq: '7',
+        delivery: { status: 'failed', errorCode: 'line.unavailable', retryExpiresAt: null },
+      }),
     ]);
-    expect(retryPlan(row(failed))).toBe('retry');
+    expect(retryPlan(row(failed), CLOCK)).toBe('retry');
     const items = applySendEvent(failed, { type: 'resent', id: ID });
     expect(row(items).localState).toBe('sending');
-    expect(retryPlan(row(items))).toBeNull();
+    expect(retryPlan(row(items), CLOCK)).toBeNull();
     const done = applySendEvent(items, {
       type: 'answered',
       message: server({ id: ID, seq: '7', updatedSeq: '12' }),
@@ -239,7 +246,7 @@ describe('send state machine (ui-screens 7.5)', () => {
       id: ID,
       code: 'internal.unexpected',
     });
-    expect(retryPlan(row(failed))).toBe('resend');
+    expect(retryPlan(row(failed), CLOCK)).toBe('resend');
     const items = applySendEvent(failed, { type: 'resent', id: ID });
     expect(row(items).localState).toBe('sending');
     expect(row(items).localError).toBeUndefined();
@@ -258,7 +265,13 @@ describe('send state machine (ui-screens 7.5)', () => {
   it('an answer that repeats the version already shown drops the local overlay', () => {
     const shown = mergeThread(
       [],
-      [server({ id: ID, seq: '7', delivery: { status: 'failed', errorCode: 'line.unavailable' } })],
+      [
+        server({
+          id: ID,
+          seq: '7',
+          delivery: { status: 'failed', errorCode: 'line.unavailable', retryExpiresAt: null },
+        }),
+      ],
     );
     const retrying = applySendEvent(shown, { type: 'resent', id: ID });
     const items = applySendEvent(retrying, {
@@ -266,7 +279,7 @@ describe('send state machine (ui-screens 7.5)', () => {
       message: server({
         id: ID,
         seq: '7',
-        delivery: { status: 'failed', errorCode: 'line.unavailable' },
+        delivery: { status: 'failed', errorCode: 'line.unavailable', retryExpiresAt: null },
       }),
     });
     expect(row(items).localState).toBeUndefined();
@@ -280,7 +293,7 @@ describe('send state machine (ui-screens 7.5)', () => {
         id: ID,
         seq: '7',
         updatedSeq: '8',
-        delivery: { status: 'pending', errorCode: null },
+        delivery: { status: 'pending', errorCode: null, retryExpiresAt: null },
       }),
     });
     expect(row(items).updatedSeq).toBe('15');
@@ -289,7 +302,13 @@ describe('send state machine (ui-screens 7.5)', () => {
   it('message.not_retryable on a retry shows the server state instead of a failure', () => {
     const failed = mergeThread(
       [],
-      [server({ id: ID, seq: '7', delivery: { status: 'failed', errorCode: 'line.unavailable' } })],
+      [
+        server({
+          id: ID,
+          seq: '7',
+          delivery: { status: 'failed', errorCode: 'line.unavailable', retryExpiresAt: null },
+        }),
+      ],
     );
     const retrying = applySendEvent(failed, { type: 'resent', id: ID });
     const items = applySendEvent(retrying, {
@@ -313,21 +332,56 @@ describe('send state machine (ui-screens 7.5)', () => {
     expect(applySendEvent(items, { type: 'timedOut', id: 'other' })).toBe(items);
   });
 
+  it('retryPlan: no retry once the retry key window has passed, a retry just inside it', () => {
+    const failedUntil = (retryExpiresAt: string) =>
+      row(
+        mergeThread(
+          [],
+          [
+            server({
+              id: ID,
+              seq: '7',
+              delivery: { status: 'failed', errorCode: 'line.push_failed', retryExpiresAt },
+            }),
+          ],
+        ),
+      );
+    const end = CLOCK.getTime();
+    const justInside = failedUntil(new Date(end + 1).toISOString());
+    expect(isRetryExpired(justInside, CLOCK)).toBe(false);
+    expect(retryPlan(justInside, CLOCK)).toBe('retry');
+    const atEnd = failedUntil(new Date(end).toISOString());
+    expect(isRetryExpired(atEnd, CLOCK)).toBe(true);
+    expect(retryPlan(atEnd, CLOCK)).toBeNull();
+    // The server's refusal counts as expired even before the browser's clock gets there.
+    const refused = {
+      ...justInside,
+      localState: 'failed' as const,
+      localError: 'message.retry_expired',
+    };
+    expect(isRetryExpired(refused, CLOCK)).toBe(true);
+    expect(retryPlan(refused, CLOCK)).toBeNull();
+  });
+
   it('retryPlan: nothing to do while in flight or when sent', () => {
-    expect(retryPlan(sending())).toBeNull();
-    expect(retryPlan({ ...sending(), localState: 'unconfirmed' })).toBeNull();
+    expect(retryPlan(sending(), CLOCK)).toBeNull();
+    expect(retryPlan({ ...sending(), localState: 'unconfirmed' }, CLOCK)).toBeNull();
     const sent = row(mergeThread([], [server({ id: ID, seq: '7' })]));
-    expect(retryPlan(sent)).toBeNull();
+    expect(retryPlan(sent, CLOCK)).toBeNull();
     const localNoState = { ...sending() };
     delete localNoState.localState;
-    expect(retryPlan(localNoState)).toBeNull();
+    expect(retryPlan(localNoState, CLOCK)).toBeNull();
   });
 
   it('outgoingStatus: inbound rows have no delivery status', () => {
     expect(outgoingStatus(inbound('in', '1'))).toEqual({ status: 'none', code: null });
     expect(
       outgoingStatus(
-        server({ id: 'p', seq: '1', delivery: { status: 'pending', errorCode: null } }),
+        server({
+          id: 'p',
+          seq: '1',
+          delivery: { status: 'pending', errorCode: null, retryExpiresAt: null },
+        }),
       ),
     ).toEqual({
       status: 'pending',

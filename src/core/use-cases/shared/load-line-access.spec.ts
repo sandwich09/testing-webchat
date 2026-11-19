@@ -31,6 +31,7 @@ describe('loadLineAccess', () => {
         channelAccessTokenEnc: cipher.encrypt('token-1'),
       },
       BOT,
+      { channelId: '1000000001', secretVerifiedAt: null },
     );
 
     expect(await load()).toEqual({
@@ -55,6 +56,7 @@ describe('loadLineAccess', () => {
           channelAccessTokenEnc: pick(keys.token).encrypt('token-1'),
         },
         BOT,
+        { channelId: '1000000001', secretVerifiedAt: null },
       );
 
       const result = await load();

@@ -2,8 +2,13 @@ import type Anthropic from '@anthropic-ai/sdk';
 import type { ExtractResponse } from '@/core/ports';
 import type { DocumentExtractor, ExtractRequest } from '@/core/ports';
 import { ok } from '@/core/domain';
-import { CLAUDE_EXTRACT_MAX_RETRIES, CLAUDE_EXTRACT_TIMEOUT_MS } from './claude.constants';
 import {
+  CLAUDE_COUNT_TOKENS_TIMEOUT_MS,
+  CLAUDE_EXTRACT_MAX_RETRIES,
+  CLAUDE_EXTRACT_TIMEOUT_MS,
+} from './claude.constants';
+import {
+  callOptions,
   type ClaudeAdapterOptions,
   createClaudeClient,
   fallbackParams,
@@ -78,19 +83,28 @@ export const buildExtractParams = (
   ],
 });
 
+const EXTRACT_LIMITS = {
+  timeoutMs: CLAUDE_EXTRACT_TIMEOUT_MS,
+  maxRetries: CLAUDE_EXTRACT_MAX_RETRIES,
+};
+const COUNT_TOKENS_LIMITS = {
+  timeoutMs: CLAUDE_COUNT_TOKENS_TIMEOUT_MS,
+  maxRetries: CLAUDE_EXTRACT_MAX_RETRIES,
+};
+
 export const createClaudeDocumentExtractor = (options: ClaudeAdapterOptions): DocumentExtractor => {
-  const client = createClaudeClient(options, {
-    timeoutMs: CLAUDE_EXTRACT_TIMEOUT_MS,
-    maxRetries: CLAUDE_EXTRACT_MAX_RETRIES,
-  });
+  const client = createClaudeClient(options, EXTRACT_LIMITS);
 
   // Streams because AI_EXTRACT_MAX_TOKENS is above what a non-streaming request may ask for;
-  // finalMessage() collects the stream into one message.
+  // finalMessage() collects the stream into one message. The deadline signal of callOptions also
+  // ends a stream that is still running, which the SDK timeout (headers only) does not.
   const send = (req: ExtractRequest) => {
     const params = buildExtractParams(req);
     return usesServerFallback(req.model, 'extract')
-      ? client.beta.messages.stream({ ...params, ...fallbackParams() }).finalMessage()
-      : client.messages.stream(params).finalMessage();
+      ? client.beta.messages
+          .stream({ ...params, ...fallbackParams() }, callOptions(EXTRACT_LIMITS))
+          .finalMessage()
+      : client.messages.stream(params, callOptions(EXTRACT_LIMITS)).finalMessage();
   };
 
   return {
@@ -108,10 +122,10 @@ export const createClaudeDocumentExtractor = (options: ClaudeAdapterOptions): Do
     async countTokens(model, text) {
       try {
         // Free endpoint (token-counting docs, "Pricing and rate limits"), so no usage is recorded.
-        const counted = await client.messages.countTokens({
-          model,
-          messages: [{ role: 'user', content: text }],
-        });
+        const counted = await client.messages.countTokens(
+          { model, messages: [{ role: 'user', content: text }] },
+          callOptions(COUNT_TOKENS_LIMITS),
+        );
         return ok(counted.input_tokens);
       } catch (error) {
         return mapClaudeError(error);

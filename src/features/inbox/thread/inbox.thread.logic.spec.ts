@@ -246,6 +246,10 @@ describe('deliveryReason and failedLineText', () => {
   it('keeps a reason that does not start with it', () => {
     expect(deliveryReason('client.network')).toBe('เชื่อมต่อระบบไม่ได้ ตรวจอินเทอร์เน็ตแล้วลองอีกครั้ง');
     expect(deliveryReason('media.too_large')).toBe('ไฟล์ใหญ่เกินไป แนบไฟล์ที่เล็กกว่า');
+    // The hours come from LINE_RETRY_KEY_WINDOW_MS, and the line asks to type the message again.
+    expect(failedLineText('message.retry_expired')).toBe(
+      'ส่งไม่สำเร็จ · ส่งอีกครั้งไม่ได้แล้วเพราะเกิน 24 ชั่วโมงหลังส่งครั้งแรก พิมพ์ข้อความแล้วส่งใหม่',
+    );
   });
 
   it('shows only the failed word without a usable code', () => {

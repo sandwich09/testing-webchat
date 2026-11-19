@@ -7,9 +7,14 @@ import {
   FakeLogger,
   FakeRateLimitRepository,
 } from '@/adapters/fakes';
-import { ACCESS_COOKIE_TTL_MS, PRICE_TABLE, RATE_LIMIT_UNLOCK } from '@/core/domain';
+import {
+  ACCESS_COOKIE_TTL_MS,
+  PRICE_TABLE,
+  RATE_LIMIT_UNLOCK,
+  RATE_LIMIT_UNLOCK_NO_IP,
+} from '@/core/domain';
 import type { RateLimitRepository } from '@/core/ports';
-import { makeUnlockAccess } from './unlock-access.use-case';
+import { NO_CLIENT_IP_SUBJECT, makeUnlockAccess } from './unlock-access.use-case';
 import type { RequestContext, UseCaseConfig } from './types';
 
 const baseConfig: UseCaseConfig = {
@@ -134,15 +139,46 @@ describe('UnlockAccess', () => {
     expect(other.ok).toBe(true);
   });
 
-  it('counts a null IP together under the subject unknown', async () => {
+  it('counts requests without an IP in one unlock_no_ip bucket of RATE_LIMIT_UNLOCK_NO_IP', async () => {
     const unlock = build();
-    await failTimes(unlock, RATE_LIMIT_UNLOCK.limit, null);
+    await failTimes(unlock, RATE_LIMIT_UNLOCK_NO_IP.limit, null);
 
     const result = await unlock({ code: FAKE_ACCESS_CODE }, ipCtx(null));
-    const literal = await unlock({ code: FAKE_ACCESS_CODE }, ipCtx('unknown'));
 
     expect(code(result)).toBe('access.rate_limited');
-    expect(code(literal)).toBe('access.rate_limited');
+    if (result.ok) return;
+    expect(result.error.retryAfterSeconds).toBeGreaterThan(RATE_LIMIT_UNLOCK.windowMs / 1000);
+    expect(keys.every((k) => k.startsWith('unlock_no_ip:'))).toBe(true);
+    expect(logger.eventsOf('warn')).toContain('access.unlock.client_ip_missing');
+  });
+
+  it('keeps callers with an IP unaffected when the bucket without an IP is full', async () => {
+    const unlock = build();
+    await failTimes(unlock, RATE_LIMIT_UNLOCK_NO_IP.limit, null);
+
+    expect((await unlock({ code: FAKE_ACCESS_CODE }, ipCtx(IP))).ok).toBe(true);
+    expect((await unlock({ code: 'wrong' }, ipCtx(IP))).ok).toBe(false);
+    expect(code(await unlock({ code: 'wrong' }, ipCtx(IP)))).toBe('access.code_invalid');
+  });
+
+  it('does not let an IP whose text is the shared subject reach the bucket without an IP', async () => {
+    const unlock = build();
+    await failTimes(unlock, RATE_LIMIT_UNLOCK_NO_IP.limit, null);
+
+    expect((await unlock({ code: FAKE_ACCESS_CODE }, ipCtx(NO_CLIENT_IP_SUBJECT))).ok).toBe(true);
+  });
+
+  it('does not scale the bucket without an IP with RATE_LIMIT_SCALE', async () => {
+    const unlock = build({ ...baseConfig, rateLimitScale: 10 });
+    await failTimes(unlock, RATE_LIMIT_UNLOCK_NO_IP.limit, null);
+
+    expect(code(await unlock({ code: FAKE_ACCESS_CODE }, ipCtx(null)))).toBe('access.rate_limited');
+  });
+
+  it('logs client_ip_missing only for requests without an IP', async () => {
+    await build()({ code: FAKE_ACCESS_CODE }, ipCtx(IP));
+
+    expect(logger.eventsOf()).toEqual(['access.unlock.succeeded']);
   });
 
   it('sends the repository a key without the raw IP', async () => {

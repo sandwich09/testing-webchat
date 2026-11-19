@@ -41,6 +41,9 @@ export class FakeAccessTokenSigner implements AccessTokenSigner {
   }
 
   private sign(expiry: string): string {
-    return createHmac('sha256', this.secret).update(`access:${expiry}`, 'utf8').digest('base64url');
+    // The code is part of the key, so changing the code invalidates every earlier token.
+    return createHmac('sha256', `${this.secret}\u0000${this.code}`)
+      .update(`access:${expiry}`, 'utf8')
+      .digest('base64url');
   }
 }

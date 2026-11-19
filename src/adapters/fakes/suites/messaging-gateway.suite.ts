@@ -22,13 +22,18 @@ export interface MessagingGatewayHarness {
   freshReplyToken(): Promise<string>;
   /** A reply token LINE rejects as invalid or expired. */
   invalidReplyToken: string;
-  /** Makes LINE hold this content. `knownSize: false` serves it without Content-Length. */
+  /**
+   * Makes LINE hold this content. `knownSize: false` serves it without Content-Length.
+   * `notReadyTimes`: that many "not ready" answers first (a download of the original answers 202,
+   * a status call says processing), each using one.
+   */
   seedContent(content: {
     lineMessageId: LineMessageId;
     original: Uint8Array;
     preview?: Uint8Array;
     contentType: string;
     knownSize: boolean;
+    notReadyTimes?: number;
   }): Promise<void>;
   /** A message id for which LINE holds no content. */
   missingMessageId: LineMessageId;
@@ -36,6 +41,10 @@ export interface MessagingGatewayHarness {
   exhaustPushQuota(): Promise<void>;
   /** How many pushes to this user LINE actually delivered. */
   deliveredPushCount(to: LineUserId): Promise<number>;
+  /** A Channel ID whose channel secret is `channelSecret`. */
+  channelId: string;
+  /** Makes LINE's next secret check fail with a 5xx, for this harness's Channel ID only. */
+  failNextSecretCheck(): Promise<void>;
 }
 
 const text = (value: string): OutboundLinePart[] => [{ type: 'text', text: value }];
@@ -316,6 +325,13 @@ export const describeMessagingGatewaySuite = (
         if (!second.ok) expect(second.error.code).toBe('line.reply_token_invalid');
       });
 
+      it('returns line.reply_failed, not reply_token_invalid, for a request LINE finds malformed', async () => {
+        const h = await makeHarness();
+        const result = await h.gateway.reply(h.validToken, await h.freshReplyToken(), []);
+        expect(result.ok).toBe(false);
+        if (!result.ok) expect(result.error.code).toBe('line.reply_failed');
+      });
+
       it('returns line.unauthorized for an invalid access token', async () => {
         const h = await makeHarness();
         const result = await h.gateway.reply(h.invalidToken, await h.freshReplyToken(), text('hi'));
@@ -498,6 +514,32 @@ export const describeMessagingGatewaySuite = (
         expect(await readAll(result.value.stream)).toEqual(bytes);
       });
 
+      it('returns line.content_not_ready while LINE prepares the content, then streams it', async () => {
+        const h = await makeHarness();
+        const id = uniqueId('vidwait') as LineMessageId;
+        await h.seedContent({
+          lineMessageId: id,
+          original: bytes,
+          contentType: 'video/mp4',
+          knownSize: true,
+          notReadyTimes: 2,
+        });
+        const first = await h.gateway.downloadContent(h.validToken, id, 'original', 10_000);
+        expect(first.ok).toBe(false);
+        if (!first.ok) expect(first.error.code).toBe('line.content_not_ready');
+        expect(await h.gateway.getContentStatus(h.validToken, id)).toEqual({
+          ok: true,
+          value: 'processing',
+        });
+        expect(await h.gateway.getContentStatus(h.validToken, id)).toEqual({
+          ok: true,
+          value: 'succeeded',
+        });
+        const ready = await h.gateway.downloadContent(h.validToken, id, 'original', 10_000);
+        expect(ready.ok).toBe(true);
+        if (ready.ok) expect(await readAll(ready.value.stream)).toEqual(bytes);
+      });
+
       it('returns line.content_unavailable when LINE holds no such content', async () => {
         const h = await makeHarness();
         const result = await h.gateway.downloadContent(
@@ -520,6 +562,69 @@ export const describeMessagingGatewaySuite = (
         );
         expect(result.ok).toBe(false);
         if (!result.ok) expect(result.error.code).toBe('line.unauthorized');
+      });
+    });
+
+    describe('getContentStatus', () => {
+      it('says succeeded for content that is ready', async () => {
+        const h = await makeHarness();
+        const id = uniqueId('imgready') as LineMessageId;
+        await h.seedContent({
+          lineMessageId: id,
+          original: Uint8Array.from([1, 2, 3]),
+          contentType: 'image/jpeg',
+          knownSize: true,
+        });
+        expect(await h.gateway.getContentStatus(h.validToken, id)).toEqual({
+          ok: true,
+          value: 'succeeded',
+        });
+      });
+
+      it('returns line.unauthorized for an invalid access token', async () => {
+        const h = await makeHarness();
+        const result = await h.gateway.getContentStatus(h.invalidToken, h.missingMessageId);
+        expect(result.ok).toBe(false);
+        if (!result.ok) expect(result.error.code).toBe('line.unauthorized');
+      });
+    });
+
+    describe('verifyChannelSecret', () => {
+      it('accepts the channel secret of the Channel ID', async () => {
+        const h = await makeHarness();
+        expect(await h.gateway.verifyChannelSecret(h.channelId, h.channelSecret)).toEqual({
+          ok: true,
+          value: undefined,
+        });
+      });
+
+      it('returns line.channel_secret_invalid for another secret or another Channel ID', async () => {
+        const h = await makeHarness();
+        for (const [id, secret] of [
+          [h.channelId, `${h.channelSecret}-other`],
+          ['9999999999', h.channelSecret],
+        ] as const) {
+          const result = await h.gateway.verifyChannelSecret(id, secret);
+          expect(result.ok).toBe(false);
+          if (!result.ok) expect(result.error.code).toBe('line.channel_secret_invalid');
+        }
+      });
+
+      it('returns line.unavailable when LINE cannot check, never line.channel_secret_invalid', async () => {
+        const h = await makeHarness();
+        await h.failNextSecretCheck();
+        const result = await h.gateway.verifyChannelSecret(h.channelId, h.channelSecret);
+        expect(result.ok).toBe(false);
+        if (!result.ok) expect(result.error.code).toBe('line.unavailable');
+      });
+
+      it('never puts the secret in an error detail', async () => {
+        const h = await makeHarness();
+        const result = await h.gateway.verifyChannelSecret(
+          h.channelId,
+          'secret-that-must-not-leak',
+        );
+        expect(JSON.stringify(result)).not.toContain('secret-that-must-not-leak');
       });
     });
 

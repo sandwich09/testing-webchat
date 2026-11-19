@@ -16,6 +16,8 @@ export class FakeMessageRepository implements MessageRepository {
   readonly sequence: FakeChangeSequence;
   private readonly contacts: FakeContactRepository | null;
   private readonly rows = new Map<MessageId, Message>();
+  /** Message.deliveryAttemptAt, a column the domain Message does not carry. */
+  private readonly attemptAt = new Map<MessageId, Date>();
 
   constructor(options: { contacts?: FakeContactRepository; sequence?: FakeChangeSequence } = {}) {
     this.contacts = options.contacts ?? null;
@@ -43,8 +45,9 @@ export class FakeMessageRepository implements MessageRepository {
       throw new Error('FakeMessageRepository: duplicate id or lineMessageId (unique)');
     }
     const seq = this.sequence.next();
-    const row: Message = { ...structuredClone(m), seq, updatedSeq: seq };
+    const row: Message = { ...structuredClone(m), seq, updatedSeq: seq, firstPushAt: null };
     this.rows.set(row.id, row);
+    if (m.deliveryStatus === 'pending') this.attemptAt.set(row.id, m.createdAt);
     return row;
   }
 
@@ -119,13 +122,54 @@ export class FakeMessageRepository implements MessageRepository {
       : Promise.reject(new Error('FakeMessageRepository.markFailed: message does not exist'));
   };
 
-  readonly markPendingIfFailed: MessageRepository['markPendingIfFailed'] = (id) => {
+  readonly markPendingIfFailed: MessageRepository['markPendingIfFailed'] = (id, at) => {
     if (this.rows.get(id)?.deliveryStatus !== 'failed') return Promise.resolve(false);
     this.update(id, (m) => {
       m.deliveryStatus = 'pending';
       m.deliveryError = null;
     });
+    this.attemptAt.set(id, at);
     return Promise.resolve(true);
+  };
+
+  readonly recordFirstPush: MessageRepository['recordFirstPush'] = (id, at) => {
+    const row = this.rows.get(id);
+    if (row?.firstPushAt === null) {
+      this.update(id, (m) => {
+        m.firstPushAt = at;
+      });
+    }
+    return Promise.resolve();
+  };
+
+  readonly failStuckMedia: MessageRepository['failStuckMedia'] = (contactId, staleBefore) => {
+    const stuck = this.forContact(contactId).filter(
+      (m) => m.mediaStatus === 'pending' && m.createdAt.getTime() < staleBefore.getTime(),
+    );
+    for (const m of stuck) {
+      this.update(m.id, (row) => {
+        row.mediaStatus = 'failed';
+      });
+    }
+    return Promise.resolve(stuck.map((m) => m.id));
+  };
+
+  readonly failStuckDeliveries: MessageRepository['failStuckDeliveries'] = (
+    contactId,
+    staleBefore,
+  ) => {
+    const stuck = this.forContact(contactId).filter(
+      (m) =>
+        m.deliveryStatus === 'pending' &&
+        (this.attemptAt.get(m.id) ?? m.createdAt).getTime() < staleBefore.getTime(),
+    );
+    for (const m of stuck) {
+      this.update(m.id, (row) => {
+        row.deliveryStatus = 'failed';
+        row.deliveryError = 'line.send_interrupted';
+      });
+    }
+    return Promise.resolve(stuck.map((m) => m.id));
   };
 
   readonly setMediaReady: MessageRepository['setMediaReady'] = (id, mediaUrl, previewUrl) => {

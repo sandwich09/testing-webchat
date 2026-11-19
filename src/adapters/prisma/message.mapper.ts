@@ -51,6 +51,7 @@ export const toMessage = (row: MessageRow): Message => ({
   retryKey: row.retryKey,
   createdAt: row.createdAt,
   sentAt: row.sentAt,
+  firstPushAt: row.firstPushAt,
 });
 
 /** Domain message to the row inserted. `seq` and `updatedSeq` come from the database. */
@@ -74,4 +75,6 @@ export const toNewMessageRow = (m: NewMessage): Prisma.MessageCreateManyInput =>
   retryKey: m.retryKey,
   createdAt: m.createdAt,
   sentAt: m.sentAt,
+  // The delivery attempt of a new pending row starts when the row is written.
+  deliveryAttemptAt: m.deliveryStatus === 'pending' ? m.createdAt : null,
 });

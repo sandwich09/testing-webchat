@@ -23,10 +23,14 @@ export interface SettingsRepository {
     >,
   ): Promise<Settings>;
   getEncryptedLineCredentials(): Promise<EncryptedLineCredentials | null>;
+  /** Stores the credentials with the Channel ID and when LINE confirmed the secret (or null). */
   saveLineCredentials(
     c: EncryptedLineCredentials,
     bot: { botName: string; basicId: string },
+    channel: { channelId: string; secretVerifiedAt: Date | null },
   ): Promise<void>;
+  /** Result of a later secret check: when LINE confirmed it, or null when it refused the pair. */
+  recordLineSecretCheck(verifiedAt: Date | null): Promise<void>;
   updateLineBotInfo(bot: { botName: string; basicId: string }): Promise<void>;
   recordWebhookReceived(at: Date): Promise<void>;
   recordLineError(e: { code: ErrorCode; at: Date } | null): Promise<void>;

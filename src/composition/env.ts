@@ -10,8 +10,15 @@ const BASE64 = /^[A-Za-z0-9+/_-]+={0,2}$/;
 const DEFAULT_LINE_API_BASE_URL = 'https://api.line.me';
 const DEFAULT_LINE_DATA_API_BASE_URL = 'https://api-data.line.me';
 const DEFAULT_POLL_INTERVAL_MS = 2000;
-const DEFAULT_AI_DEBOUNCE_MS = 2500;
+export const DEFAULT_AI_DEBOUNCE_MS = 2500;
 const DEFAULT_RATE_LIMIT_SCALE = 1;
+
+/** Base URLs that only point at the stub: production uses the official hosts, so they stay unset. */
+const PRODUCTION_UNSET = [
+  'LINE_API_BASE_URL',
+  'LINE_DATA_API_BASE_URL',
+  'ANTHROPIC_BASE_URL',
+] as const;
 
 /** An empty value counts as unset, as `.env.example` leaves optional values empty. */
 const blankToUndefined = (value: unknown): unknown =>
@@ -68,10 +75,25 @@ const envSchema = z
     AI_DEBOUNCE_MS: integerAtLeast(1, DEFAULT_AI_DEBOUNCE_MS),
     RATE_LIMIT_SCALE: integerAtLeast(1, DEFAULT_RATE_LIMIT_SCALE),
     NODE_ENV: optional,
+    // Set by Vercel (production, preview, development); unset in Docker, CI and `pnpm dev`.
+    VERCEL_ENV: optional,
   })
   .superRefine((env, issue) => {
     if (env.FILE_STORAGE === 'blob' && env.BLOB_READ_WRITE_TOKEN === undefined) {
       issue.addIssue({ code: 'custom', path: ['BLOB_READ_WRITE_TOKEN'], message: 'required' });
+    }
+    if (env.VERCEL_ENV !== 'production') return;
+    // Production refuses the settings that exist for stubs and tests (project-setup 6.10).
+    for (const name of PRODUCTION_UNSET) {
+      if (env[name] !== undefined) {
+        issue.addIssue({ code: 'custom', path: [name], message: 'must be unset in production' });
+      }
+    }
+    if (env.FILE_STORAGE === 'local') {
+      issue.addIssue({ code: 'custom', path: ['FILE_STORAGE'], message: 'must be blob' });
+    }
+    if (env.RATE_LIMIT_SCALE !== DEFAULT_RATE_LIMIT_SCALE) {
+      issue.addIssue({ code: 'custom', path: ['RATE_LIMIT_SCALE'], message: 'must be 1' });
     }
   });
 

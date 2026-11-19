@@ -208,6 +208,7 @@ describe('ListContacts', () => {
       await settings.saveLineCredentials(
         { channelSecretEnc: 's', channelAccessTokenEnc: 't' },
         { botName: 'Bot', basicId: '@bot' },
+        { channelId: '1000000001', secretVerifiedAt: null },
       );
 
       const r = await page({ filter: 'unread' });

@@ -12,6 +12,7 @@ import { err, ok } from '@/core/domain';
 import type { MessagingGateway } from '@/core/ports';
 import {
   LINE_CONTENT_TIMEOUT_MS,
+  LINE_LOADING_MAX_RETRIES,
   LINE_MAX_RETRIES,
   LINE_PROFILE_TIMEOUT_MS,
   LINE_REQUEST_TIMEOUT_MS,
@@ -47,18 +48,16 @@ export class LineContentTooLargeError extends Error {
   }
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /**
- * Value of `X-Line-Retry-Key`. Assumption (ต้องยืนยันกับเอกสาร LINE): LINE accepts only a UUID
- * there. Message ids (UUIDv7) are sent unchanged; any other key is mapped to a stable UUID
- * derived from its SHA-256, so the same key always yields the same header on every retry.
+ * Value of `X-Line-Retry-Key`: a UUID with version-5 and RFC 4122 variant bits over the first 16
+ * bytes of SHA-256 of the key. LINE is known to accept version 4 and 5 keys; message ids are
+ * UUIDv7, which LINE has not been seen to accept, so every key is mapped, ids included. The same
+ * key always gives the same header, on every retry and after a restart.
  */
 export const toLineRetryKey = (retryKey: string): string => {
-  if (UUID.test(retryKey)) return retryKey;
   const h = createHash('sha256').update(retryKey, 'utf8').digest().subarray(0, 16);
-  h.writeUInt8((h.readUInt8(6) & 0x0f) | 0x80, 6); // version 8 (custom)
-  h.writeUInt8((h.readUInt8(8) & 0x3f) | 0x80, 8); // RFC 9562 variant
+  h.writeUInt8((h.readUInt8(6) & 0x0f) | 0x50, 6); // version 5
+  h.writeUInt8((h.readUInt8(8) & 0x3f) | 0x80, 8); // RFC 4122 variant
   const hex = h.toString('hex');
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 };
@@ -71,6 +70,10 @@ const profileSchema = z.looseObject({
   pictureUrl: z.string().optional(),
 });
 const botInfoSchema = z.looseObject({ displayName: z.string().min(1), basicId: z.string().min(1) });
+const contentStatusSchema = z.looseObject({
+  status: z.enum(['processing', 'succeeded', 'failed']),
+});
+const issuedTokenSchema = z.looseObject({ access_token: z.string().min(1) });
 
 const toLineMessage = (part: OutboundLinePart): Record<string, string> => {
   switch (part.type) {
@@ -87,11 +90,13 @@ const toLineMessage = (part: OutboundLinePart): Record<string, string> => {
 };
 
 /**
- * Assumption (ต้องยืนยันกับเอกสาร LINE): LINE answers 400 to a reply whose token is invalid,
- * expired or used. Only the status is read, not the message (stubs-and-fixtures 4.1). A 400 means
- * nothing was sent, so the caller may push instead.
+ * LINE answers 400 with a message matching "Invalid reply token" to a reply whose token is expired
+ * or already used; nothing was sent, so the caller may push instead. Any other 400 (a malformed
+ * message, with `details[].property`) is not about the token: pushing the same payload would fail
+ * the same way, so it is `line.reply_failed`.
  */
-const isReplyTokenRejection = (status: number): boolean => status === 400;
+const isReplyTokenRejection = (status: number, message: string | null): boolean =>
+  status === 400 && message !== null && /invalid reply token/i.test(message);
 
 /**
  * Assumption (ต้องยืนยันกับเอกสาร LINE): a push whose retry key LINE already accepted is
@@ -104,8 +109,11 @@ const isRetryKeyAlreadyAccepted = (status: number, headers: Headers): boolean =>
  * Content API path. Assumption (ต้องยืนยันกับเอกสาร LINE): the video preview image is served at
  * `/content/preview`. The id is checked against SAFE_PATH_ID before this is called.
  */
-const contentPath = (lineMessageId: LineMessageId, variant: 'original' | 'preview'): string =>
-  `/v2/bot/message/${lineMessageId}${variant === 'preview' ? '/content/preview' : '/content'}`;
+const contentPath = (
+  lineMessageId: LineMessageId,
+  variant: 'original' | 'preview' | 'transcoding',
+): string =>
+  `/v2/bot/message/${lineMessageId}/content${variant === 'original' ? '' : `/${variant}`}`;
 
 const contentLength = (headers: Headers): number | null => {
   const value = headers.get('content-length');
@@ -192,7 +200,7 @@ export const createLineMessagingGateway = (
       }
       if (o.kind !== 'error') return err('line.unavailable', outcomeDetail(o));
       if (o.status === 401) return err('line.unauthorized', outcomeDetail(o));
-      if (isReplyTokenRejection(o.status)) {
+      if (isReplyTokenRejection(o.status, o.message)) {
         // A rejected token after an attempt with no known result may mean that attempt was
         // delivered and used the token; pushing now could send the message twice.
         return ex.earlierAttemptUnknown
@@ -274,6 +282,11 @@ export const createLineMessagingGateway = (
         if (o.status === 429 || o.status >= 500) return err('line.unavailable', outcomeDetail(o));
         return err('line.content_unavailable', outcomeDetail(o));
       }
+      // Only 200 carries the file; 202 means LINE is still preparing it (a video being transcoded).
+      if (o.response.status !== 200) {
+        await discard(o.response);
+        return err('line.content_not_ready', `LINE answered ${String(o.response.status)}`);
+      }
       const sizeBytes = contentLength(o.response.headers);
       if (sizeBytes !== null && sizeBytes > maxBytes) {
         await discard(o.response);
@@ -296,12 +309,76 @@ export const createLineMessagingGateway = (
       });
     },
 
+    async getContentStatus(token: LineAccessToken, lineMessageId: LineMessageId) {
+      if (!SAFE_PATH_ID.test(lineMessageId)) {
+        return err('line.content_unavailable', 'invalid message id');
+      }
+      // A poll: one short attempt; the caller decides whether to ask again.
+      const ex = await call(data, contentPath(lineMessageId, 'transcoding'), token, {
+        timeoutMs: LINE_REQUEST_TIMEOUT_MS,
+        retries: 0,
+      });
+      const o = ex.outcome;
+      if (o.kind !== 'ok' && o.kind !== 'error') return err('line.unavailable', outcomeDetail(o));
+      if (o.kind === 'error') {
+        if (o.status === 401) return err('line.unauthorized', outcomeDetail(o));
+        if (o.status === 429 || o.status >= 500) return err('line.unavailable', outcomeDetail(o));
+        return err('line.content_unavailable', outcomeDetail(o));
+      }
+      const body = contentStatusSchema.safeParse(await readJson(o.response));
+      if (!body.success) return err('line.unavailable', 'unexpected transcoding body');
+      return ok(body.data.status);
+    },
+
+    async verifyChannelSecret(channelId: string, channelSecret: string) {
+      // Form fields, not JSON, and no bearer token: this is LINE's client-credentials endpoint.
+      const issued = await exchange(fetchFn, sleep, {
+        url: urlOf(api, '/v2/oauth/accessToken'),
+        init: {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            grant_type: 'client_credentials',
+            client_id: channelId,
+            client_secret: channelSecret,
+          }).toString(),
+        },
+        timeoutMs: LINE_REQUEST_TIMEOUT_MS,
+        // Each attempt that reaches LINE issues a token; one attempt keeps it to one.
+        maxRetries: 0,
+      });
+      const o = issued.outcome;
+      if (o.kind === 'timeout' || o.kind === 'network') {
+        return err('line.unavailable', outcomeDetail(o));
+      }
+      if (o.kind === 'error') {
+        if (o.status === 429 || o.status >= 500) return err('line.unavailable', outcomeDetail(o));
+        return err('line.channel_secret_invalid', outcomeDetail(o));
+      }
+      const token = issuedTokenSchema.safeParse(await readJson(o.response));
+      // A 2xx without a token proves nothing either way.
+      if (!token.success) return err('line.unavailable', 'unexpected token body');
+      // Best effort: the token is short-lived and is dropped here whatever LINE answers.
+      const revoked = await exchange(fetchFn, sleep, {
+        url: urlOf(api, '/v2/oauth/revoke'),
+        init: {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ access_token: token.data.access_token }).toString(),
+        },
+        timeoutMs: LINE_REQUEST_TIMEOUT_MS,
+        maxRetries: 0,
+      });
+      if (revoked.outcome.kind === 'ok') await discard(revoked.outcome.response);
+      return ok(undefined);
+    },
+
     async showLoading(token: LineAccessToken, userId: LineUserId, seconds: number) {
       // Not retried: the caller does not treat a failure here as a failure.
       const ex = await call(api, '/v2/bot/chat/loading/start', token, {
         body: { chatId: userId, loadingSeconds: seconds },
         timeoutMs: LINE_REQUEST_TIMEOUT_MS,
-        retries: 0,
+        retries: LINE_LOADING_MAX_RETRIES,
       });
       const o = ex.outcome;
       if (o.kind === 'ok') {

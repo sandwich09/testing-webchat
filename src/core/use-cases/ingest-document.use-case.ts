@@ -6,7 +6,9 @@ import {
   bangkokDayRange,
   computeCost,
   err,
+  isNoResponse,
   knowledgeOverflow,
+  noResponseUsage,
   ok,
   sniffContentType,
 } from '@/core/domain';
@@ -192,6 +194,20 @@ export const makeExtractDocument: (
   const settle = async ({ documentId, bytes, model }: ExtractFollowUp): Promise<Settled> => {
     const res = await extractor.extract({ model, pdf: bytes, maxTokens: AI_EXTRACT_MAX_TOKENS });
     if (!res.ok) {
+      // Sent without an answer: may be billed, so it gets a zero-cost row (usage-cost).
+      if (isNoResponse(res.error.code)) {
+        await usage.insert(
+          noResponseUsage({
+            id: ids.usageId(),
+            kind: 'ingest',
+            contactId: null,
+            documentId,
+            provider: 'claude',
+            model,
+            createdAt: clock.now(),
+          }),
+        );
+      }
       await settings.recordAiError({ code: res.error.code, at: clock.now() });
       return failed('knowledge.extract_failed');
     }

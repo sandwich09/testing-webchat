@@ -3,7 +3,7 @@ import { err, ok } from '@/core/domain';
 import type { TopicGuard, TopicGuardRequest, TopicGuardResponse } from '@/core/ports';
 
 export type FakeTopicGuardErrorCode =
-  'ai.unavailable' | 'ai.rate_limited' | 'ai.auth_failed' | 'ai.bad_request';
+  'ai.unavailable' | 'ai.no_response' | 'ai.rate_limited' | 'ai.auth_failed' | 'ai.bad_request';
 
 type GuardResult = Result<TopicGuardResponse, FakeTopicGuardErrorCode>;
 type Scripted = GuardResult | ((req: TopicGuardRequest) => GuardResult);

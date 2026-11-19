@@ -14,6 +14,8 @@ import { LINE_MAX_PARTS_PER_REQUEST, err, ok } from '@/core/domain';
 import type { MessagingGateway } from '@/core/ports';
 
 export const FAKE_LINE_CHANNEL_SECRET = 'fake-channel-secret';
+/** The Channel ID the fake pairs with FAKE_LINE_CHANNEL_SECRET. */
+export const FAKE_LINE_CHANNEL_ID = '1000000001';
 export const FAKE_LINE_ACCESS_TOKEN = 'fake-access-token' as LineAccessToken;
 /** A token the fake always rejects. */
 export const FAKE_LINE_INVALID_TOKEN = 'fake-invalid-token' as LineAccessToken;
@@ -25,7 +27,14 @@ type Failure<M extends keyof MessagingGateway> = Extract<
 
 /** Methods whose next call can be made to fail with `failNext`. */
 export type FakeMessagingGatewayFailable =
-  'reply' | 'push' | 'getProfile' | 'downloadContent' | 'showLoading' | 'getBotInfo';
+  | 'reply'
+  | 'push'
+  | 'getProfile'
+  | 'downloadContent'
+  | 'getContentStatus'
+  | 'showLoading'
+  | 'verifyChannelSecret'
+  | 'getBotInfo';
 
 export interface FakeLineContent {
   original?: Uint8Array;
@@ -34,6 +43,14 @@ export interface FakeLineContent {
   contentType: string | null;
   /** When false the fake reports `sizeBytes: null`, like a response without Content-Length. */
   knownSize?: boolean;
+  /**
+   * "Not ready" answers before the content is ready, like LINE's 202 while a video is transcoded:
+   * each download of the original (`line.content_not_ready`) and each `getContentStatus`
+   * (`processing`) uses one. Once used up the status is `succeeded` and the original is served.
+   */
+  notReadyTimes?: number;
+  /** `getContentStatus` says `failed` and the original is never served. */
+  transcodingFailed?: boolean;
 }
 
 export interface FakeSentReply {
@@ -157,6 +174,8 @@ export class FakeMessagingGateway implements MessagingGateway {
   readonly rejectedTokens = new Set<string>([FAKE_LINE_INVALID_TOKEN]);
   readonly invalidReplyTokens = new Set<string>();
   quotaExceeded = false;
+  /** Channel ID to its channel secret, for `verifyChannelSecret`. */
+  readonly channels = new Map<string, string>();
 
   private readonly usedReplyTokens = new Set<string>();
   private readonly acceptedRetryKeys = new Set<string>();
@@ -167,6 +186,7 @@ export class FakeMessagingGateway implements MessagingGateway {
 
   constructor(opts: { channelSecret?: string } = {}) {
     this.channelSecret = opts.channelSecret ?? FAKE_LINE_CHANNEL_SECRET;
+    this.channels.set(FAKE_LINE_CHANNEL_ID, this.channelSecret);
   }
 
   // --- test controls -------------------------------------------------------------------------
@@ -184,7 +204,8 @@ export class FakeMessagingGateway implements MessagingGateway {
   }
 
   setContent(lineMessageId: LineMessageId, content: FakeLineContent): void {
-    this.contents.set(lineMessageId, content);
+    // A copy: the fake counts notReadyTimes down on its own record.
+    this.contents.set(lineMessageId, { ...content });
   }
 
   setBotInfo(info: { botName: string; basicId: string }): void {
@@ -299,6 +320,12 @@ export class FakeMessagingGateway implements MessagingGateway {
     const bytes = variant === 'preview' ? content?.preview : content?.original;
     if (content === undefined || bytes === undefined)
       return Promise.resolve(err('line.content_unavailable'));
+    if (
+      variant === 'original' &&
+      (content.transcodingFailed === true || this.takeNotReady(content))
+    ) {
+      return Promise.resolve(err('line.content_not_ready'));
+    }
     const knownSize = content.knownSize ?? true;
     // With a known size an oversized file is refused before any byte is read.
     if (knownSize && bytes.length > maxBytes) return Promise.resolve(err('media.too_large'));
@@ -308,6 +335,33 @@ export class FakeMessagingGateway implements MessagingGateway {
         contentType: content.contentType,
         sizeBytes: knownSize ? bytes.length : null,
       }),
+    );
+  }
+
+  getContentStatus(
+    token: LineAccessToken,
+    lineMessageId: LineMessageId,
+  ): Promise<Result<'processing' | 'succeeded' | 'failed', Failure<'getContentStatus'>>> {
+    const failure = this.takeFailure('getContentStatus');
+    if (failure !== null) return Promise.resolve(err(failure as Failure<'getContentStatus'>));
+    if (this.isRejected(token)) return Promise.resolve(err('line.unauthorized'));
+    const content = this.contents.get(lineMessageId);
+    if (content === undefined) return Promise.resolve(err('line.content_unavailable'));
+    if (content.transcodingFailed === true) return Promise.resolve(ok('failed'));
+    return Promise.resolve(ok(this.takeNotReady(content) ? 'processing' : 'succeeded'));
+  }
+
+  verifyChannelSecret(
+    channelId: string,
+    channelSecret: string,
+  ): Promise<Result<void, Failure<'verifyChannelSecret'>>> {
+    const failure = this.takeFailure('verifyChannelSecret');
+    if (failure !== null) return Promise.resolve(err(failure as Failure<'verifyChannelSecret'>));
+    const known = this.channels.get(channelId);
+    return Promise.resolve(
+      known !== undefined && known === channelSecret
+        ? ok(undefined)
+        : err('line.channel_secret_invalid'),
     );
   }
 
@@ -334,6 +388,13 @@ export class FakeMessagingGateway implements MessagingGateway {
     if (failure !== null) return Promise.resolve(err(failure as Failure<'getBotInfo'>));
     if (this.isRejected(token)) return Promise.resolve(err('line.credentials_invalid'));
     return Promise.resolve(ok({ ...this.botInfo }));
+  }
+
+  /** Uses one "not ready" answer of the content; false once none are left. */
+  private takeNotReady(content: FakeLineContent): boolean {
+    if (content.notReadyTimes === undefined || content.notReadyTimes <= 0) return false;
+    content.notReadyTimes -= 1;
+    return true;
   }
 
   private isRejected(token: LineAccessToken): boolean {

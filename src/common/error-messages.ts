@@ -28,6 +28,8 @@ export interface ErrorMessageContext {
   /** Tokens by which the knowledge base would exceed its capacity. */
   over?: string | number;
   max?: string | number;
+  /** Hours of LINE's retry key window (LINE_RETRY_KEY_WINDOW_MS). */
+  hours?: string | number;
 }
 
 /** `null` means the catalog shows no text for the code. */
@@ -60,6 +62,8 @@ const ERROR_MESSAGES: Record<ErrorMessageCode, MessageEntry> = {
   'line.credentials_unreadable':
     'อ่าน credential ของ LINE ที่บันทึกไว้ไม่ได้ กรอก Channel secret และ Channel access token ใหม่ที่ ตั้งค่า › LINE Official Account',
   'line.credentials_invalid': 'Channel access token ไม่ถูกต้อง ตรวจค่าที่คัดลอกมาอีกครั้ง',
+  'line.channel_secret_invalid':
+    'Channel ID กับ Channel secret ไม่ตรงกัน ตรวจว่าคัดลอกทั้งสองค่ามาจาก channel เดียวกัน',
   'line.unauthorized': 'ส่งไม่สำเร็จ Channel access token ใช้ไม่ได้ ตรวจที่ ตั้งค่า › LINE Official Account',
   'line.quota_exceeded': 'ส่งไม่สำเร็จ โควตาข้อความของ LINE เต็ม',
   'line.rate_limited': 'ส่งไม่สำเร็จ LINE รับคำขอถี่เกินไป รอสักครู่แล้วกด "ส่งอีกครั้ง"',
@@ -73,13 +77,17 @@ const ERROR_MESSAGES: Record<ErrorMessageCode, MessageEntry> = {
   'line.profile_unavailable': null,
   // The catalog shows no code here; the bubble shows the media text of ui-copy instead.
   'line.content_unavailable': null,
+  'line.content_not_ready': null,
   'line.loading_failed': null,
+  'line.send_interrupted': 'ส่งไม่สำเร็จ ระบบหยุดทำงานก่อนรู้ผลการส่ง กด "ส่งอีกครั้ง"',
 
   // Contacts and messages
   'contact.not_found': 'ไม่พบแชทนี้ เลือกแชทจากรายชื่อ',
   'contact.unfollowed': 'ลูกค้าเลิกติดตามแล้ว ส่งข้อความไม่ได้',
   'message.not_found': 'ไม่พบข้อความนี้ โหลดหน้าใหม่แล้วลองอีกครั้ง',
   'message.not_retryable': 'ข้อความนี้ส่งแล้วหรือกำลังส่งอยู่',
+  'message.retry_expired':
+    'ส่งไม่สำเร็จ ส่งอีกครั้งไม่ได้แล้วเพราะเกิน {hours} ชั่วโมงหลังส่งครั้งแรก พิมพ์ข้อความแล้วส่งใหม่',
   'message.id_conflict': 'ส่งไม่สำเร็จ คัดลอกข้อความแล้วส่งใหม่',
   'message.rate_limited': 'ส่งถี่เกินไป รอสักครู่แล้วส่งอีกครั้ง ข้อความที่พิมพ์ยังอยู่',
 
@@ -109,6 +117,8 @@ const ERROR_MESSAGES: Record<ErrorMessageCode, MessageEntry> = {
   'ai.rate_limited': 'เรียก AI ถี่เกินโควตาของผู้ให้บริการ รอสักครู่',
   'ai.auth_failed': 'API key ของ AI ใช้ไม่ได้ ตรวจค่า ANTHROPIC_API_KEY บน Vercel',
   'ai.bad_request': 'ผู้ให้บริการ AI ไม่รับคำขอของระบบ แจ้งผู้พัฒนา',
+  'ai.no_response': 'เรียก AI ไม่สำเร็จ ส่งคำขอแล้วแต่ไม่ได้คำตอบในเวลาที่กำหนด ระบบจะลองอีกครั้งเมื่อมีข้อความใหม่',
+  'ai.link_not_allowed': 'คำตอบของ AI มีลิงก์ที่ไม่อยู่ในคลังความรู้หรือคำแนะนำของร้าน จึงไม่ได้ส่ง',
 
   // Settings
   'settings.guard_topics_required': 'ใส่หัวข้ออย่างน้อยหนึ่งหัวข้อแล้วบันทึกก่อน จึงจะเปิดหรือทดลองขอบเขตหัวข้อได้',
@@ -126,6 +136,8 @@ const ERROR_MESSAGES: Record<ErrorMessageCode, MessageEntry> = {
   'knowledge.extract_failed': 'แปลงไฟล์ไม่สำเร็จ กด "ลองใหม่" แล้วเลือกไฟล์อีกครั้ง',
   'knowledge.extract_empty': 'ไม่พบข้อความที่อ่านได้ในไฟล์นี้ ใช้ไฟล์ที่มีข้อความ',
   'knowledge.extract_refused': 'AI ไม่แปลงไฟล์นี้ ตรวจเนื้อหาของไฟล์แล้วลองไฟล์อื่น',
+  'knowledge.extract_interrupted':
+    'แปลงไฟล์ไม่เสร็จเพราะระบบหยุดทำงานกลางคัน กด "ลองใหม่" แล้วเลือกไฟล์อีกครั้ง',
 
   // Canned replies
   'canned_reply.not_found': 'ไม่พบข้อความสำเร็จรูปนี้ โหลดหน้าใหม่',

@@ -1,6 +1,8 @@
 import {
+  MEDIA_STUCK_AFTER_MS,
   MESSAGE_PAGE_LIMIT,
   POLL_PAGE_LIMIT,
+  SEND_STUCK_AFTER_MS,
   err,
   ok,
   type ContactId,
@@ -24,15 +26,30 @@ export type GetMessagesOutput = {
   highWater: Seq;
 };
 
-export type GetMessagesDeps = Pick<AllPorts, 'contacts' | 'messages'>;
+export type GetMessagesDeps = Pick<AllPorts, 'contacts' | 'messages' | 'clock' | 'logger'>;
 
 export const makeGetMessages: (
   deps: GetMessagesDeps,
   config: UseCaseConfig,
 ) => UseCase<GetMessagesInput, GetMessagesOutput, 'contact.not_found'> =
-  ({ contacts, messages }) =>
+  ({ contacts, messages, clock, logger }) =>
   async ({ contactId, mode }) => {
     if ((await contacts.findById(contactId)) === null) return err('contact.not_found');
+
+    // Rows left behind by a stopped function: inbound media still pending and outbound messages
+    // still sending become failed before the page is read, so this poll already shows them.
+    const now = clock.now().getTime();
+    const media = await messages.failStuckMedia(contactId, new Date(now - MEDIA_STUCK_AFTER_MS));
+    if (media.length > 0) {
+      logger.log('warn', 'media.store.stuck_recovered', { contactId, count: media.length });
+    }
+    const sends = await messages.failStuckDeliveries(
+      contactId,
+      new Date(now - SEND_STUCK_AFTER_MS),
+    );
+    if (sends.length > 0) {
+      logger.log('warn', 'line.send.stuck_recovered', { contactId, count: sends.length });
+    }
 
     switch (mode.kind) {
       case 'latest': {

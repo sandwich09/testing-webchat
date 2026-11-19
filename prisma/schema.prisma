@@ -106,6 +106,10 @@ model Settings {
   lineAccessTokenEnc   String?
   lineBotName          String?
   lineBasicId          String?
+  // Not secret. Null for credentials saved before the Channel ID was asked for.
+  lineChannelId        String?
+  // When LINE last confirmed the Channel ID and channel secret pair.
+  lineSecretVerifiedAt DateTime?      @db.Timestamptz(3)
   aiEnabled            Boolean        @default(false)
   aiProvider           String         @default("claude")
   aiModel              String         @default("claude-opus-5-5")
@@ -155,27 +159,31 @@ model Contact {
 }
 
 model Message {
-  id               String           @id @db.Uuid
-  seq              BigInt           @unique @default(dbgenerated("nextval('change_seq')"))
-  updatedSeq       BigInt           @default(0)
-  contactId        String           @db.Uuid
-  direction        MessageDirection
-  author           MessageAuthor
-  type             MessageType
-  otherKind        OtherKind?
-  eventCode        String?
-  text             String?
-  mediaUrl         String?
-  previewUrl       String?
-  mediaStatus      MediaStatus?
-  stickerPackageId String?
-  stickerId        String?
-  lineMessageId    String?          @unique
-  deliveryStatus   DeliveryStatus?
-  deliveryError    String?
-  retryKey         String?          @db.Uuid
-  createdAt        DateTime         @db.Timestamptz(3)
-  sentAt           DateTime?        @db.Timestamptz(3)
+  id                String           @id @db.Uuid
+  seq               BigInt           @unique @default(dbgenerated("nextval('change_seq')"))
+  updatedSeq        BigInt           @default(0)
+  contactId         String           @db.Uuid
+  direction         MessageDirection
+  author            MessageAuthor
+  type              MessageType
+  otherKind         OtherKind?
+  eventCode         String?
+  text              String?
+  mediaUrl          String?
+  previewUrl        String?
+  mediaStatus       MediaStatus?
+  stickerPackageId  String?
+  stickerId         String?
+  lineMessageId     String?          @unique
+  deliveryStatus    DeliveryStatus?
+  deliveryError     String?
+  retryKey          String?          @db.Uuid
+  createdAt         DateTime         @db.Timestamptz(3)
+  sentAt            DateTime?        @db.Timestamptz(3)
+  // When the current delivery attempt started: the insert of a pending row or the last retry.
+  deliveryAttemptAt DateTime?        @db.Timestamptz(3)
+  // When the first push with retryKey was attempted; never moves (LINE_RETRY_KEY_WINDOW_MS).
+  firstPushAt       DateTime?        @db.Timestamptz(3)
 
   contact  Contact   @relation(fields: [contactId], references: [id], onDelete: Restrict)
   aiUsages AiUsage[]

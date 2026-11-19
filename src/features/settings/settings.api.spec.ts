@@ -56,6 +56,8 @@ const settings = {
     status: 'not_configured',
     botName: null,
     basicId: null,
+    channelId: null,
+    secretStatus: 'no_channel_id',
     webhookUrl: 'https://example.test/api/line/webhook',
     lastWebhookAt: null,
   },
@@ -98,6 +100,7 @@ const usage = {
   totalCostUsd: '0.000000',
   replyCount: 0,
   averageCostPerReplyUsd: null,
+  noResponseCount: 0,
 };
 const record = {
   id: 'u1',
@@ -136,10 +139,11 @@ describe('AI and LINE', () => {
     expect(call()).toEqual({ url: '/api/settings', method: 'PATCH', body: { aiEnabled: false } });
   });
 
-  it('saveLineCredentials sends PUT and returns the bot info', async () => {
-    fetchMock.mockResolvedValue(json({ botName: 'ร้าน', basicId: '@shop' }));
-    const body = { channelSecret: 's', channelAccessToken: 't' };
-    await expect(saveLineCredentials(body)).resolves.toEqual({ botName: 'ร้าน', basicId: '@shop' });
+  it('saveLineCredentials sends PUT and returns the bot info with the secret check', async () => {
+    const info = { botName: 'ร้าน', basicId: '@shop', secretStatus: 'verified' };
+    fetchMock.mockResolvedValue(json(info));
+    const body = { channelId: '1234567890', channelSecret: 's', channelAccessToken: 't' };
+    await expect(saveLineCredentials(body)).resolves.toEqual(info);
     expect(call()).toEqual({ url: '/api/settings/line-credentials', method: 'PUT', body });
   });
 
@@ -148,12 +152,14 @@ describe('AI and LINE', () => {
       json({ error: { code: 'line.credentials_invalid', message: 'x', requestId: 'r' } }, 422),
     );
     await expect(
-      saveLineCredentials({ channelSecret: 's', channelAccessToken: 't' }),
+      saveLineCredentials({ channelId: '1234567890', channelSecret: 's', channelAccessToken: 't' }),
     ).rejects.toMatchObject({ code: 'line.credentials_invalid', status: 422 });
   });
 
   it('testLineConnection posts to /api/settings/line/test', async () => {
-    fetchMock.mockResolvedValue(json({ botName: 'ร้าน', basicId: '@shop' }));
+    fetchMock.mockResolvedValue(
+      json({ botName: 'ร้าน', basicId: '@shop', secretStatus: 'no_channel_id' }),
+    );
     await testLineConnection();
     expect(call()).toMatchObject({ url: '/api/settings/line/test', method: 'POST' });
   });

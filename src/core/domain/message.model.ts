@@ -37,4 +37,9 @@ export interface Message {
   retryKey: string | null;
   createdAt: Date;
   sentAt: Date | null;
+  /**
+   * Outbound: when the first push with retryKey was attempted, or null when none was. Unlike the
+   * start of the current attempt it never moves, so it dates LINE's retry key window.
+   */
+  firstPushAt: Date | null;
 }

@@ -32,6 +32,8 @@ const defaults = (): Row => ({
     lineConfigured: false,
     lineBotName: null,
     lineBasicId: null,
+    lineChannelId: null,
+    lineSecretVerifiedAt: null,
     lastWebhookAt: null,
     lastLineError: null,
     lastAiError: null,
@@ -44,6 +46,12 @@ export class FakeSettingsRepository implements SettingsRepository {
   private row: Row | null = null;
   /** Set to make `ping` throw, as when the database cannot be reached. */
   pingError: Error | null = null;
+
+  /** Test control: the row as credentials saved before the Channel ID was asked for leave it. */
+  forgetLineChannelId(): void {
+    this.current().settings.lineChannelId = null;
+    this.current().settings.lineSecretVerifiedAt = null;
+  }
 
   private current(): Row {
     this.row ??= defaults();
@@ -73,12 +81,19 @@ export class FakeSettingsRepository implements SettingsRepository {
     return Promise.resolve(c ? { ...c } : null);
   };
 
-  readonly saveLineCredentials: SettingsRepository['saveLineCredentials'] = (c, bot) => {
+  readonly saveLineCredentials: SettingsRepository['saveLineCredentials'] = (c, bot, channel) => {
     const row = this.current();
     row.credentials = { ...c };
     row.settings.lineConfigured = true;
     row.settings.lineBotName = bot.botName;
     row.settings.lineBasicId = bot.basicId;
+    row.settings.lineChannelId = channel.channelId;
+    row.settings.lineSecretVerifiedAt = channel.secretVerifiedAt;
+    return Promise.resolve();
+  };
+
+  readonly recordLineSecretCheck: SettingsRepository['recordLineSecretCheck'] = (verifiedAt) => {
+    this.current().settings.lineSecretVerifiedAt = verifiedAt;
     return Promise.resolve();
   };
 

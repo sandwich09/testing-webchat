@@ -4,7 +4,7 @@ import type { DocumentExtractor, ExtractRequest, ExtractResponse } from '@/core/
 import { FAKE_USAGE } from './fake-chat-model';
 
 export type FakeExtractorErrorCode =
-  'ai.unavailable' | 'ai.rate_limited' | 'ai.auth_failed' | 'ai.bad_request';
+  'ai.unavailable' | 'ai.no_response' | 'ai.rate_limited' | 'ai.auth_failed' | 'ai.bad_request';
 
 type ExtractResult = Result<ExtractResponse, FakeExtractorErrorCode>;
 type ScriptedExtract = ExtractResult | ((req: ExtractRequest) => ExtractResult);

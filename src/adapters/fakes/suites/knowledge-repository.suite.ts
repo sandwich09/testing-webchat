@@ -267,6 +267,54 @@ export const describeKnowledgeRepositorySuite = (
       });
     });
 
+    describe('failStuckProcessing', () => {
+      it('fails processing documents last updated before staleBefore, once, keeping the file values', async () => {
+        await create(1, 1);
+        await create(2, 10);
+        await create(3, 2);
+        await repo.markReady(docId(3), { text: 't', pageCount: 1, tokenCount: 5, now: at(3) });
+
+        expect(await repo.failStuckProcessing(at(10), at(30))).toEqual([docId(1)]);
+        expect(await repo.findById(docId(1))).toMatchObject({
+          status: 'failed',
+          error: 'knowledge.extract_interrupted',
+          fileName: 'menu-1.pdf',
+          sha256: sha(1),
+          updatedAt: at(30),
+        });
+        // updatedAt equal to staleBefore is not older; a ready document is untouched.
+        expect((await repo.findById(docId(2)))?.status).toBe('processing');
+        expect((await repo.findById(docId(3)))?.status).toBe('ready');
+        expect(await repo.failStuckProcessing(at(10), at(31))).toEqual([]);
+      });
+
+      it('lets the existing retry restart a recovered document', async () => {
+        await create(1, 1);
+        await repo.failStuckProcessing(at(10), at(30));
+        const restarted = await repo.restartProcessing(docId(1), {
+          fileName: 'menu-1.pdf',
+          sizeBytes: 1001,
+          sha256: sha(1),
+          now: at(31),
+        });
+        expect(restarted.ok && restarted.value).toMatchObject({
+          status: 'processing',
+          error: null,
+        });
+        // The restart moved updatedAt, so the same bound no longer catches it.
+        expect(await repo.failStuckProcessing(at(31), at(32))).toEqual([]);
+      });
+
+      it('gives each stuck document to one of several concurrent callers', async () => {
+        await create(1, 1);
+        await create(2, 2);
+        const results = await Promise.all(
+          Array.from({ length: 5 }, () => repo.failStuckProcessing(at(10), at(30))),
+        );
+        expect(results.flat().sort()).toEqual([docId(1), docId(2)]);
+      });
+    });
+
     it('sumReadyTokens adds the tokens of ready documents only', async () => {
       expect(await repo.sumReadyTokens()).toBe(0);
       await create(1);

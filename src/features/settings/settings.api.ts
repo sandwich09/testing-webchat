@@ -16,6 +16,7 @@ import {
   type CannedReplyDto,
   type DocumentDetailDto,
   type DocumentDto,
+  type LineBotInfoResponse,
   type ListDocumentsResponse,
   type SettingsDto,
   type SystemStatusDto,
@@ -27,7 +28,7 @@ import {
 export type SettingsPatch = UpdateSettingsBody;
 export type KbDocumentsList = ListDocumentsResponse;
 export type UsageReport = UsageReportResponse;
-export type LineBotInfo = { botName: string; basicId: string };
+export type LineBotInfo = LineBotInfoResponse;
 
 const documentPath = (id: string): string => `/api/knowledge/documents/${encodeURIComponent(id)}`;
 const cannedPath = (id: string): string => `/api/canned-replies/${encodeURIComponent(id)}`;
@@ -49,6 +50,7 @@ export function updateSettings(patch: SettingsPatch): Promise<SettingsDto> {
 
 /** PUT /api/settings/line-credentials */
 export function saveLineCredentials(body: {
+  channelId: string;
   channelSecret: string;
   channelAccessToken: string;
 }): Promise<LineBotInfo> {

@@ -39,6 +39,8 @@ export const usageReportResponseSchema = z.strictObject({
   totalCostUsd: usdCostStringSchema,
   replyCount: tokenCountSchema,
   averageCostPerReplyUsd: usdCostStringSchema.nullable(),
+  /** Calls sent without an answer (ai.no_response): may be billed, so the total may be low. */
+  noResponseCount: tokenCountSchema,
 });
 export type UsageReportResponse = z.infer<typeof usageReportResponseSchema>;
 

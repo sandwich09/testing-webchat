@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHmac, hkdfSync, randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { describeAccessTokenSignerSuite } from '@/adapters/fakes';
 import { ACCESS_COOKIE_TTL_MS } from '@/core/domain';
@@ -8,11 +8,19 @@ const CODE = 'test-access-code';
 const newSecret = (): string => randomBytes(32).toString('base64');
 const NOW = new Date('2026-11-18T03:00:00Z');
 
-describeAccessTokenSignerSuite(() => ({
-  signer: createHmacAccessTokenSigner({ accessCode: CODE, sessionSecret: newSecret() }),
-  code: CODE,
-  otherSecretSigner: createHmacAccessTokenSigner({ accessCode: CODE, sessionSecret: newSecret() }),
-}));
+describeAccessTokenSignerSuite(() => {
+  const sessionSecret = newSecret();
+  return {
+    signer: createHmacAccessTokenSigner({ accessCode: CODE, sessionSecret }),
+    code: CODE,
+    otherSecretSigner: createHmacAccessTokenSigner({
+      accessCode: CODE,
+      sessionSecret: newSecret(),
+    }),
+    otherCodeSigner: createHmacAccessTokenSigner({ accessCode: 'new-access-code', sessionSecret }),
+    sameSettingsSigner: createHmacAccessTokenSigner({ accessCode: CODE, sessionSecret }),
+  };
+});
 
 describe('createHmacAccessTokenSigner', () => {
   it('issues v1.<expiry ms>.<43-char signature> that expires ACCESS_COOKIE_TTL_MS later', () => {
@@ -49,6 +57,40 @@ describe('createHmacAccessTokenSigner', () => {
     const payload = `v1.${String(NOW.getTime() + 60_000)}`;
     const rawSignature = createHmac('sha256', sessionSecret).update(payload).digest('base64url');
     expect(signer.verify(`${payload}.${rawSignature}`, NOW)).toBe(false);
+  });
+
+  it('signs out everyone when ACCESS_CODE changes: a token from code A fails once the code is B', () => {
+    const sessionSecret = newSecret();
+    const before = createHmacAccessTokenSigner({ accessCode: 'code-a', sessionSecret });
+    const { token } = before.issue(NOW);
+    const restartedSameCode = createHmacAccessTokenSigner({ accessCode: 'code-a', sessionSecret });
+    const afterChange = createHmacAccessTokenSigner({ accessCode: 'code-b', sessionSecret });
+    expect(restartedSameCode.verify(token, NOW)).toBe(true);
+    expect(afterChange.verify(token, NOW)).toBe(false);
+    expect(afterChange.checkCode('code-a')).toBe(false);
+  });
+
+  it('keys the signature on both SESSION_SECRET and a digest of ACCESS_CODE, never the code alone', () => {
+    const sessionSecret = newSecret();
+    const signer = createHmacAccessTokenSigner({ accessCode: CODE, sessionSecret });
+    const payload = `v1.${String(NOW.getTime() + 60_000)}`;
+    const withSecretOnlyKey = createHmac(
+      'sha256',
+      Buffer.from(
+        hkdfSync(
+          'sha256',
+          Buffer.from(sessionSecret, 'base64'),
+          'twa.access-token',
+          'hmac-sha256.v1',
+          32,
+        ),
+      ),
+    )
+      .update(payload)
+      .digest('base64url');
+    const withCodeAsKey = createHmac('sha256', CODE).update(payload).digest('base64url');
+    expect(signer.verify(`${payload}.${withSecretOnlyKey}`, NOW)).toBe(false);
+    expect(signer.verify(`${payload}.${withCodeAsKey}`, NOW)).toBe(false);
   });
 
   it('rejects a signature that differs only in the spare bits of its last character', () => {

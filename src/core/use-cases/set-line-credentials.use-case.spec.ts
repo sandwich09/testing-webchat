@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  FAKE_LINE_CHANNEL_ID,
   FAKE_LINE_INVALID_TOKEN,
   FakeClock,
   FakeLogger,
@@ -23,6 +24,13 @@ const config: UseCaseConfig = {
 const ctx = { requestId: 'req-1', clientIp: null };
 const SECRET = 'channel-secret-value';
 const TOKEN = 'access-token-value' as LineAccessToken; // brand: test token
+const CHANNEL_ID = FAKE_LINE_CHANNEL_ID;
+const input = (over: { channelSecret?: string; channelAccessToken?: LineAccessToken } = {}) => ({
+  channelId: CHANNEL_ID,
+  channelSecret: SECRET,
+  channelAccessToken: TOKEN,
+  ...over,
+});
 
 describe('SetLineCredentials', () => {
   let gateway: FakeMessagingGateway;
@@ -34,19 +42,22 @@ describe('SetLineCredentials', () => {
 
   beforeEach(() => {
     clock = new FakeClock();
-    gateway = new FakeMessagingGateway();
+    gateway = new FakeMessagingGateway({ channelSecret: SECRET });
     cipher = new FakeSecretCipher();
     settings = new FakeSettingsRepository();
     logger = new FakeLogger(clock);
     run = makeSetLineCredentials({ gateway, cipher, settings, clock, logger }, config);
   });
 
-  it('saves a valid token encrypted and returns the bot info', async () => {
+  it('saves a valid token encrypted with the verified pair and returns the bot info', async () => {
     gateway.setBotInfo({ botName: 'Shop Bot', basicId: '@shop' });
 
-    const result = await run({ channelSecret: SECRET, channelAccessToken: TOKEN }, ctx);
+    const result = await run(input(), ctx);
 
-    expect(result).toEqual({ ok: true, value: { botName: 'Shop Bot', basicId: '@shop' } });
+    expect(result).toEqual({
+      ok: true,
+      value: { botName: 'Shop Bot', basicId: '@shop', secretStatus: 'verified' },
+    });
     const stored = await settings.getEncryptedLineCredentials();
     expect(stored).not.toBeNull();
     expect(stored?.channelSecretEnc).not.toBe(SECRET);
@@ -56,13 +67,55 @@ describe('SetLineCredentials', () => {
     const s = await settings.get();
     expect(s.lineConfigured).toBe(true);
     expect(s.lineBotName).toBe('Shop Bot');
+    expect(s.lineChannelId).toBe(CHANNEL_ID);
+    expect(s.lineSecretVerifiedAt).toEqual(clock.now());
+    expect(logger.entries.at(-1)).toMatchObject({
+      event: 'line.credentials.saved',
+      outcome: 'verified',
+    });
+  });
+
+  it("refuses a secret that is not the Channel ID's, writes nothing and says which pair", async () => {
+    const result = await run(input({ channelSecret: 'someone-elses-secret' }), ctx);
+
+    expect(result.ok ? null : result.error.code).toBe('line.channel_secret_invalid');
+    expect(await settings.getEncryptedLineCredentials()).toBeNull();
+    expect((await settings.get()).lineChannelId).toBeNull();
+    expect(logger.entries).toMatchObject([
+      { event: 'line.credentials.rejected', errorCode: 'line.channel_secret_invalid' },
+    ]);
+  });
+
+  it('saves with the secret unchecked when LINE cannot check it now (429, 5xx, no network)', async () => {
+    gateway.failNext('verifyChannelSecret', 'line.unavailable');
+
+    const result = await run(input(), ctx);
+
+    expect(result).toEqual({
+      ok: true,
+      value: { botName: 'Fake Bot', basicId: '@fakebot', secretStatus: 'unchecked' },
+    });
+    const s = await settings.get();
+    expect(s.lineConfigured).toBe(true);
+    expect(s.lineChannelId).toBe(CHANNEL_ID);
+    expect(s.lineSecretVerifiedAt).toBeNull();
+    expect(logger.entries.at(-1)).toMatchObject({
+      event: 'line.credentials.saved',
+      outcome: 'unchecked',
+      errorCode: 'line.unavailable',
+    });
+  });
+
+  it('checks the access token first: a rejected token never reaches the secret check', async () => {
+    gateway.failNext('verifyChannelSecret', 'line.channel_secret_invalid');
+    const result = await run(input({ channelAccessToken: FAKE_LINE_INVALID_TOKEN }), ctx);
+    expect(result.ok ? null : result.error.code).toBe('line.credentials_invalid');
+    // The queued failure is still there: verifyChannelSecret was not called.
+    expect(await gateway.verifyChannelSecret(CHANNEL_ID, SECRET)).toMatchObject({ ok: false });
   });
 
   it('returns line.credentials_invalid and writes nothing for a rejected token', async () => {
-    const result = await run(
-      { channelSecret: SECRET, channelAccessToken: FAKE_LINE_INVALID_TOKEN },
-      ctx,
-    );
+    const result = await run(input({ channelAccessToken: FAKE_LINE_INVALID_TOKEN }), ctx);
 
     expect(result.ok ? null : result.error.code).toBe('line.credentials_invalid');
     expect(await settings.getEncryptedLineCredentials()).toBeNull();
@@ -73,7 +126,7 @@ describe('SetLineCredentials', () => {
   it('returns line.unavailable when LINE is down and writes nothing', async () => {
     gateway.failNext('getBotInfo', 'line.unavailable');
 
-    const result = await run({ channelSecret: SECRET, channelAccessToken: TOKEN }, ctx);
+    const result = await run(input(), ctx);
 
     expect(result.ok ? null : result.error.code).toBe('line.unavailable');
     expect(await settings.getEncryptedLineCredentials()).toBeNull();
@@ -82,15 +135,18 @@ describe('SetLineCredentials', () => {
   it('clears lastLineError once saved', async () => {
     await settings.recordLineError({ code: 'line.unauthorized', at: clock.now() });
 
-    await run({ channelSecret: SECRET, channelAccessToken: TOKEN }, ctx);
+    await run(input(), ctx);
 
     expect((await settings.get()).lastLineError).toBeNull();
     expect(logger.eventsOf()).toEqual(['line.credentials.saved']);
   });
 
   it('keeps the secret and the token out of the log', async () => {
-    await run({ channelSecret: SECRET, channelAccessToken: TOKEN }, ctx);
-    await run({ channelSecret: SECRET, channelAccessToken: FAKE_LINE_INVALID_TOKEN }, ctx);
+    await run(input(), ctx);
+    await run(input({ channelAccessToken: FAKE_LINE_INVALID_TOKEN }), ctx);
+    await run(input({ channelSecret: `${SECRET}-wrong` }), ctx);
+    gateway.failNext('verifyChannelSecret', 'line.unavailable');
+    await run(input(), ctx);
 
     const dump = JSON.stringify(logger.entries);
     expect(dump).not.toContain(SECRET);

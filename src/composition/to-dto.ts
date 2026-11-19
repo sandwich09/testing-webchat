@@ -9,7 +9,7 @@ import type {
   NanoUsd,
   TokenUsage,
 } from '@/core/domain';
-import { formatUsd } from '@/core/domain';
+import { formatUsd, lineSecretStatus, retryKeyExpiresAt } from '@/core/domain';
 import type { UploadTarget, UsageByContactRow } from '@/core/ports';
 import type {
   GetContactOutput,
@@ -128,7 +128,11 @@ export const toMessageDto = (m: Message): MessageDto => {
     // Null for inbound messages and event lines.
     delivery:
       m.direction === 'outbound'
-        ? { status: m.deliveryStatus ?? 'pending', errorCode: m.deliveryError }
+        ? {
+            status: m.deliveryStatus ?? 'pending',
+            errorCode: m.deliveryError,
+            retryExpiresAt: isoOrNull(retryKeyExpiresAt(m)),
+          }
         : null,
     createdAt: iso(m.createdAt),
     sentAt: isoOrNull(m.sentAt),
@@ -183,6 +187,8 @@ export const toSettingsDto = (o: GetSettingsOutput): SettingsDto => {
           : 'connected',
       botName: s.lineBotName,
       basicId: s.lineBasicId,
+      channelId: s.lineChannelId,
+      secretStatus: lineSecretStatus(s),
       webhookUrl: o.webhookUrl,
       lastWebhookAt: isoOrNull(s.lastWebhookAt),
     },
@@ -329,6 +335,7 @@ export const toUsageReportResponse = (r: UsageReport): UsageReportResponse => ({
   totalCostUsd: cost6(r.totalCost),
   replyCount: r.replyCount,
   averageCostPerReplyUsd: r.averageCostPerReply === null ? null : cost6(r.averageCostPerReply),
+  noResponseCount: r.noResponseCount,
 });
 
 export const toUsageRecordDto = (r: AiUsageRecord): UsageRecordDto => ({

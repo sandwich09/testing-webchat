@@ -117,6 +117,7 @@ describe('SendAdminMessage', () => {
         channelAccessTokenEnc: cipher.encrypt(FAKE_LINE_ACCESS_TOKEN),
       },
       { botName: 'Shop', basicId: '@shop' },
+      { channelId: '1000000001', secretVerifiedAt: null },
     );
 
   const givenContact = async (
@@ -487,6 +488,7 @@ describe('SendAdminMessage', () => {
           channelAccessTokenEnc: new FakeSecretCipher('another-key').encrypt('t'),
         },
         { botName: 'Shop', basicId: '@shop' },
+        { channelId: '1000000001', secretVerifiedAt: null },
       );
       const c = await givenContact();
       const input = textInput(c.id);

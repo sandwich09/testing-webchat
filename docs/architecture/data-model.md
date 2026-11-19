@@ -1,6 +1,6 @@
 # Data model
 
-> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-18
+> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-19
 
 ฐานข้อมูลคือ PostgreSQL 17 เข้าถึงผ่าน Prisma 7 ตารางด้านล่างอธิบายความหมายของแต่ละ field ชื่อและชนิดจริงอยู่ในหัวข้อ [Prisma schema](#prisma-schema) ท้ายเอกสาร Type ของ domain และสัญญาของ repository อยู่ใน [domain-and-ports](domain-and-ports.md)
 
@@ -22,6 +22,8 @@
 | --- | --- |
 | lineChannelSecretEnc, lineAccessTokenEnc | เข้ารหัสด้วย AES-256-GCM ไม่มี API ใดคืนค่า |
 | lineBotName, lineBasicId | ได้จากการทดสอบการเชื่อมต่อ |
+| lineChannelId | Channel ID ของ channel ตัวเลขไม่เกิน `LINE_CHANNEL_ID_MAX_CHARS` ไม่ใช่ความลับ จึงไม่เข้ารหัสและออกทาง API ได้ null สำหรับ credential ที่บันทึกก่อน migration ที่สี่ |
+| lineSecretVerifiedAt | เวลาที่ LINE ยืนยันล่าสุดว่า Channel secret เป็นของ `lineChannelId` (การตรวจแบบ client credentials ตอนบันทึกหรือทดสอบ) null เมื่อยังไม่เคยยืนยัน ตรวจไม่ได้ตอนบันทึก หรือ LINE ปฏิเสธคู่นี้ตอนทดสอบ |
 | aiEnabled | kill switch ค่าเริ่มต้นปิด ([ค่าเริ่มต้นของระบบที่ติดตั้งใหม่](project-setup.md#101-แกนกลาง)) |
 | aiProvider, aiModel | ค่าเริ่มต้น `claude` และ `DEFAULT_AI_MODEL` |
 | aiDailyBudgetUsd | งบต่อวัน ค่าเริ่มต้น `DEFAULT_AI_DAILY_BUDGET_USD` |
@@ -70,6 +72,8 @@ Index: `lastMessageAt`, และ `needsAdmin` กับ `unreadCount` สำห
 | deliveryStatus, deliveryError | `pending`, `sent`, `failed` เฉพาะข้อความขาออก `deliveryError` เป็นรหัสจาก [error-catalog](error-catalog.md) |
 | retryKey | ใช้กับ LINE ทุกครั้งที่ส่งข้อความเดิม เท่ากับ id ของข้อความขาออก |
 | createdAt, sentAt | |
+| firstPushAt | เวลาที่ push ครั้งแรกของข้อความขาออกเริ่ม (`recordFirstPush` ก่อนเรียก LINE ด้วย compare-and-set บน null) ไม่เปลี่ยนเมื่อส่งอีกครั้ง null เมื่อยังไม่เคย push (ส่งด้วย reply หรือ reply ล้มเหลว) และสำหรับแถวที่สร้างก่อน migration ที่สี่ ใช้วัดหน้าต่าง `LINE_RETRY_KEY_WINDOW_MS` ของ "ส่งอีกครั้ง" ออกทาง API เป็น `delivery.retryExpiresAt` |
+| deliveryAttemptAt | เวลาที่การส่งรอบปัจจุบันของข้อความขาออกเริ่ม: `createdAt` ตอน insert แถว pending และเวลาที่กด "ส่งอีกครั้ง" (`markPendingIfFailed`) null สำหรับแถวอื่นและแถวที่สร้างก่อน migration ที่สาม ใช้วัดการส่งที่ค้างในกฎของ repository ข้อ 13 ไม่อยู่ใน entity `Message` ของ domain และไม่ออกทาง API |
 | updatedSeq | เท่ากับ `seq` ตอนสร้าง และได้ค่าใหม่ทุกครั้งที่แถวถูกแก้ เช่น สถานะการส่งหรือสถานะสื่อ ใช้ใน polling |
 
 id ของข้อความขาออกสร้างที่หน้าเว็บ จึงกันการส่งซ้ำได้ด้วย primary key
@@ -175,6 +179,14 @@ Migration แรก (`init`) ถูก apply แล้ว ห้ามแก้�
 `Message.seq` ใช้ค่าเริ่มต้น `nextval('change_seq')` จาก schema (`dbgenerated`) Prisma สร้าง `CREATE TABLE` ที่อ้าง sequence นี้ จึงต้องเพิ่ม `CREATE SEQUENCE` ไว้บนสุดของไฟล์ migration ก่อน apply
 
 ใช้ trigger แทนการให้ทุก method ของ repository ตั้งค่าเอง เพื่อไม่มีทางลืม ค่าที่ trigger ตั้งกลับมาใน `RETURNING` ของ Prisma ตามปกติ ข้อนี้ทำให้ [domain-and-ports](domain-and-ports.md) ที่ให้ repository ตั้ง `updatedSeq` เป็นจริงโดยไม่ต้องเขียนโค้ด
+
+### Migration ที่สาม: เวลาเริ่มของการส่ง
+
+`message_delivery_attempt_at` เพิ่มคอลัมน์ `Message.deliveryAttemptAt` (`timestamptz(3)` ว่างได้ ไม่มีค่าเริ่มต้น) อย่างเดียว โค้ดรุ่นก่อนจึงยังทำงานกับตารางใหม่ได้ แถวเดิมเป็น null และถูกวัดด้วย `createdAt` แทน สร้างด้วย `--create-only` ตามวิธีของ migration ที่สอง และลบคำสั่งของ `"Message"."seq"` กับ `DROP SEQUENCE "change_seq"` ที่ Prisma สร้างเกินมาด้วยมือ ไฟล์จึงมีเฉพาะ `ALTER TABLE "Message" ADD COLUMN "deliveryAttemptAt"` เหตุผล: "ส่งอีกครั้ง" ทำให้ข้อความเก่ากลับเป็น pending ถ้าวัดด้วย `createdAt` ข้อความที่เพิ่งกดส่งอีกครั้งจะถูกคืนสภาพเป็น failed ทันทีขณะยังส่งอยู่
+
+### Migration ที่สี่: Channel ID และ push ครั้งแรก
+
+`line_channel_id_and_first_push` เพิ่มสามคอลัมน์ที่ว่างได้และไม่มีค่าเริ่มต้นอย่างเดียว: `Message.firstPushAt` (`timestamptz(3)`), `Settings.lineChannelId` (`text`) และ `Settings.lineSecretVerifiedAt` (`timestamptz(3)`) โค้ดรุ่นก่อนจึงยังทำงานกับตารางใหม่ได้ สร้างด้วย `--create-only` ตามวิธีของ migration ที่สอง และลบคำสั่งของ `"Message"."seq"` กับ `DROP SEQUENCE "change_seq"` ที่ Prisma สร้างเกินมาด้วยมือ ไฟล์จึงมีเฉพาะ `ALTER TABLE "Message" ADD COLUMN "firstPushAt"` และ `ALTER TABLE "Settings" ADD COLUMN "lineChannelId", ADD COLUMN "lineSecretVerifiedAt"` ไม่ย้ายข้อมูล: ข้อความเดิมไม่มีหน้าต่างของ retry key (ส่งอีกครั้งได้เหมือนก่อน migration) และ credential เดิมแสดงว่ายังไม่ได้ตรวจ Channel secret จนกว่าจะบันทึกใหม่พร้อม Channel ID เหตุผล: `deliveryAttemptAt` เลื่อนทุกครั้งที่ส่งอีกครั้ง และ `createdAt` มาก่อน push ครั้งแรกของข้อความที่ reply ล้มเหลว ทั้งสองจึงไม่ใช่เวลาที่ LINE เริ่มนับอายุของ key ([ADR 0023](../adr/0023-retry-key-v5-window-and-reply-400.md))
 
 ## Prisma schema
 
@@ -304,6 +316,10 @@ model Settings {
   lineAccessTokenEnc   String?
   lineBotName          String?
   lineBasicId          String?
+  // Not secret. Null for credentials saved before the Channel ID was asked for.
+  lineChannelId        String?
+  // When LINE last confirmed the Channel ID and channel secret pair.
+  lineSecretVerifiedAt DateTime?      @db.Timestamptz(3)
   aiEnabled            Boolean        @default(false)
   aiProvider           String         @default("claude")
   aiModel              String         @default("claude-opus-5-5")
@@ -353,27 +369,31 @@ model Contact {
 }
 
 model Message {
-  id               String           @id @db.Uuid
-  seq              BigInt           @unique @default(dbgenerated("nextval('change_seq')"))
-  updatedSeq       BigInt           @default(0)
-  contactId        String           @db.Uuid
-  direction        MessageDirection
-  author           MessageAuthor
-  type             MessageType
-  otherKind        OtherKind?
-  eventCode        String?
-  text             String?
-  mediaUrl         String?
-  previewUrl       String?
-  mediaStatus      MediaStatus?
-  stickerPackageId String?
-  stickerId        String?
-  lineMessageId    String?          @unique
-  deliveryStatus   DeliveryStatus?
-  deliveryError    String?
-  retryKey         String?          @db.Uuid
-  createdAt        DateTime         @db.Timestamptz(3)
-  sentAt           DateTime?        @db.Timestamptz(3)
+  id                String           @id @db.Uuid
+  seq               BigInt           @unique @default(dbgenerated("nextval('change_seq')"))
+  updatedSeq        BigInt           @default(0)
+  contactId         String           @db.Uuid
+  direction         MessageDirection
+  author            MessageAuthor
+  type              MessageType
+  otherKind         OtherKind?
+  eventCode         String?
+  text              String?
+  mediaUrl          String?
+  previewUrl        String?
+  mediaStatus       MediaStatus?
+  stickerPackageId  String?
+  stickerId         String?
+  lineMessageId     String?          @unique
+  deliveryStatus    DeliveryStatus?
+  deliveryError     String?
+  retryKey          String?          @db.Uuid
+  createdAt         DateTime         @db.Timestamptz(3)
+  sentAt            DateTime?        @db.Timestamptz(3)
+  // When the current delivery attempt started: the insert of a pending row or the last retry.
+  deliveryAttemptAt DateTime?        @db.Timestamptz(3)
+  // When the first push with retryKey was attempted; never moves (LINE_RETRY_KEY_WINDOW_MS).
+  firstPushAt       DateTime?        @db.Timestamptz(3)
 
   contact  Contact   @relation(fields: [contactId], references: [id], onDelete: Restrict)
   aiUsages AiUsage[]
@@ -509,6 +529,12 @@ model RateLimitBucket {
     - การลองรหัสเข้าใช้นับเฉพาะรหัสผิด ตาม [access-gate](../specs/access-gate.md) จึงใช้ `peek` ก่อนตรวจรหัส และ `hit` เมื่อรหัสผิด ([use-cases](use-cases.md#unlockaccess))
     - เมื่อ `RETURNING "count"` เป็น 1 ลบแถวที่ `windowStart` เก่ากว่า 1 วันในคำสั่งถัดไป ตารางจึงไม่โตตามจำนวน IP
 12. **ยอดใช้จ่ายของวัน:** รวม `costUsd` ของ `AiUsage` ที่ `createdAt` อยู่ในช่วงเที่ยงคืนถึงเที่ยงคืนตามเวลาไทย ช่วงเวลาคำนวณใน domain แล้วส่งเป็นเวลา UTC สองค่าให้ repository
+13. **คืนสภาพงานที่ค้างเมื่อ function ถูกตัด:** แต่ละสถานะกลางทางมี `UPDATE ... RETURNING "id"` ผ่าน `$queryRaw` คำสั่งเดียวที่มีเงื่อนไขบนสถานะเดิม เหมือน `recoverStuckAiStates` ในข้อ 8 ผู้เรียกพร้อมกันที่มาทีหลังรอ row lock แล้วไม่เห็นสถานะเดิมอีก แต่ละแถวจึงกลับไปที่ผู้เรียกคนเดียว และ trigger ของข้อ 10 ให้ `updatedSeq` ใหม่ polling รอบถัดไปจึงเห็น ([pitfalls M3](../guidelines/pitfalls-and-prevention.md#m3-สถานะกลางทางค้างเมื่อ-function-ถูกตัด)) ค่าของเวลาทั้งสามอยู่ใน [project-setup ข้อ 10.1](project-setup.md#101-แกนกลาง)
+    - `failStuckProcessing(staleBefore, now)`: `UPDATE "KbDocument" SET "status" = 'failed', "error" = 'knowledge.extract_interrupted', "updatedAt" = $now WHERE "status" = 'processing' AND "updatedAt" < $staleBefore` `ListDocuments` เรียกทุกครั้งด้วย `now - KNOWLEDGE_STUCK_AFTER_MS`
+    - `failStuckMedia(contactId, staleBefore)`: `UPDATE "Message" SET "mediaStatus" = 'failed' WHERE "contactId" = $1 AND "mediaStatus" = 'pending' AND "createdAt" < $2` `GetMessages` เรียกทุกครั้งด้วย `now - MEDIA_STUCK_AFTER_MS`
+    - `failStuckDeliveries(contactId, staleBefore)`: `UPDATE "Message" SET "deliveryStatus" = 'failed', "deliveryError" = 'line.send_interrupted' WHERE "contactId" = $1 AND "deliveryStatus" = 'pending' AND COALESCE("deliveryAttemptAt", "createdAt") < $2` `GetMessages` เรียกทุกครั้งด้วย `now - SEND_STUCK_AFTER_MS`
+    - `markSent`, `markFailed`, `markReady` และ `markFailed` ของ KbDocument ไม่มีเงื่อนไขบนสถานะ ถ้างานที่ยังไม่ตายจบหลังการคืนสภาพ ผลจริงของมันเขียนทับ failed แต่เวลาของข้อ 10.1 มากกว่าเวลาแย่ที่สุดของทุกงาน ([project-setup ข้อ 10.4](project-setup.md#104-adapter-และ-route)) กรณีนี้จึงไม่เกิดเมื่อค่าเป็นไปตาม test ของ `timing-budget.spec.ts`
+14. **Push ครั้งแรก:** `recordFirstPush(id, at)` คือ `UPDATE "Message" SET "firstPushAt" = $at WHERE "id" = $id AND "firstPushAt" IS NULL` คำสั่งเดียว ผู้เรียกพร้อมกันได้ค่าเดียว และการส่งอีกครั้งไม่เลื่อนค่า `deliverOutbound` เรียกก่อน push ทุกครั้ง
 
 ## ข้อมูลตัวอย่าง (seed)
 
@@ -529,6 +555,7 @@ model RateLimitBucket {
 | --- | --- |
 | lineBotName, lineBasicId | `ต้นหอม คาเฟ่`, `@000test` |
 | credential | `STUB_CHANNEL_SECRET`, `STUB_CHANNEL_ACCESS_TOKEN` ที่เข้ารหัสแล้ว |
+| lineChannelId, lineSecretVerifiedAt | `STUB_CHANNEL_ID` (คู่ของ `STUB_CHANNEL_SECRET` ที่ stub ยอมรับ) และ 1 นาทีก่อนรัน ส่วน LINE จึงแสดงว่า LINE ยืนยัน Channel secret แล้ว |
 | aiEnabled | เปิด เพื่อให้ผู้ตรวจลอง AI ตอบแทนกับ stub ได้ทันที (ต่างจากค่าเริ่มต้นของระบบที่ติดตั้งใหม่ซึ่งปิด) |
 | aiModel, aiDailyBudgetUsd, aiPoliteParticle | ค่าเริ่มต้นของ schema (`DEFAULT_AI_MODEL`, `DEFAULT_AI_DAILY_BUDGET_USD`, `DEFAULT_POLITE_PARTICLE`) |
 | aiInstructions | `ตอบสุภาพ เป็นกันเอง ถ้าลูกค้าถามเรื่องจัดเลี้ยงหรือสั่งจำนวนมาก ให้แอดมินตอบ` |
@@ -547,7 +574,7 @@ model RateLimitBucket {
 | 4 | ป้าแดง | ติดตามอยู่ | ปิด | 1 | ลูกค้า "ขอบคุณที่ส่งไวนะจ๊ะ" (เมื่อวาน) · ลูกค้าส่งสติกเกอร์ (เมื่อวาน) |
 | 5 | ต้นข้าว | ติดตามอยู่ | ปิด | 0 | ลูกค้าส่งรูป `ready` (2 วันก่อน) · แอดมิน "ลาเต้เย็นแก้วนี้ 65 บาทค่ะ" ส่งแล้ว (2 วันก่อน) |
 | 6 | นนท์ | เลิกติดตามแล้ว | ปิด | 0 | ลูกค้า "ยกเลิกออเดอร์ครับ" (4 วันก่อน) · แอดมิน "รับทราบค่ะ" ส่งแล้ว (4 วันก่อน) |
-| 7 | แพรวา | ติดตามอยู่ | ปิด | 0 | ลูกค้า "ส่งเมนูให้หน่อยค่ะ" (9 วันก่อน) · แอดมิน "เดี๋ยวส่งให้นะคะ" ส่งไม่สำเร็จ `deliveryError` เป็น `line.push_failed` (9 วันก่อน) |
+| 7 | แพรวา | ติดตามอยู่ | ปิด | 0 | ลูกค้า "ส่งเมนูให้หน่อยค่ะ" (9 วันก่อน) · แอดมิน "เดี๋ยวส่งให้นะคะ" ส่งไม่สำเร็จ `deliveryError` เป็น `line.push_failed` และ `firstPushAt` เท่ากับเวลาของข้อความ (9 วันก่อน) จึงเลยหน้าต่างของ retry key แล้ว ฟองแสดงเหตุผล `message.retry_expired` และไม่มีปุ่มส่งอีกครั้ง |
 
 - สติกเกอร์ของป้าแดงใช้ `stickerPackageId` `446` และ `stickerId` `1988` ซึ่งเป็นตัวอย่างที่พบในเอกสารของ LINE (ต้องยืนยันว่าแสดงได้ ถ้าไม่ได้หน้าเว็บแสดงป้ายแทน)
 - ข้อความของลูกค้าทุกข้อความมี `lineMessageId` ปลอมที่ไม่ซ้ำ ข้อความขาออกมี `retryKey` เท่ากับ id บรรทัดเหตุการณ์มี `direction` `internal`, `author` `system`, `type` `event` และ `eventCode` ตามตาราง

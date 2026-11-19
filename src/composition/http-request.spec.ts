@@ -7,6 +7,7 @@ import {
   PDF_UPLOAD_MAX_BODY_BYTES,
   bodyStream,
   clientIpOf,
+  clientSubjectOf,
   decodeContactCursor,
   encodeContactCursor,
   parseJsonBody,
@@ -278,19 +279,58 @@ describe('readPdfUpload', () => {
 describe('clientIpOf', () => {
   const h = (init: Record<string, string>) => new Headers(init);
 
-  it('takes the first x-forwarded-for entry', () => {
-    expect(clientIpOf(h({ 'x-forwarded-for': '203.0.113.7, 10.0.0.1' }))).toBe('203.0.113.7');
-    expect(clientIpOf(h({ 'x-forwarded-for': '2001:db8::1' }))).toBe('2001:db8::1');
+  it('takes the last x-forwarded-for entry, the one the nearest proxy wrote', () => {
+    expect(clientIpOf(h({ 'x-forwarded-for': '203.0.113.7' }))).toBe('203.0.113.7');
+    // A caller-sent first hop never becomes the key, whether the proxy appended or replaced it.
+    expect(clientIpOf(h({ 'x-forwarded-for': '198.51.100.99, 203.0.113.7' }))).toBe('203.0.113.7');
+    expect(clientIpOf(h({ 'x-forwarded-for': '1.1.1.1,2.2.2.2 , 203.0.113.7 ' }))).toBe(
+      '203.0.113.7',
+    );
   });
 
-  it('falls back to x-real-ip, then null', () => {
-    expect(clientIpOf(h({ 'x-real-ip': '198.51.100.2' }))).toBe('198.51.100.2');
+  it('gives a caller rotating forged first hops one key per real address', () => {
+    const keys = new Set(
+      Array.from({ length: 20 }, (_, i) =>
+        clientIpOf(h({ 'x-forwarded-for': `10.0.0.${String(i)}, 203.0.113.7` })),
+      ),
+    );
+    expect([...keys]).toEqual(['203.0.113.7']);
+  });
+
+  it('never reads x-real-ip, which a caller can send', () => {
+    expect(clientIpOf(h({ 'x-real-ip': '198.51.100.2' }))).toBeNull();
+    expect(clientIpOf(h({ 'x-forwarded-for': '203.0.113.7', 'x-real-ip': '198.51.100.2' }))).toBe(
+      '203.0.113.7',
+    );
     expect(clientIpOf(h({}))).toBeNull();
   });
 
-  it('ignores a value that is not an IP address', () => {
-    expect(clientIpOf(h({ 'x-forwarded-for': 'evil-key, 1.2.3.4' }))).toBeNull();
+  it('ignores a last entry that is not an IP address', () => {
+    expect(clientIpOf(h({ 'x-forwarded-for': '1.2.3.4, evil-key' }))).toBeNull();
     expect(clientIpOf(h({ 'x-forwarded-for': `1.2.3.4${'0'.repeat(50)}` }))).toBeNull();
+    expect(clientIpOf(h({ 'x-forwarded-for': '1.2.3.4, ' }))).toBeNull();
+  });
+
+  it('keys IPv6 by its /64 network and IPv4-mapped IPv6 by the IPv4 address', () => {
+    expect(clientIpOf(h({ 'x-forwarded-for': '2001:db8:1:2:aaaa::1' }))).toBe('2001:db8:1:2::/64');
+    expect(clientIpOf(h({ 'x-forwarded-for': '2001:DB8:1:2:ffff:1:2:3' }))).toBe(
+      '2001:db8:1:2::/64',
+    );
+    expect(clientIpOf(h({ 'x-forwarded-for': '::ffff:172.18.0.1' }))).toBe('172.18.0.1');
+    expect(clientIpOf(h({ 'x-forwarded-for': '::1' }))).toBe('0:0:0:0::/64');
+  });
+});
+
+describe('clientSubjectOf', () => {
+  it.each([
+    ['203.0.113.7', '203.0.113.7'],
+    ['2001:db8::', '2001:db8:0:0::/64'],
+    ['2001:0db8:0000:0042:0000:8a2e:0370:7334', '2001:db8:0:42::/64'],
+    ['::ffff:10.1.2.3', '10.1.2.3'],
+    ['64:ff9b::192.0.2.33', '64:ff9b:0:0::/64'],
+    ['fe80::1:2:3:4', 'fe80:0:0:0::/64'],
+  ])('%s → %s', (ip, subject) => {
+    expect(clientSubjectOf(ip)).toBe(subject);
   });
 });
 

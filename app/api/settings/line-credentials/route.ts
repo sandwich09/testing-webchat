@@ -13,6 +13,10 @@ export const PUT = withRoute(
   async ({ body, ctx }) => {
     const r = await setLineCredentials(toSetLineCredentialsInput(body), ctx);
     if (!r.ok) return r;
-    return json({ botName: r.value.botName, basicId: r.value.basicId });
+    return json({
+      botName: r.value.botName,
+      basicId: r.value.basicId,
+      secretStatus: r.value.secretStatus,
+    });
   },
 );

@@ -5,6 +5,8 @@ import {
   AI_MODEL_IDS,
   GUARD_REFUSAL_MAX_CHARS,
   GUARD_TEST_MAX_CHARS,
+  LINE_CHANNEL_ID_MAX_CHARS,
+  LINE_SECRET_STATUSES,
   POLITE_PARTICLES,
   normalizeGuardTopics,
 } from '@/core/domain';
@@ -72,16 +74,25 @@ export const testTopicGuardResponseSchema = z.strictObject({
 });
 export type TestTopicGuardResponse = z.infer<typeof testTopicGuardResponseSchema>;
 
-/** PUT /api/settings/line-credentials. No whitespace anywhere in either value. */
+/** A LINE Channel ID: digits only, at most LINE_CHANNEL_ID_MAX_CHARS. Shared with the form. */
+export const LINE_CHANNEL_ID_PATTERN = new RegExp(`^\\d{1,${String(LINE_CHANNEL_ID_MAX_CHARS)}}$`);
+
+/** PUT /api/settings/line-credentials. No whitespace anywhere in any value. */
 export const setLineCredentialsBodySchema = z.strictObject({
+  channelId: z.string().regex(LINE_CHANNEL_ID_PATTERN),
   channelSecret: z.string().min(1).max(200).regex(/^\S+$/),
   channelAccessToken: z.string().min(1).max(1000).regex(/^\S+$/),
 });
 export type SetLineCredentialsBody = z.infer<typeof setLineCredentialsBodySchema>;
 
-/** Response of PUT /api/settings/line-credentials and POST /api/settings/line/test. */
+/**
+ * Response of PUT /api/settings/line-credentials and POST /api/settings/line/test. A save answers
+ * `verified` or `unchecked` (LINE could not check the secret now); a test may also answer
+ * `no_channel_id` when none is stored.
+ */
 export const lineBotInfoResponseSchema = z.strictObject({
   botName: z.string(),
   basicId: z.string(),
+  secretStatus: z.enum(LINE_SECRET_STATUSES),
 });
 export type LineBotInfoResponse = z.infer<typeof lineBotInfoResponseSchema>;

@@ -20,7 +20,11 @@ import { getPrismaClient } from '@/adapters/prisma';
 import { createAesGcmCipher, createSystemClock } from '@/adapters/system';
 import { computeCost, PRICE_TABLE } from '@/core/domain';
 import type { StorageKey } from '@/core/domain';
-import { STUB_CHANNEL_ACCESS_TOKEN, STUB_CHANNEL_SECRET } from '../e2e/fixtures/line/credentials';
+import {
+  STUB_CHANNEL_ACCESS_TOKEN,
+  STUB_CHANNEL_ID,
+  STUB_CHANNEL_SECRET,
+} from '../e2e/fixtures/line/credentials';
 
 // ---------------------------------------------------------------------------
 // Environment
@@ -408,6 +412,8 @@ const messageRows = (contacts: readonly ContactSeed[]) =>
           deliveryStatus: failed ? ('failed' as const) : ('sent' as const),
           deliveryError: failed ? 'line.push_failed' : null,
           sentAt: failed ? null : d.at,
+          // The failed one was pushed: its retry key window has long passed (LINE_RETRY_KEY_WINDOW_MS).
+          firstPushAt: failed ? d.at : null,
         };
       }),
     )
@@ -457,6 +463,8 @@ async function main(): Promise<void> {
         lineAccessTokenEnc: cipher.encrypt(STUB_CHANNEL_ACCESS_TOKEN),
         lineBotName: 'ต้นหอม คาเฟ่',
         lineBasicId: '@000test',
+        lineChannelId: STUB_CHANNEL_ID,
+        lineSecretVerifiedAt: ago(MINUTE),
         aiEnabled: true,
         aiInstructions: AI_INSTRUCTIONS,
         guardEnabled: false,

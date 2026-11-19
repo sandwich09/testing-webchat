@@ -16,7 +16,8 @@ import { expect, test } from './helpers/test';
 
 // Journey 2: the admin replies (stubs-and-fixtures section 9). Projects `desktop` and `mobile`.
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** `X-Line-Retry-Key`: a version-5 UUID with the RFC 4122 variant (line-messaging rule 4). */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 type LineBody = { replyToken?: string; to?: string; chatId?: string; messages?: unknown[] };
 const bodyOf = (body: unknown): LineBody => body ?? {};

@@ -38,7 +38,7 @@ app/
 - แกนกลาง (`core/`) รู้จักแค่ port ที่ตัวเองประกาศ ไม่รู้จัก Next.js, Prisma, LINE หรือ Claude ([ADR 0003](../adr/0003-hexagonal-architecture.md))
 - Route handler ตรวจ request ด้วย schema ใน `src/contracts/` เรียก use case หนึ่งตัว แล้วแปลงผลเป็น response
 - ความล้มเหลวที่คาดได้คืนเป็น `Result` ไม่ throw ส่วนที่ไม่คาดคิดถูกดักที่ขอบของ route แล้วตอบ 500
-- Webhook ตอบ 200 เสมอเมื่อ signature ถูกต้อง ประมวลผลแต่ละ event แยกกัน และงานหลังตอบ (`after()`) ถูกห่อด้วยตัวดัก error กลางที่บันทึก log และใส่สถานะในฐานข้อมูล
+- Webhook ตอบ 200 เมื่อ signature ถูกต้อง ยกเว้นเมื่อบันทึก event ใดในก้อนไม่ได้เลยเพราะฐานข้อมูลล่ม ซึ่งตอบ 503 ให้ LINE ส่งซ้ำ ([line-messaging](../specs/line-messaging.md#รับ-event-webhook) ข้อ 6) ประมวลผลแต่ละ event แยกกัน และงานหลังตอบ (`after()`) ถูกห่อด้วยตัวดัก error กลางที่บันทึก log และใส่สถานะในฐานข้อมูล
 - ทุกการเรียกภายนอกมี timeout และ retry เฉพาะเครือข่ายล่ม, 5xx และ 429 ตามค่าใน [project-setup](project-setup.md#104-adapter-และ-route)
 - ทุกความล้มเหลวที่แอดมินต้องรู้มีสถานะในฐานข้อมูล ไม่พึ่ง log อย่างเดียว ([ADR 0016](../adr/0016-logging-without-pii-and-status-in-db.md))
 - Log เป็น JSON ทาง stdout รับเฉพาะ field ที่อนุญาตตาม port `Logger` ใน [domain-and-ports](domain-and-ports.md#logger)

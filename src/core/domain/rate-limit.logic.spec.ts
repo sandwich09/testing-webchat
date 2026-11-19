@@ -19,9 +19,10 @@ describe('rateWindowStart', () => {
 });
 
 describe('effectiveLimit', () => {
-  it('keeps unlock unscaled and scales every other action by 10', () => {
+  it('keeps both unlock rules unscaled and scales every other action by 10', () => {
     expect(effectiveLimit('unlock', 10)).toBe(RATE_LIMIT_RULES.unlock.limit);
-    for (const action of RATE_LIMIT_ACTIONS.filter((a) => a !== 'unlock')) {
+    expect(effectiveLimit('unlock_no_ip', 10)).toBe(RATE_LIMIT_RULES.unlock_no_ip.limit);
+    for (const action of RATE_LIMIT_ACTIONS.filter((a) => a !== 'unlock' && a !== 'unlock_no_ip')) {
       expect(effectiveLimit(action, 10)).toBe(RATE_LIMIT_RULES[action].limit * 10);
     }
   });

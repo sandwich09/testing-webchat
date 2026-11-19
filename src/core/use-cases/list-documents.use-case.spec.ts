@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { DocumentId } from '@/core/domain';
-import { KNOWLEDGE_CAPACITY_TOKENS } from '@/core/domain';
-import { FakeClock, FakeKnowledgeRepository } from '@/adapters/fakes';
+import { KNOWLEDGE_CAPACITY_TOKENS, KNOWLEDGE_STUCK_AFTER_MS } from '@/core/domain';
+import { FakeClock, FakeKnowledgeRepository, FakeLogger } from '@/adapters/fakes';
 import { makeListDocuments } from './list-documents.use-case';
 import type { RequestContext, UseCaseConfig } from './types';
 
@@ -11,12 +11,14 @@ const docId = (n: number) => `0190f000-0000-7000-8000-${String(n).padStart(12, '
 describe('ListDocuments', () => {
   let clock: FakeClock;
   let knowledge: FakeKnowledgeRepository;
+  let logger: FakeLogger;
   let list: ReturnType<typeof makeListDocuments>;
 
   beforeEach(() => {
     clock = new FakeClock(new Date('2026-11-18T03:00:00.000Z'));
     knowledge = new FakeKnowledgeRepository();
-    list = makeListDocuments({ knowledge }, {} as UseCaseConfig); // brand: config unused
+    logger = new FakeLogger(clock);
+    list = makeListDocuments({ knowledge, clock, logger }, {} as UseCaseConfig); // brand: config unused
   });
 
   const add = async (n: number) => {
@@ -66,5 +68,45 @@ describe('ListDocuments', () => {
     ]);
     for (const d of r.value.documents) expect(d).not.toHaveProperty('extractedText');
     expect(JSON.stringify(r.value)).not.toContain('ข้อความเมนู');
+  });
+
+  describe('stuck extraction recovery', () => {
+    it('fails a document processing longer than KNOWLEDGE_STUCK_AFTER_MS with knowledge.extract_interrupted', async () => {
+      const stuck = await add(1);
+      clock.advance(KNOWLEDGE_STUCK_AFTER_MS);
+      const fresh = await add(2);
+      clock.advance(1);
+
+      const r = await list({}, ctx);
+      if (!r.ok) throw new Error('list failed');
+      expect(r.value.documents.map((d) => [d.id, d.status, d.error])).toEqual([
+        [fresh, 'processing', null],
+        [stuck, 'failed', 'knowledge.extract_interrupted'],
+      ]);
+      expect(logger.entries).toContainEqual(
+        expect.objectContaining({
+          event: 'knowledge.ingest.stuck_recovered',
+          level: 'warn',
+          count: 1,
+        }),
+      );
+    });
+
+    it('leaves a document younger than the bound and logs nothing when nothing is stuck', async () => {
+      const doc = await add(1);
+      clock.advance(KNOWLEDGE_STUCK_AFTER_MS - 1000);
+
+      const r = await list({}, ctx);
+      expect(r.ok && r.value.documents[0]).toMatchObject({ id: doc, status: 'processing' });
+      expect(logger.eventsOf()).toEqual([]);
+    });
+
+    it('recovers a stuck document for one of two concurrent lists only', async () => {
+      await add(1);
+      clock.advance(KNOWLEDGE_STUCK_AFTER_MS + 1);
+
+      await Promise.all([list({}, ctx), list({}, ctx)]);
+      expect(logger.eventsOf()).toEqual(['knowledge.ingest.stuck_recovered']);
+    });
   });
 });

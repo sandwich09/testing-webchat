@@ -1,13 +1,15 @@
 import {
   LINE_MAX_PARTS_PER_REQUEST,
+  LINE_RETRY_KEY_WINDOW_MS,
   LINE_TEXT_MAX_CHARS,
   PREVIEW_TEXT_MAX_CHARS,
   REPLY_TOKEN_USABLE_MS,
 } from './constants';
 import type { Contact } from './contact.model';
-import type { MessageType } from './enums.model';
+import type { LineSecretStatus, MessageType } from './enums.model';
 import type { OutboundLinePart } from './line-event.model';
 import type { Message } from './message.model';
+import type { Settings } from './settings.model';
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
@@ -26,6 +28,32 @@ export const replyTokenExpiry: (eventTimestamp: Date, isRedelivery: boolean) => 
   eventTimestamp,
   isRedelivery,
 ) => (isRedelivery ? null : new Date(eventTimestamp.getTime() + REPLY_TOKEN_USABLE_MS));
+
+/**
+ * End of LINE's retry key window of an outbound message: LINE_RETRY_KEY_WINDOW_MS after its first
+ * push. null while no push was attempted, since LINE has not seen the key yet.
+ */
+export const retryKeyExpiresAt: (m: Pick<Message, 'firstPushAt'>) => Date | null = (m) =>
+  m.firstPushAt === null ? null : new Date(m.firstPushAt.getTime() + LINE_RETRY_KEY_WINDOW_MS);
+
+/**
+ * True once the window has passed (its end included): a push with the same key could then reach
+ * the customer a second time, so "send again" is refused.
+ */
+export const isRetryKeyExpired: (m: Pick<Message, 'firstPushAt'>, now: Date) => boolean = (
+  m,
+  now,
+) => {
+  const expiresAt = retryKeyExpiresAt(m);
+  return expiresAt !== null && now.getTime() >= expiresAt.getTime();
+};
+
+export const lineSecretStatus: (
+  s: Pick<Settings, 'lineChannelId' | 'lineSecretVerifiedAt'>,
+) => LineSecretStatus = (s) => {
+  if (s.lineChannelId === null) return 'no_channel_id';
+  return s.lineSecretVerifiedAt === null ? 'unchecked' : 'verified';
+};
 
 export const chooseSendChannel: (
   c: Pick<Contact, 'replyToken' | 'replyTokenExpiresAt'>,

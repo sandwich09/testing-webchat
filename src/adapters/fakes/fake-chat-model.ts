@@ -3,7 +3,7 @@ import { err, ok } from '@/core/domain';
 import type { ChatModel, ChatModelRequest, ChatModelResponse } from '@/core/ports';
 
 export type FakeChatModelErrorCode =
-  'ai.unavailable' | 'ai.rate_limited' | 'ai.auth_failed' | 'ai.bad_request';
+  'ai.unavailable' | 'ai.no_response' | 'ai.rate_limited' | 'ai.auth_failed' | 'ai.bad_request';
 
 type ChatResult = Result<ChatModelResponse, FakeChatModelErrorCode>;
 type Scripted = ChatResult | ((req: ChatModelRequest) => ChatResult);

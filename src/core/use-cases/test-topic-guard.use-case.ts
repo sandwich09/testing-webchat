@@ -7,6 +7,8 @@ import {
   computeCost,
   err,
   guardVerdictOf,
+  isNoResponse,
+  noResponseUsage,
   ok,
 } from '@/core/domain';
 import { makeHitRateLimit } from './shared/hit-rate-limit';
@@ -29,6 +31,7 @@ export type TestTopicGuardError =
   | 'settings.guard_topics_required'
   | 'ai.budget_exhausted'
   | 'ai.unavailable'
+  | 'ai.no_response'
   | 'ai.rate_limited'
   | 'ai.auth_failed'
   | 'ai.bad_request'
@@ -75,6 +78,20 @@ export const makeTestTopicGuard: (
       timeoutMs: GUARD_TIMEOUT_MS,
     });
     if (!g.ok) {
+      // Sent without an answer: may be billed, so it gets a zero-cost row (usage-cost).
+      if (isNoResponse(g.error.code)) {
+        await usage.insert(
+          noResponseUsage({
+            id: ids.usageId(),
+            kind: 'guard',
+            contactId: null,
+            documentId: null,
+            provider: s.aiProvider,
+            model: GUARD_MODEL,
+            createdAt: now,
+          }),
+        );
+      }
       await settings.recordAiError({ code: g.error.code, at: now });
       logger.log('warn', 'guard.failed', { requestId: ctx.requestId, errorCode: g.error.code });
       return err(g.error.code);

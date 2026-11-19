@@ -38,6 +38,8 @@ export function toSettings(row: SettingsRow): Settings {
     lineConfigured: row.lineChannelSecretEnc !== null && row.lineAccessTokenEnc !== null,
     lineBotName: row.lineBotName,
     lineBasicId: row.lineBasicId,
+    lineChannelId: row.lineChannelId,
+    lineSecretVerifiedAt: row.lineSecretVerifiedAt,
     lastWebhookAt: row.lastWebhookAt,
     lastLineError: toError(row.lastLineError, row.lastLineErrorAt),
     lastAiError: toError(row.lastAiError, row.lastAiErrorAt),

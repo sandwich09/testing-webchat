@@ -1,4 +1,4 @@
-import { EVENT_CODES, type EventCode, type Message, type Seq } from '@/core/domain';
+import { EVENT_CODES, type EventCode, type Message, type MessageId, type Seq } from '@/core/domain';
 import type { MessageRepository, NewMessage } from '@/core/ports';
 import type { Message as MessageRow, Prisma } from './generated/client';
 import { toMessage, toNewMessageRow } from './message.mapper';
@@ -68,13 +68,21 @@ export function createMessageRepository(client: PrismaClient): MessageRepository
       }),
     );
 
-  const markPendingIfFailed: MessageRepository['markPendingIfFailed'] = async (id) => {
+  const markPendingIfFailed: MessageRepository['markPendingIfFailed'] = async (id, at) => {
     // Compare-and-set: the WHERE is re-checked after the row lock, so one caller wins.
     const { count } = await client.message.updateMany({
       where: { id, deliveryStatus: 'failed' },
-      data: { deliveryStatus: 'pending', deliveryError: null },
+      data: { deliveryStatus: 'pending', deliveryError: null, deliveryAttemptAt: at },
     });
     return count === 1;
+  };
+
+  const recordFirstPush: MessageRepository['recordFirstPush'] = async (id, at) => {
+    // Compare-and-set on NULL: only the first push dates the retry key window.
+    await client.message.updateMany({
+      where: { id, firstPushAt: null },
+      data: { firstPushAt: at },
+    });
   };
 
   // Compare-and-set on pending, like markPendingIfFailed: one StoreInboundMedia run finishes it.
@@ -92,6 +100,31 @@ export function createMessageRepository(client: PrismaClient): MessageRepository
       data: { mediaStatus: status },
     });
     return count === 1;
+  };
+
+  // Recovery of rows left behind by a function that was stopped (data-model rule 13). One UPDATE
+  // each: a concurrent caller waits for the row lock, then no longer sees `pending`.
+  const failStuckMedia: MessageRepository['failStuckMedia'] = async (contactId, staleBefore) => {
+    const rows = await client.$queryRaw<{ id: string }[]>`
+      UPDATE "Message" SET "mediaStatus" = 'failed'
+      WHERE "contactId" = ${contactId}::uuid
+        AND "mediaStatus" = 'pending'
+        AND "createdAt" < ${staleBefore}::timestamptz
+      RETURNING "id"`;
+    return rows.map((r) => r.id as MessageId); // brand: ids returned by the Message table
+  };
+
+  const failStuckDeliveries: MessageRepository['failStuckDeliveries'] = async (
+    contactId,
+    staleBefore,
+  ) => {
+    const rows = await client.$queryRaw<{ id: string }[]>`
+      UPDATE "Message" SET "deliveryStatus" = 'failed', "deliveryError" = 'line.send_interrupted'
+      WHERE "contactId" = ${contactId}::uuid
+        AND "deliveryStatus" = 'pending'
+        AND COALESCE("deliveryAttemptAt", "createdAt") < ${staleBefore}::timestamptz
+      RETURNING "id"`;
+    return rows.map((r) => r.id as MessageId); // brand: ids returned by the Message table
   };
 
   const latestInbound: MessageRepository['latestInbound'] = async (contactId) => {
@@ -191,8 +224,11 @@ export function createMessageRepository(client: PrismaClient): MessageRepository
     markSent,
     markFailed,
     markPendingIfFailed,
+    recordFirstPush,
     setMediaReady,
     setMediaStatus,
+    failStuckMedia,
+    failStuckDeliveries,
     latestInbound,
     recentForAi,
     listLatest,

@@ -1,6 +1,6 @@
 # API contract
 
-> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-18
+> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-19
 
 สัญญาของทุก HTTP endpoint ที่หน้าเว็บและ LINE เรียก รวม DTO, รูปแบบ error และ protocol ของ polling ไฟล์นี้เป็นที่เดียวที่กำหนดเรื่องเหล่านี้ Schema ใน `src/contracts/` ต้องตรงกับไฟล์นี้ ส่วนขั้นตอนภายในอยู่ใน [use-cases](use-cases.md), รหัส error อยู่ใน [error-catalog](error-catalog.md), ค่าของ constant อยู่ใน [project-setup](project-setup.md#10-ค่าคงที่ของระบบ) และ function ฝั่งหน้าเว็บที่เรียกแต่ละ endpoint อยู่ใน [ui-screens](../specs/ui-screens.md#16-การเรียก-api)
 
@@ -54,6 +54,7 @@ DTO ถูกสร้างจาก entity ใน route ด้วยฟัง�
 | Action (`RateLimitAction`) | Constant | Endpoint | Error |
 | --- | --- | --- | --- |
 | `unlock` | `RATE_LIMIT_UNLOCK` | `POST /api/access/unlock` | `access.rate_limited` |
+| `unlock_no_ip` | `RATE_LIMIT_UNLOCK_NO_IP` | `POST /api/access/unlock` เมื่อไม่มี IP ของผู้เรียก | `access.rate_limited` |
 | `send_message` | `RATE_LIMIT_SEND_MESSAGE` | `POST /api/contacts/:id/messages`, `POST /api/contacts/:id/messages/:messageId/retry` | `message.rate_limited` |
 | `upload_ticket` | `RATE_LIMIT_UPLOAD_TICKET` | `POST /api/uploads` | `upload.rate_limited` |
 | `pdf_ingest` | `RATE_LIMIT_PDF_INGEST` | `POST /api/knowledge/documents`, `POST /api/knowledge/documents/:id/retry` | `knowledge.rate_limited` |
@@ -107,7 +108,11 @@ interface MessageDto {
   sticker: { packageId: string; stickerId: string; imageUrl: string } | null;
   otherKind: OtherKind | null;
   eventCode: EventCode | null;
-  delivery: { status: DeliveryStatus; errorCode: ErrorCode | null } | null;
+  delivery: {
+    status: DeliveryStatus;
+    errorCode: ErrorCode | null;
+    retryExpiresAt: IsoDate | null;   // firstPushAt + LINE_RETRY_KEY_WINDOW_MS ตั้งแต่เวลานี้ "ส่งอีกครั้ง" ได้ message.retry_expired, null เมื่อยังไม่เคย push
+  } | null;
   createdAt: IsoDate;
   sentAt: IsoDate | null;
 }
@@ -133,6 +138,8 @@ interface SettingsDto {
     status: "connected" | "error" | "not_configured"; // not_configured เมื่อ configured false, error เมื่อมี lastLineError, นอกนั้น connected
     botName: string | null;
     basicId: string | null;
+    channelId: string | null;         // ไม่ใช่ความลับ null เมื่อยังไม่เคยบันทึกพร้อม Channel ID
+    secretStatus: "verified" | "unchecked" | "no_channel_id"; // lineSecretStatus: LINE ยืนยันคู่แล้ว, มี Channel ID แต่ยังไม่ได้ยืนยัน, ไม่มี Channel ID
     webhookUrl: string;
     lastWebhookAt: IsoDate | null;
   };
@@ -227,6 +234,7 @@ interface UploadTicketDto {
 - `MessageDto.sticker.imageUrl` สร้างที่ server จาก stickerId ด้วยรูปแบบ URL ของ LINE ที่กำหนดตายตัว (ต้องยืนยันรูปแบบ URL กับเอกสาร LINE) หน้าเว็บไม่สร้าง URL เอง
 - `MessageDto.media` เป็น null เมื่อ type ไม่ใช่ image หรือ video ส่วน `url` เป็น null ขณะ `status` ยังไม่ใช่ `ready`
 - `MessageDto.delivery` เป็น null สำหรับข้อความขาเข้าและบรรทัดเหตุการณ์
+- `MessageDto.delivery.retryExpiresAt` มาจาก `Message.firstPushAt` ที่ไม่เปลี่ยน หน้าเว็บเทียบกับนาฬิกาของ browser เอง เพราะ polling ไม่ส่งแถวที่ไม่เปลี่ยนซ้ำเมื่อหน้าต่างผ่าน
 
 ### การอัปโหลดตาม `strategy`
 
@@ -325,8 +333,9 @@ Response:
 
 | สถานะ | เมื่อ | Body |
 | --- | --- | --- |
-| 200 | signature ถูก (รวม body ที่อ่านไม่ได้ และ event ที่พังภายใน) | `{}` |
+| 200 | signature ถูก (รวม body ที่อ่านไม่ได้ ก้อนที่บันทึกได้บางส่วน และ event ที่พังด้วยเหตุของตัวเอง) | `{}` |
 | 401 | `line.not_configured`, `line.credentials_unreadable`, `webhook.signature_invalid` | รูปแบบ error |
+| 503 | `db.unavailable`: signature ถูก แต่ทุก event ล้มเหลว ไม่มีอะไรถูกบันทึก และฐานข้อมูลไม่ตอบ LINE จึงส่งทั้งก้อนซ้ำเมื่อเปิด "Webhook redelivery" ([line-messaging](../specs/line-messaging.md#รับ-event-webhook) ข้อ 6) | รูปแบบ error (รหัส ข้อความกลาง และ `requestId` เท่านั้น) |
 | 413 | `request.too_large` (เกิน `WEBHOOK_MAX_BODY_BYTES`) | รูปแบบ error |
 
 ### GET /api/health
@@ -344,7 +353,7 @@ Response 200 `{ "status": "ok" }` หรือ 503 `db.unavailable`
 | --- | --- |
 | Use case | `UnlockAccess` |
 | การเข้าระบบ | เปิด ตรวจต้นทาง |
-| การจำกัดความถี่ | `unlock` ตาม `RATE_LIMIT_UNLOCK` นับเฉพาะรหัสผิด |
+| การจำกัดความถี่ | `unlock` ตาม `RATE_LIMIT_UNLOCK` นับเฉพาะรหัสผิด ต่อ IP จากค่าสุดท้ายของ `x-forwarded-for` ([infrastructure](infrastructure.md#ip-ของผู้เรียก)) คำขอที่ไม่มี IP ใช้ `unlock_no_ip` ร่วมกัน |
 
 | Body field | ชนิด | บังคับ | ข้อกำหนด |
 | --- | --- | --- | --- |
@@ -473,7 +482,7 @@ Error: 404 `contact.not_found`, 409 `contact.unfollowed`, 409 `line.not_configur
 
 Body ว่าง Response 200 `MessageDto`
 
-Error: 404 `message.not_found`, 409 `message.not_retryable`, 409 `contact.unfollowed`, 409 `line.not_configured`, 409 `line.credentials_unreadable`, 429 `message.rate_limited`
+Error: 404 `message.not_found`, 409 `message.not_retryable`, 409 `message.retry_expired` (ผ่าน `LINE_RETRY_KEY_WINDOW_MS` นับจาก push ครั้งแรกแล้ว ไม่เรียก LINE และข้อความยังเป็น failed), 409 `contact.unfollowed`, 409 `line.not_configured`, 409 `line.credentials_unreadable`, 429 `message.rate_limited`
 
 ### POST /api/contacts/:id/typing
 
@@ -587,7 +596,7 @@ Response 200:
 { allowed: boolean; matchedTopic: string | null; costUsd: UsdString }   // 6 ตำแหน่ง
 ```
 
-Error: 409 `ai.disabled_globally`, 409 `settings.guard_topics_required`, 409 `ai.budget_exhausted`, 429 `settings.guard_rate_limited`, 502 `ai.refused`, 502 `ai.truncated`, 502 `ai.invalid_output`, 502 `ai.bad_request`, 502 `ai.auth_failed`, 503 `ai.unavailable`, 503 `ai.rate_limited`
+Error: 409 `ai.disabled_globally`, 409 `settings.guard_topics_required`, 409 `ai.budget_exhausted`, 429 `settings.guard_rate_limited`, 502 `ai.refused`, 502 `ai.truncated`, 502 `ai.invalid_output`, 502 `ai.bad_request`, 502 `ai.auth_failed`, 503 `ai.unavailable`, 503 `ai.no_response`, 503 `ai.rate_limited`
 
 ### PUT /api/settings/line-credentials
 
@@ -597,10 +606,11 @@ Error: 409 `ai.disabled_globally`, 409 `settings.guard_topics_required`, 409 `ai
 
 | Body field | ชนิด | บังคับ | ข้อกำหนด |
 | --- | --- | --- | --- |
+| `channelId` | string | ใช่ | ตัวเลข 1 ถึง `LINE_CHANNEL_ID_MAX_CHARS` หลัก (`LINE_CHANNEL_ID_PATTERN`) |
 | `channelSecret` | string | ใช่ | 1 ถึง 200 ตัว ไม่มีช่องว่าง |
 | `channelAccessToken` | string | ใช่ | 1 ถึง 1000 ตัว ไม่มีช่องว่าง |
 
-Response 200 `{ "botName": string, "basicId": string }` หน้าเว็บโหลด `GET /api/settings` ใหม่หลังสำเร็จ Error: 422 `line.credentials_invalid`, 503 `line.unavailable`
+Response 200 `{ "botName": string, "basicId": string, "secretStatus": "verified" | "unchecked" }` (`unchecked`: LINE ตรวจ Channel secret ไม่ได้ตอนนี้ ค่าถูกบันทึกแล้ว) หน้าเว็บโหลด `GET /api/settings` ใหม่หลังสำเร็จ Error: 422 `line.credentials_invalid`, 422 `line.channel_secret_invalid` (Channel ID กับ Channel secret ไม่ใช่คู่กัน ไม่บันทึก), 503 `line.unavailable` (ตรวจ access token ไม่ได้)
 
 ### POST /api/settings/line/test
 
@@ -608,9 +618,9 @@ Response 200 `{ "botName": string, "basicId": string }` หน้าเว็บ
 | --- | --- |
 | Use case | `TestLineConnection` |
 
-Body ว่าง Response 200 `{ "botName": string, "basicId": string }`
+Body ว่าง Response 200 `{ "botName": string, "basicId": string, "secretStatus": "verified" | "unchecked" | "no_channel_id" }` ผลการตรวจ Channel secret ของการทดสอบครั้งนี้
 
-Error: 409 `line.not_configured`, 409 `line.credentials_unreadable`, 422 `line.credentials_invalid`, 503 `line.unavailable`
+Error: 409 `line.not_configured`, 409 `line.credentials_unreadable`, 422 `line.credentials_invalid`, 422 `line.channel_secret_invalid`, 503 `line.unavailable`
 
 ### GET /api/knowledge/documents
 
@@ -725,6 +735,8 @@ Response 200:
   totalCostUsd: UsdString;                // ลูกค้า + ingest + guard
   replyCount: number;
   averageCostPerReplyUsd: UsdString | null;
+  /** การเรียกทุกชนิดในเดือนที่ส่งแล้วไม่ได้คำตอบ (ai.no_response) อาจถูกคิดเงินแต่ไม่อยู่ใน totalCostUsd */
+  noResponseCount: number;
 }
 ```
 

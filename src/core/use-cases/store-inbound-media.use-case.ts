@@ -7,9 +7,14 @@ import type {
   StorageKey,
 } from '@/core/domain';
 import {
+  MEDIA_CONTENT_CALL_WORST_MS,
+  MEDIA_JOB_BUDGET_MS,
+  MEDIA_NOT_READY_POLL_MS,
+  MEDIA_STATUS_CALL_WORST_MS,
   PREVIEW_MAX_BYTES,
   inboundMediaMaxBytes,
   inboundStorageKeys,
+  err,
   isAllowedInboundType,
   ok,
   sniffContentType,
@@ -90,7 +95,7 @@ export const makeStoreInboundMedia: (
   deps: StoreInboundMediaDeps,
   config: UseCaseConfig,
 ) => UseCase<StoreInboundMediaInput, StoreInboundMediaOutput> = (deps) => {
-  const { messages, gateway, storage, ids, logger } = deps;
+  const { messages, gateway, storage, ids, clock, logger } = deps;
   const loadLineAccess = makeLoadLineAccess(deps);
 
   const dropFile = async (key: StorageKey): Promise<void> => {
@@ -141,6 +146,42 @@ export const makeStoreInboundMedia: (
     }
   };
 
+  /**
+   * The original answered "not ready" (LINE still prepares it). Waits and asks LINE about the
+   * content while the job budget still holds the worst case of what is left (this wait, a status
+   * call, the original again and a video's preview), then downloads the original once more. When
+   * the budget cannot hold that, nothing is retried and the caller fails the message, so it never
+   * stays pending without a retry under way.
+   */
+  const downloadWhenReady = async (
+    token: LineAccessToken,
+    id: MessageId,
+    type: 'image' | 'video',
+    lineMessageId: LineMessageId,
+    max: number,
+    startedMs: number,
+    ctx: RequestContext,
+  ): ReturnType<typeof gateway.downloadContent> => {
+    const elapsed = (): number => clock.now().getTime() - startedMs;
+    const rest = MEDIA_CONTENT_CALL_WORST_MS * (type === 'video' ? 2 : 1);
+    for (let attempt = 1; ; attempt += 1) {
+      const next = MEDIA_NOT_READY_POLL_MS + MEDIA_STATUS_CALL_WORST_MS + rest;
+      if (elapsed() + next > MEDIA_JOB_BUDGET_MS) break;
+      logger.log('info', 'media.store.not_ready', {
+        requestId: ctx.requestId,
+        messageId: id,
+        attempt,
+      });
+      await clock.sleep(MEDIA_NOT_READY_POLL_MS);
+      const status = await gateway.getContentStatus(token, lineMessageId);
+      if (status.ok && status.value === 'failed') return err('line.content_unavailable');
+      if (status.ok && status.value === 'succeeded') break;
+      // processing, or no answer: ask again while the budget allows.
+    }
+    if (elapsed() + rest > MEDIA_JOB_BUDGET_MS) return err('line.content_not_ready');
+    return gateway.downloadContent(token, lineMessageId, 'original', max);
+  };
+
   /** The status another run left, when the compare-and-set on pending lost to it. */
   const currentStatus = async (id: MessageId, fallback: MediaStatus): Promise<MediaStatus> =>
     (await messages.findById(id))?.mediaStatus ?? fallback;
@@ -179,7 +220,11 @@ export const makeStoreInboundMedia: (
     // type from the content and the header.
     const keys = inboundStorageKeys(ids.randomToken(), type === 'image' ? 'jpg' : 'mp4');
 
-    const download = await gateway.downloadContent(token, lineMessageId, 'original', max);
+    const startedMs = clock.now().getTime();
+    let download = await gateway.downloadContent(token, lineMessageId, 'original', max);
+    if (!download.ok && download.error.code === 'line.content_not_ready') {
+      download = await downloadWhenReady(token, id, type, lineMessageId, max, startedMs, ctx);
+    }
     if (!download.ok) {
       return download.error.code === 'media.too_large'
         ? finish(id, 'too_large', ctx, 'media.too_large')

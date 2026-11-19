@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { LineMessageId, LineUserId } from '@/core/domain';
 import {
   FAKE_LINE_ACCESS_TOKEN,
+  FAKE_LINE_CHANNEL_ID,
   FAKE_LINE_INVALID_TOKEN,
   FakeMessagingGateway,
 } from './fake-messaging-gateway';
@@ -32,6 +33,7 @@ const makeHarness = (): MessagingGatewayHarness => {
         preview: c.preview,
         contentType: c.contentType,
         knownSize: c.knownSize,
+        notReadyTimes: c.notReadyTimes,
       });
       return Promise.resolve();
     },
@@ -41,6 +43,11 @@ const makeHarness = (): MessagingGatewayHarness => {
       return Promise.resolve();
     },
     deliveredPushCount: (to) => Promise.resolve(gateway.pushes.filter((p) => p.to === to).length),
+    channelId: FAKE_LINE_CHANNEL_ID,
+    failNextSecretCheck: () => {
+      gateway.failNext('verifyChannelSecret', 'line.unavailable');
+      return Promise.resolve();
+    },
   };
 };
 

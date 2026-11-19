@@ -7,6 +7,10 @@ export interface AccessTokenSignerHarness {
   code: string;
   /** A signer of the same kind built with a different secret. */
   otherSecretSigner: AccessTokenSigner;
+  /** A signer of the same kind built with the same secret and a different access code. */
+  otherCodeSigner: AccessTokenSigner;
+  /** A second signer built with the same secret and the same code as `signer`. */
+  sameSettingsSigner: AccessTokenSigner;
 }
 
 const NOW = new Date('2026-11-18T03:00:00Z');
@@ -57,6 +61,17 @@ export const describeAccessTokenSignerSuite = (
       const { signer, otherSecretSigner } = await makeHarness();
       const { token } = otherSecretSigner.issue(NOW);
       expect(signer.verify(token, NOW)).toBe(false);
+    });
+
+    it('rejects a token issued under another access code with the same secret', async () => {
+      const { signer, otherCodeSigner } = await makeHarness();
+      expect(signer.verify(otherCodeSigner.issue(NOW).token, NOW)).toBe(false);
+      expect(otherCodeSigner.verify(signer.issue(NOW).token, NOW)).toBe(false);
+    });
+
+    it('accepts a token from another instance built with the same secret and code', async () => {
+      const { signer, sameSettingsSigner } = await makeHarness();
+      expect(sameSettingsSigner.verify(signer.issue(NOW).token, NOW)).toBe(true);
     });
 
     it('rejects a token that was changed', async () => {

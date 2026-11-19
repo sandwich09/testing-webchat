@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  MEDIA_STUCK_AFTER_MS,
   MESSAGE_PAGE_LIMIT,
   POLL_PAGE_LIMIT,
+  SEND_STUCK_AFTER_MS,
   type ContactId,
   type LineUserId,
   type Message,
@@ -11,6 +13,7 @@ import {
   FakeClock,
   FakeContactRepository,
   FakeIdGenerator,
+  FakeLogger,
   FakeMessageRepository,
 } from '@/adapters/fakes';
 import { makeGetMessages, type GetMessagesOutput } from './get-messages.use-case';
@@ -23,6 +26,7 @@ describe('GetMessages', () => {
   let ids: FakeIdGenerator;
   let contacts: FakeContactRepository;
   let messages: FakeMessageRepository;
+  let logger: FakeLogger;
   let getMessages: ReturnType<typeof makeGetMessages>;
   let contactId: ContactId;
   let n = 0;
@@ -96,7 +100,8 @@ describe('GetMessages', () => {
     ids = new FakeIdGenerator(clock);
     contacts = new FakeContactRepository();
     messages = new FakeMessageRepository({ contacts });
-    getMessages = makeGetMessages({ contacts, messages }, {} as UseCaseConfig); // brand: config unused
+    logger = new FakeLogger(clock);
+    getMessages = makeGetMessages({ contacts, messages, clock, logger }, {} as UseCaseConfig); // brand: config unused
     n = 0;
     contactId = await newContact();
   });
@@ -207,5 +212,94 @@ describe('GetMessages', () => {
       const r = await getMessages({ contactId: unknown, mode }, ctx);
       expect(r).toMatchObject({ ok: false, error: { code: 'contact.not_found' } });
     }
+  });
+
+  describe('recovery of rows left by a stopped function', () => {
+    const addImage = async (cid: ContactId): Promise<Message> =>
+      (
+        await messages.insertInboundIfAbsent({
+          id: ids.messageId(),
+          contactId: cid,
+          direction: 'inbound',
+          author: 'customer',
+          type: 'image',
+          text: null,
+          mediaUrl: null,
+          previewUrl: null,
+          mediaStatus: 'pending',
+          stickerPackageId: null,
+          stickerId: null,
+          otherKind: null,
+          eventCode: null,
+          lineMessageId: null,
+          deliveryStatus: null,
+          deliveryError: null,
+          retryKey: null,
+          createdAt: clock.now(),
+          sentAt: null,
+        })
+      ).message;
+
+    it('fails media pending longer than MEDIA_STUCK_AFTER_MS and shows it in the changes poll', async () => {
+      const image = await addImage(contactId);
+      const before = await run({ contactId, mode: { kind: 'latest' } });
+      clock.advance(MEDIA_STUCK_AFTER_MS + 1);
+
+      const r = await run({
+        contactId,
+        mode: { kind: 'changes', afterUpdatedSeq: before.highWater },
+      });
+
+      expect(r.messages).toEqual([
+        expect.objectContaining({ id: image.id, mediaStatus: 'failed' }),
+      ]);
+      expect(logger.entries).toContainEqual(
+        expect.objectContaining({ event: 'media.store.stuck_recovered', contactId, count: 1 }),
+      );
+    });
+
+    it('fails a send pending longer than SEND_STUCK_AFTER_MS with line.send_interrupted', async () => {
+      const text = await addText(contactId, 'ส่งไม่จบ');
+      clock.advance(SEND_STUCK_AFTER_MS + 1);
+
+      const r = await run({ contactId, mode: { kind: 'latest' } });
+
+      expect(r.messages).toEqual([
+        expect.objectContaining({
+          id: text.id,
+          deliveryStatus: 'failed',
+          deliveryError: 'line.send_interrupted',
+        }),
+      ]);
+      expect(logger.entries).toContainEqual(
+        expect.objectContaining({ event: 'line.send.stuck_recovered', contactId, count: 1 }),
+      );
+      expect(JSON.stringify(logger.entries)).not.toContain('ส่งไม่จบ');
+    });
+
+    it('leaves rows younger than the bounds and of other contacts alone', async () => {
+      const other = await newContact();
+      await addImage(other);
+      await addText(other, 'other');
+      clock.advance(Math.max(MEDIA_STUCK_AFTER_MS, SEND_STUCK_AFTER_MS) + 1);
+      const image = await addImage(contactId);
+      const text = await addText(contactId, 'fresh');
+
+      const r = await run({ contactId, mode: { kind: 'latest' } });
+
+      expect(r.messages.map((m) => [m.id, m.mediaStatus, m.deliveryStatus])).toEqual([
+        [image.id, 'pending', null],
+        [text.id, null, 'pending'],
+      ]);
+      const otherRows = await run({ contactId: other, mode: { kind: 'latest' } });
+      expect(otherRows.messages.map((m) => m.mediaStatus ?? m.deliveryStatus)).toEqual([
+        'failed',
+        'failed',
+      ]);
+      expect(logger.eventsOf()).toEqual([
+        'media.store.stuck_recovered',
+        'line.send.stuck_recovered',
+      ]);
+    });
   });
 });

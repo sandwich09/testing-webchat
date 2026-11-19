@@ -26,10 +26,19 @@ const BIG_VIDEO_BYTES = 51 * MIB;
 const STREAM_CHUNK_BYTES = 64 * 1024;
 
 const INVALID_LINE_TOKEN = 'stub-invalid-token';
+/**
+ * The one Channel ID and channel secret pair the client-credentials route accepts. Same values as
+ * STUB_CHANNEL_ID and STUB_CHANNEL_SECRET in e2e/fixtures/line/credentials.ts, which this file
+ * cannot import (header comment).
+ */
+const STUB_CHANNEL_ID = '1000000000';
+const STUB_CHANNEL_SECRET = 'stub-channel-secret';
 const INVALID_CLAUDE_KEY = 'stub-invalid-key';
 const LINE_AUTH_MESSAGE =
   'Authentication failed. Confirm that the access token in the authorization header is valid.';
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** A UUID of version 4 or 5 with the RFC 4122 variant: the keys LINE is known to accept. */
+const RETRY_KEY_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[45][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const JPEG_HEAD = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00]);
 const MP4_HEAD = Buffer.from([
@@ -69,7 +78,9 @@ type LineEndpoint =
   | 'info'
   | 'content'
   | 'content-preview'
-  | 'content-transcoding';
+  | 'content-transcoding'
+  | 'oauth-token'
+  | 'oauth-revoke';
 const LINE_ENDPOINTS: readonly string[] = [
   'reply',
   'push',
@@ -79,6 +90,8 @@ const LINE_ENDPOINTS: readonly string[] = [
   'content',
   'content-preview',
   'content-transcoding',
+  'oauth-token',
+  'oauth-revoke',
 ];
 
 type RecordedRequest = {
@@ -122,9 +135,17 @@ type Incoming = {
   headers: IncomingMessage['headers'];
   body: unknown;
   bodyIsJson: boolean;
+  /** The body as text, for the form-encoded oauth routes. */
+  rawText: string;
 };
 
-type LineMatch = { to?: string; userId?: string; messageId?: string; replyToken?: string };
+type LineMatch = {
+  to?: string;
+  userId?: string;
+  messageId?: string;
+  replyToken?: string;
+  channelId?: string;
+};
 type LineFacts = LineMatch;
 
 type Entry<M, D> = { match: M | undefined; times: number; data: D };
@@ -160,6 +181,8 @@ type SeededContent = {
   sendContentLength: boolean;
 };
 type Profile = { displayName: string; pictureUrl: string | null | undefined };
+/** Set with POST /__control/line/transcoding: LINE still prepares this message's content. */
+type Transcoding = { notReadyTimes: number; failed: boolean };
 
 type State = {
   seq: number;
@@ -175,6 +198,9 @@ type State = {
   claudeDelay: Entry<string, ClaudeDelay>[];
   countTokens: { value: number; times: number }[];
   lineContent: Map<string, SeededContent>;
+  transcoding: Map<string, Transcoding>;
+  /** Tokens the client-credentials route issued and that were not revoked yet. */
+  issuedTokens: Set<string>;
 };
 
 type Params = readonly string[];
@@ -182,6 +208,8 @@ type LineRoute = {
   endpoint: LineEndpoint;
   service: 'line' | 'line-data';
   method: 'GET' | 'POST';
+  /** `form`: the oauth routes take form fields and no bearer token (default `json`). */
+  body?: 'json' | 'form';
   pattern: RegExp;
   facts: (inc: Incoming, params: Params) => LineFacts;
   validate: (inc: Incoming, params: Params) => Reply | undefined;
@@ -207,6 +235,8 @@ function createState(seq: number, ids: number): State {
     claudeDelay: [],
     countTokens: [],
     lineContent: new Map(),
+    transcoding: new Map(),
+    issuedTokens: new Set(),
   };
 }
 
@@ -265,12 +295,25 @@ function json(status: number, value: unknown, headers: Record<string, string> = 
   return { status, headers, payload: { kind: 'json', value }, delayMs: 0 };
 }
 
-function lineBadRequest(detail: string): Reply {
+/** LINE's answer to a malformed body: `details[].property` names the field. */
+function lineBadRequest(detail: string, property = ''): Reply {
   return json(400, {
     message: 'The request body has 1 error(s)',
-    details: [{ message: detail }],
+    details: [{ message: detail, property }],
   });
 }
+
+/** Bodies of the `preset` option of POST /__control/line/fail-next (stubs-and-fixtures 6). */
+const LINE_FAIL_PRESETS: Record<string, { status: number; body: unknown }> = {
+  invalid_reply_token: { status: 400, body: { message: 'Invalid reply token' } },
+  validation: {
+    status: 400,
+    body: {
+      message: 'The request body has 1 error(s)',
+      details: [{ message: 'Length must be between 1 and 5000', property: '/messages/0/text' }],
+    },
+  },
+};
 
 function claudeError(status: number, type: string, message: string): Reply {
   return json(status, { type: 'error', error: { type, message } });
@@ -291,7 +334,7 @@ function isJsonContentType(inc: Incoming): boolean {
 }
 
 function factsMatch(match: LineMatch, facts: LineFacts): boolean {
-  const keys = ['to', 'userId', 'messageId', 'replyToken'] as const;
+  const keys = ['to', 'userId', 'messageId', 'replyToken', 'channelId'] as const;
   return keys.every((key) => match[key] === undefined || match[key] === facts[key]);
 }
 
@@ -331,11 +374,14 @@ function isHttpUrl(value: unknown): boolean {
 function validateMessages(body: Record<string, unknown>): Reply | undefined {
   const messages = body['messages'];
   if (!Array.isArray(messages) || messages.length < 1 || messages.length > MAX_LINE_MESSAGES) {
-    return lineBadRequest(`messages must have 1 to ${String(MAX_LINE_MESSAGES)} items`);
+    return lineBadRequest(
+      `messages must have 1 to ${String(MAX_LINE_MESSAGES)} items`,
+      '/messages',
+    );
   }
-  for (const message of messages) {
+  for (const [index, message] of messages.entries()) {
     const problem = isValidLineMessage(message);
-    if (problem !== undefined) return lineBadRequest(problem);
+    if (problem !== undefined) return lineBadRequest(problem, `/messages/${String(index)}`);
   }
   return undefined;
 }
@@ -406,7 +452,25 @@ function streamReply(contentType: string, head: Buffer, totalBytes: number): Rep
   };
 }
 
+/** Uses one "not ready" answer of a message set with POST /__control/line/transcoding. */
+function takeNotReady(messageId: string): boolean {
+  const entry = state.transcoding.get(messageId);
+  if (entry === undefined) return false;
+  if (entry.failed) return true;
+  if (entry.notReadyTimes <= 0) return false;
+  entry.notReadyTimes -= 1;
+  return true;
+}
+
+function transcodingReply(messageId: string): Reply {
+  const entry = state.transcoding.get(messageId);
+  if (entry?.failed === true) return json(200, { status: 'failed' });
+  return json(200, { status: takeNotReady(messageId) ? 'processing' : 'succeeded' });
+}
+
 async function contentReply(messageId: string): Promise<Reply> {
+  // LINE answers 202 with no file while it still prepares the content.
+  if (takeNotReady(messageId)) return json(202, {});
   const seeded = state.lineContent.get(messageId);
   if (seeded !== undefined) {
     return bytesReply(seeded.contentType, seeded.data, seeded.sendContentLength);
@@ -479,6 +543,33 @@ function handlePush(inc: Incoming): Reply {
   return reply;
 }
 
+function formField(inc: Incoming, name: string): string | undefined {
+  return new URLSearchParams(inc.rawText).get(name) ?? undefined;
+}
+
+/** LINE's client-credentials token: issued only for the stub's Channel ID and channel secret. */
+function handleOauthToken(inc: Incoming): Reply {
+  if (formField(inc, 'grant_type') !== 'client_credentials') {
+    return json(400, { error: 'unsupported_grant_type' });
+  }
+  if (
+    formField(inc, 'client_id') !== STUB_CHANNEL_ID ||
+    formField(inc, 'client_secret') !== STUB_CHANNEL_SECRET
+  ) {
+    return json(400, { error: 'invalid_client', error_description: 'invalid client' });
+  }
+  const token = `stub-issued-${String(nextId())}`;
+  state.issuedTokens.add(token);
+  return json(200, { access_token: token, expires_in: 2_592_000, token_type: 'Bearer' });
+}
+
+/** Revokes a token the stub issued; anything else is a 400, so a test sees a wrong revoke. */
+function handleOauthRevoke(inc: Incoming): Reply {
+  const token = formField(inc, 'access_token') ?? '';
+  if (!state.issuedTokens.delete(token)) return json(400, { error: 'invalid_request' });
+  return json(200, {});
+}
+
 function validateLoading(inc: Incoming): Reply | undefined {
   const seconds = bodyRecord(inc)['loadingSeconds'];
   if (
@@ -522,8 +613,8 @@ const LINE_ROUTES: readonly LineRoute[] = [
     facts: (inc) => ({ to: stringField(inc, 'to') }),
     validate: (inc) => {
       if (!stringField(inc, 'to')?.startsWith('U')) return lineBadRequest('to must start with U');
-      if (!UUID_PATTERN.test(headerValue(inc, 'x-line-retry-key') ?? '')) {
-        return lineBadRequest('X-Line-Retry-Key must be a UUID');
+      if (!RETRY_KEY_PATTERN.test(headerValue(inc, 'x-line-retry-key') ?? '')) {
+        return lineBadRequest('X-Line-Retry-Key must be a version 4 or 5 UUID');
       }
       return validateMessages(bodyRecord(inc));
     },
@@ -589,11 +680,37 @@ const LINE_ROUTES: readonly LineRoute[] = [
     pattern: /^\/line-data\/v2\/bot\/message\/([^/]+)\/content\/transcoding$/,
     facts: (_inc, params) => ({ messageId: param(params, 0) }),
     validate: () => undefined,
-    handle: () => json(200, { status: 'succeeded' }),
+    handle: (_inc, params) => transcodingReply(param(params, 0)),
+  },
+  {
+    endpoint: 'oauth-token',
+    service: 'line',
+    method: 'POST',
+    body: 'form',
+    pattern: /^\/line\/v2\/oauth\/accessToken$/,
+    facts: (inc) => ({ channelId: formField(inc, 'client_id') }),
+    validate: () => undefined,
+    handle: handleOauthToken,
+  },
+  {
+    endpoint: 'oauth-revoke',
+    service: 'line',
+    method: 'POST',
+    body: 'form',
+    pattern: /^\/line\/v2\/oauth\/revoke$/,
+    facts: () => ({}),
+    validate: () => undefined,
+    handle: handleOauthRevoke,
   },
 ];
 
 function checkLineCommon(route: LineRoute, inc: Incoming): Reply | undefined {
+  if (route.body === 'form') {
+    const type = headerValue(inc, 'content-type') ?? '';
+    return /^application\/x-www-form-urlencoded\b/i.test(type)
+      ? undefined
+      : json(400, { error: 'invalid_request' });
+  }
   const token = bearerToken(inc);
   if (authorizationKind(inc) !== 'bearer' || token === INVALID_LINE_TOKEN) {
     return json(401, { message: LINE_AUTH_MESSAGE });
@@ -931,7 +1048,7 @@ function parseLineMatch(value: unknown): LineMatch | undefined | 'invalid' {
   if (value === undefined || value === null) return undefined;
   if (!isRecord(value)) return 'invalid';
   const match: LineMatch = {};
-  for (const key of ['to', 'userId', 'messageId', 'replyToken'] as const) {
+  for (const key of ['to', 'userId', 'messageId', 'replyToken', 'channelId'] as const) {
     const field = value[key];
     if (field === undefined) continue;
     if (typeof field !== 'string') return 'invalid';
@@ -967,7 +1084,15 @@ function controlLineFail(body: Record<string, unknown>): Reply {
   const match = parseLineMatch(body['match']);
   const times = optionalTimes(body);
   const headers = parseStringMap(body['headers']);
-  const status = body['status'];
+  const presetName = body['preset'];
+  const preset =
+    typeof presetName === 'string' && Object.hasOwn(LINE_FAIL_PRESETS, presetName)
+      ? LINE_FAIL_PRESETS[presetName]
+      : undefined;
+  if (presetName !== undefined && preset === undefined) {
+    return controlError('preset must be "invalid_reply_token" or "validation"');
+  }
+  const status = preset?.status ?? body['status'];
   const endpoint = body['endpoint'];
   if (typeof endpoint !== 'string' || !LINE_ENDPOINTS.includes(endpoint)) {
     return controlError('endpoint must be a LINE endpoint name');
@@ -978,8 +1103,22 @@ function controlLineFail(body: Record<string, unknown>): Reply {
   if (typeof status !== 'number' || !Number.isInteger(status) || status < 100 || status > 599) {
     return controlError('status must be an HTTP status code');
   }
-  const data: LineFail = { endpoint, status, body: body['body'] ?? {}, headers };
+  const data: LineFail = { endpoint, status, body: preset?.body ?? body['body'] ?? {}, headers };
   state.lineFail.push({ match, times, data });
+  return OK();
+}
+
+/** Makes LINE still prepare a message's content: content answers 202, transcoding `processing`. */
+function controlLineTranscoding(body: Record<string, unknown>): Reply {
+  const { messageId, notReadyTimes, failed } = body;
+  if (!isNonEmptyString(messageId)) return controlError('messageId must be a non-empty string');
+  if (notReadyTimes !== undefined && !isPositiveInt(notReadyTimes)) {
+    return controlError('notReadyTimes must be a positive integer');
+  }
+  if (failed !== undefined && typeof failed !== 'boolean') {
+    return controlError('failed must be a boolean');
+  }
+  state.transcoding.set(messageId, { notReadyTimes: notReadyTimes ?? 1, failed: failed ?? false });
   return OK();
 }
 
@@ -1193,6 +1332,7 @@ const CONTROL_POST: Record<string, (body: Record<string, unknown>) => Reply> = {
   '/__control/line/fail-next': controlLineFail,
   '/__control/line/delay-next': controlLineDelay,
   '/__control/line/content': controlLineContent,
+  '/__control/line/transcoding': controlLineTranscoding,
   '/__control/claude/next-reply': controlClaudeNextReply,
   '/__control/claude/fail-next': controlClaudeFail,
   '/__control/claude/delay-next': controlClaudeDelay,
@@ -1384,6 +1524,7 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     headers: req.headers,
     body: parsed.value,
     bodyIsJson: parsed.ok,
+    rawText: raw.toString('utf8'),
   };
 
   let reply: Reply;

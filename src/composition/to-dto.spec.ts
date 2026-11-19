@@ -57,6 +57,7 @@ import {
   toUploadTicketDto,
   toUsageReportResponse,
 } from './to-dto';
+import { LINE_RETRY_KEY_WINDOW_MS } from '@/core/domain';
 
 const T = new Date('2026-11-18T07:32:10.123Z');
 const T2 = new Date('2026-11-18T08:00:00.000Z');
@@ -109,6 +110,7 @@ const message = (over: Partial<Message> = {}): Message => ({
   retryKey: null,
   createdAt: T,
   sentAt: null,
+  firstPushAt: null,
   ...over,
 });
 
@@ -125,6 +127,8 @@ const settings = (over: Partial<Settings> = {}): Settings => ({
   lineConfigured: true,
   lineBotName: 'Shop',
   lineBasicId: '@shop',
+  lineChannelId: null,
+  lineSecretVerifiedAt: null,
   lastWebhookAt: T,
   lastLineError: null,
   lastAiError: null,
@@ -254,7 +258,27 @@ describe('messages', () => {
         sentAt: null,
       }),
     );
-    expect(out.delivery).toEqual({ status: 'failed', errorCode: 'line.push_failed' });
+    expect(out.delivery).toEqual({
+      status: 'failed',
+      errorCode: 'line.push_failed',
+      retryExpiresAt: null,
+    });
+    // The retry key window ends LINE_RETRY_KEY_WINDOW_MS after the first push.
+    const pushed = toMessageDto(
+      message({
+        direction: 'outbound',
+        author: 'admin',
+        deliveryStatus: 'failed',
+        deliveryError: 'line.push_failed',
+        firstPushAt: T,
+      }),
+    );
+    expect(pushed.delivery?.retryExpiresAt).toBe(
+      new Date(T.getTime() + LINE_RETRY_KEY_WINDOW_MS).toISOString(),
+    );
+    expect(messageDtoSchema.parse(pushed).delivery?.retryExpiresAt).toBe(
+      pushed.delivery?.retryExpiresAt,
+    );
     const event = toMessageDto(
       message({
         direction: 'internal',
@@ -311,6 +335,15 @@ describe('settings and system', () => {
     ],
   ])('derives line.status %s', (status, over) => {
     expect(toSettingsDto({ settings: settings(over), ...base }).line.status).toBe(status);
+  });
+
+  it.each([
+    ['no_channel_id', { lineChannelId: null, lineSecretVerifiedAt: null }],
+    ['unchecked', { lineChannelId: '1234567890', lineSecretVerifiedAt: null }],
+    ['verified', { lineChannelId: '1234567890', lineSecretVerifiedAt: T }],
+  ] as const)('returns the Channel ID and line.secretStatus %s', (secretStatus, over) => {
+    const dto = settingsDtoSchema.parse(toSettingsDto({ settings: settings(over), ...base }));
+    expect(dto.line).toMatchObject({ channelId: over.lineChannelId, secretStatus });
   });
 
   it('maps the system status and guardrail stats', () => {
@@ -447,8 +480,10 @@ describe('knowledge, canned replies, uploads and usage', () => {
         totalCost: usd(1_000_500n),
         replyCount: 2,
         averageCostPerReply: null,
+        noResponseCount: 3,
       }),
     );
+    expect(r.noResponseCount).toBe(3);
     expect(r.contacts[0]).toMatchObject({ totalTokens: 10, costUsd: '0.001000' });
     expect(r.contacts[0]).not.toHaveProperty('okCount');
     expect(r.guard).toEqual({ count: 4, ...usage, totalTokens: 10, costUsd: '0.000001' });
@@ -463,6 +498,7 @@ describe('knowledge, canned replies, uploads and usage', () => {
         totalCost: usd(0n),
         replyCount: 1,
         averageCostPerReply: usd(2_000n),
+        noResponseCount: 0,
       }).averageCostPerReplyUsd,
     ).toBe('0.000002');
   });

@@ -27,6 +27,10 @@ export const ERROR_HTTP = {
     message: 'The stored LINE credentials cannot be read',
   },
   'line.credentials_invalid': { status: 422, message: 'LINE rejected the channel access token' },
+  'line.channel_secret_invalid': {
+    status: 422,
+    message: 'LINE rejected the Channel ID and channel secret pair',
+  },
   'line.unauthorized': { status: null, message: 'LINE rejected the channel access token' },
   'line.quota_exceeded': { status: null, message: 'The LINE message quota is used up' },
   'line.rate_limited': { status: null, message: 'LINE rate limited the request' },
@@ -36,12 +40,24 @@ export const ERROR_HTTP = {
   'line.reply_token_invalid': { status: null, message: 'LINE rejected the reply token' },
   'line.profile_unavailable': { status: null, message: 'The LINE profile is unavailable' },
   'line.content_unavailable': { status: null, message: 'The LINE content is unavailable' },
+  'line.content_not_ready': {
+    status: null,
+    message: 'LINE has not finished preparing the content',
+  },
   'line.loading_failed': { status: null, message: 'LINE rejected the loading request' },
+  'line.send_interrupted': {
+    status: null,
+    message: 'The send stopped before its result was known',
+  },
   // Contacts and messages
   'contact.not_found': { status: 404, message: 'The contact does not exist' },
   'contact.unfollowed': { status: 409, message: 'The contact has unfollowed the account' },
   'message.not_found': { status: 404, message: 'The message does not exist' },
   'message.not_retryable': { status: 409, message: 'The message is not in a failed state' },
+  'message.retry_expired': {
+    status: 409,
+    message: 'The retry key window of the message has passed; send it as a new message',
+  },
   'message.id_conflict': { status: 409, message: 'The message id is already used' },
   'message.rate_limited': { status: 429, message: 'Too many messages' },
   // Uploads and media
@@ -67,6 +83,8 @@ export const ERROR_HTTP = {
   'ai.rate_limited': { status: 503, message: 'The AI provider rate limited the request' },
   'ai.auth_failed': { status: 502, message: 'The AI provider rejected the API key' },
   'ai.bad_request': { status: 502, message: 'The AI provider rejected the request' },
+  'ai.no_response': { status: 503, message: 'The AI provider sent no answer in time' },
+  'ai.link_not_allowed': { status: null, message: 'The AI reply held a link the shop never wrote' },
   // Settings
   'settings.guard_topics_required': {
     status: 409,
@@ -85,6 +103,10 @@ export const ERROR_HTTP = {
   'knowledge.extract_failed': { status: null, message: 'The PDF could not be converted' },
   'knowledge.extract_empty': { status: null, message: 'The PDF has no readable text' },
   'knowledge.extract_refused': { status: null, message: 'The AI model refused the PDF' },
+  'knowledge.extract_interrupted': {
+    status: null,
+    message: 'The PDF conversion stopped before it finished',
+  },
   // Canned replies
   'canned_reply.not_found': { status: 404, message: 'The canned reply does not exist' },
   'canned_reply.limit_reached': { status: 409, message: 'The canned reply limit is reached' },

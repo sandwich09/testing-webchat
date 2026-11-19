@@ -30,7 +30,7 @@ export interface TopicGuard {
   ): Promise<
     Result<
       TopicGuardResponse,
-      'ai.unavailable' | 'ai.rate_limited' | 'ai.auth_failed' | 'ai.bad_request'
+      'ai.unavailable' | 'ai.no_response' | 'ai.rate_limited' | 'ai.auth_failed' | 'ai.bad_request'
     >
   >;
 }

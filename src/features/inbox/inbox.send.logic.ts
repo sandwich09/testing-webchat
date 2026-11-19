@@ -134,7 +134,7 @@ export function optimisticMessage(
     sticker: null,
     otherKind: null,
     eventCode: null,
-    delivery: { status: 'pending', errorCode: null },
+    delivery: { status: 'pending', errorCode: null, retryExpiresAt: null },
     createdAt,
     sentAt: null,
     localState: 'sending',
@@ -254,10 +254,21 @@ export type RetryPlan =
   /** Nothing to do: in flight, or not failed. */
   | null;
 
+/**
+ * True when "send again" can no longer reuse the retry key: the server said so
+ * (`message.retry_expired`), or `delivery.retryExpiresAt` is not after `now` (ui-screens 5.3).
+ */
+export function isRetryExpired(row: ThreadMessage, now: Date): boolean {
+  if (row.localError === 'message.retry_expired') return true;
+  const expiresAt = row.delivery?.retryExpiresAt ?? null;
+  return expiresAt !== null && now.getTime() >= Date.parse(expiresAt);
+}
+
 /** What "send again" does for a row (ui-screens 7.5 rows "failed → sending"). */
-export function retryPlan(row: ThreadMessage): RetryPlan {
+export function retryPlan(row: ThreadMessage, now: Date): RetryPlan {
   if (row.localState === 'sending' || row.localState === 'unconfirmed') return null;
   if (row.seq === null) return row.localState === 'failed' ? 'resend' : null;
+  if (isRetryExpired(row, now)) return null;
   return row.localState === 'failed' || row.delivery?.status === 'failed' ? 'retry' : null;
 }
 

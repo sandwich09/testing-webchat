@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+
+import { LINE_CHANNEL_ID_MAX_CHARS } from '@/contracts';
 import {
   AI_DAILY_BUDGET_MAX_USD,
   AI_INSTRUCTIONS_MAX_CHARS,
@@ -127,20 +129,41 @@ describe('validateCannedReply', () => {
 });
 
 describe('validateLineCredentials', () => {
-  it('requires both values', () => {
-    expect(validateLineCredentials({ channelSecret: ' ', channelAccessToken: 't' })).toEqual({
-      ok: false,
-      field: 'channelSecret',
-      code: 'required',
-    });
-    expect(validateLineCredentials({ channelSecret: 's', channelAccessToken: '' })).toEqual({
-      ok: false,
-      field: 'channelAccessToken',
-      code: 'required',
-    });
-    expect(validateLineCredentials({ channelSecret: 's', channelAccessToken: 't' })).toEqual({
-      ok: true,
-    });
+  const id = '1234567890';
+
+  it('requires all three values, in the order of the form', () => {
+    expect(
+      validateLineCredentials({ channelId: ' ', channelSecret: '', channelAccessToken: '' }),
+    ).toEqual({ ok: false, field: 'channelId', code: 'required' });
+    expect(
+      validateLineCredentials({ channelId: id, channelSecret: ' ', channelAccessToken: 't' }),
+    ).toEqual({ ok: false, field: 'channelSecret', code: 'required' });
+    expect(
+      validateLineCredentials({ channelId: id, channelSecret: 's', channelAccessToken: '' }),
+    ).toEqual({ ok: false, field: 'channelAccessToken', code: 'required' });
+    expect(
+      validateLineCredentials({
+        channelId: ` ${id} `,
+        channelSecret: 's',
+        channelAccessToken: 't',
+      }),
+    ).toEqual({ ok: true });
+  });
+
+  it('takes a Channel ID of digits only, up to LINE_CHANNEL_ID_MAX_CHARS', () => {
+    const check = (channelId: string) =>
+      validateLineCredentials({ channelId, channelSecret: 's', channelAccessToken: 't' });
+    expect(check('9'.repeat(LINE_CHANNEL_ID_MAX_CHARS))).toEqual({ ok: true });
+    for (const bad of [
+      '12a4',
+      '12 34',
+      '-123',
+      '1.5',
+      '９９',
+      '9'.repeat(LINE_CHANNEL_ID_MAX_CHARS + 1),
+    ]) {
+      expect(check(bad)).toEqual({ ok: false, field: 'channelId', code: 'invalid' });
+    }
   });
 });
 

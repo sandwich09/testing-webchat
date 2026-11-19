@@ -26,9 +26,12 @@ import {
   buildGuardRulesBlock,
   buildSystemInstructions,
   computeCost,
+  disallowedLinks,
   guardContextTurns,
   guardVerdictOf,
   handoffText,
+  isNoResponse,
+  noResponseUsage,
   ok,
   previewOf,
   sanitizeAiReply,
@@ -141,6 +144,31 @@ export const makeGenerateAiReply: (
       cost,
       createdAt: clock.now(),
     };
+  };
+
+  /**
+   * A call that was sent and got no answer may still be billed (usage-cost), so it gets an
+   * AiUsage row with zero tokens and cost. Any other port error means the API answered with an
+   * error or nothing was sent, and no row is written.
+   */
+  const recordNoResponse = async (
+    kind: 'reply' | 'guard',
+    contactId: ContactId,
+    model: string,
+    code: ErrorCode,
+  ): Promise<void> => {
+    if (!isNoResponse(code)) return;
+    await usage.insert(
+      noResponseUsage({
+        id: ids.usageId(),
+        kind,
+        contactId,
+        documentId: null,
+        provider: 'claude',
+        model,
+        createdAt: clock.now(),
+      }),
+    );
   };
 
   const record = (
@@ -268,8 +296,10 @@ export const makeGenerateAiReply: (
       logger.log('warn', 'guard.failed', { contactId: c.id, errorCode: code, durationMs });
       return handoff(c, 'ai_failed');
     };
-    // No answer from the API, so nothing was billed and no AiUsage row is written.
-    if (!g.ok) return failed(g.error.code);
+    if (!g.ok) {
+      await recordNoResponse('guard', c.id, GUARD_MODEL, g.error.code);
+      return failed(g.error.code);
+    }
 
     const d = draftOf('guard', c.id, g.value);
     const v = guardVerdictOf(g.value, s.guardTopics);
@@ -292,14 +322,17 @@ export const makeGenerateAiReply: (
     return null;
   };
 
-  /** replyOnce steps 5 to 8: knowledge and the chat model. */
+  /**
+   * replyOnce steps 5 to 8: knowledge and the chat model. Also returns the texts the shop wrote
+   * (knowledge and instructions), against which the links of the reply are checked.
+   */
   const callChatModel = async (s: Settings, history: ChatTurn[]) => {
     const knowledge = await knowledgeSource.getKnowledge();
     const base = buildSystemInstructions(s);
     const systemInstructions = s.guardEnabled
       ? `${base}\n\n${buildGuardRulesBlock(s.guardTopics)}`
       : base;
-    return chatModel.generateReply({
+    const res = await chatModel.generateReply({
       model: s.aiModel,
       systemInstructions,
       knowledgeText: knowledge.text,
@@ -307,17 +340,30 @@ export const makeGenerateAiReply: (
       now: clock.now(),
       maxTokens: AI_MAX_TOKENS,
     });
+    return { res, shopTexts: [knowledge.text, s.aiInstructions] };
   };
 
-  /** replyOnce steps 9 to 11: cost, outcome and the cleaned text. */
-  const readReply = (c: Contact, r: ChatModelResponse, durationMs: number) => {
+  /**
+   * replyOnce steps 9 to 11: cost, outcome and the cleaned text. A reply with a link the shop
+   * never wrote is not sent (ai-prompt 6.1): it fails with ai.link_not_allowed.
+   */
+  const readReply = (
+    c: Contact,
+    r: ChatModelResponse,
+    durationMs: number,
+    shopTexts: readonly string[],
+  ) => {
     const d = draftOf('reply', c.id, r);
     let o = usageOutcomeOf(r);
     let text: string | null = null;
     if (o.outcome === 'ok' && r.output !== null) {
       text = sanitizeAiReply(r.output.reply);
-      if (text === null)
+      if (text === null) {
         o = { outcome: 'failed', error: 'ai.invalid_output', handoff: 'ai_failed' };
+      } else if (disallowedLinks(text, shopTexts).length > 0) {
+        text = null;
+        o = { outcome: 'failed', error: 'ai.link_not_allowed', handoff: 'ai_failed' };
+      }
     }
     logger.log('info', 'ai.model.called', {
       contactId: c.id,
@@ -389,14 +435,14 @@ export const makeGenerateAiReply: (
     }
 
     const started = clock.now().getTime();
-    const res = await callChatModel(s, history);
+    const { res, shopTexts } = await callChatModel(s, history);
     if (!res.ok) {
-      // No answer from the API, so nothing was billed and no AiUsage row is written.
+      await recordNoResponse('reply', c.id, s.aiModel, res.error.code);
       await settings.recordAiError({ code: res.error.code, at: clock.now() });
       logger.log('error', 'ai.reply.failed', { contactId: c.id, errorCode: res.error.code });
       return handoff(c, 'ai_failed');
     }
-    const { d, o, text } = readReply(c, res.value, clock.now().getTime() - started);
+    const { d, o, text } = readReply(c, res.value, clock.now().getTime() - started, shopTexts);
 
     // Second layer of the topic guard: the chat model judged the message off-topic.
     if (s.guardEnabled && o.handoff === 'ai_unsafe_or_offtopic') {

@@ -8,6 +8,8 @@ export const LINE_PROFILE_TIMEOUT_MS = 3000;
 export const LINE_CONTENT_TIMEOUT_MS = 30_000;
 /** Automatic retries for network failures, 5xx and 429 only. */
 export const LINE_MAX_RETRIES = 2;
+/** `showLoading` is not retried: a failure there is only logged. */
+export const LINE_LOADING_MAX_RETRIES = 0;
 
 /** Wait before retry n (1-based) is `LINE_RETRY_BASE_DELAY_MS * 2^(n-1)` without Retry-After. */
 export const LINE_RETRY_BASE_DELAY_MS = 250;

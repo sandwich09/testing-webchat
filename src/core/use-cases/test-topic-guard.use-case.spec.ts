@@ -187,6 +187,25 @@ describe('TestTopicGuard', () => {
     },
   );
 
+  it('returns ai.no_response and writes a guard row with zero cost, since it may be billed', async () => {
+    guard.enqueueError('ai.no_response');
+
+    const result = await run({ text: TEXT }, ctx);
+
+    expect(code(result)).toBe('ai.no_response');
+    expect(usage.records).toEqual([
+      expect.objectContaining({
+        kind: 'guard',
+        contactId: null,
+        model: GUARD_MODEL,
+        outcome: 'failed',
+        error: 'ai.no_response',
+        cost: 0n,
+      }),
+    ]);
+    expect((await settings.get()).lastAiError).toEqual({ code: 'ai.no_response', at: clock.now() });
+  });
+
   it.each([
     ['refused', 'ai.refused', (g: FakeTopicGuard) => g.enqueueRefusal()],
     ['truncated', 'ai.truncated', (g: FakeTopicGuard) => g.enqueueTruncated()],

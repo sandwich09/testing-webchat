@@ -20,6 +20,10 @@ export interface Settings {
   lineConfigured: boolean;
   lineBotName: string | null;
   lineBasicId: string | null;
+  /** Not secret. null for credentials saved before the Channel ID was asked for. */
+  lineChannelId: string | null;
+  /** When LINE last confirmed the Channel ID and channel secret pair; null when it has not. */
+  lineSecretVerifiedAt: Date | null;
   lastWebhookAt: Date | null;
   lastLineError: { code: ErrorCode; at: Date } | null;
   lastAiError: { code: ErrorCode; at: Date } | null;

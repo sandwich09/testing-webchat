@@ -1,4 +1,4 @@
-import { createHmac, hkdfSync, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, hkdfSync, randomBytes, timingSafeEqual } from 'node:crypto';
 import { ACCESS_COOKIE_TTL_MS } from '@/core/domain';
 import type { AccessTokenSigner } from '@/core/ports';
 import { decodeSecretKey } from './secret-key';
@@ -9,10 +9,18 @@ const TOKEN = /^v1\.(0|[1-9][0-9]{0,15})\.([A-Za-z0-9_-]{43})$/;
 const MAX_TOKEN_LENGTH = 64;
 /**
  * The token key is derived with HKDF rather than used directly, so it never equals an HMAC
- * that ContentHasher.keyedHash could produce from the same SESSION_SECRET.
+ * that ContentHasher.keyedHash could produce from the same SESSION_SECRET. The info also holds
+ * a SHA-256 digest of ACCESS_CODE: changing the code changes the key, so every cookie issued
+ * under the previous code fails verification. Only the digest enters the derivation; the code
+ * itself is never stored on the signer or written anywhere.
  */
 const HKDF_SALT = 'twa.access-token';
-const HKDF_INFO = `hmac-sha256.${VERSION}`;
+const HKDF_INFO_LABEL = `hmac-sha256.${VERSION}.access-code:`;
+
+const deriveTokenKey = (secret: Buffer, accessCode: string): Buffer => {
+  const codeDigest = createHash('sha256').update(accessCode, 'utf8').digest('hex');
+  return Buffer.from(hkdfSync('sha256', secret, HKDF_SALT, `${HKDF_INFO_LABEL}${codeDigest}`, 32));
+};
 
 export interface HmacAccessTokenSignerOptions {
   /** ACCESS_CODE. */
@@ -37,7 +45,7 @@ export const createHmacAccessTokenSigner = (
     throw new Error('Access token TTL must be a positive integer of milliseconds');
   }
   const secret = decodeSecretKey(options.sessionSecret, 'Session secret');
-  const tokenKey = Buffer.from(hkdfSync('sha256', secret, HKDF_SALT, HKDF_INFO, 32));
+  const tokenKey = deriveTokenKey(secret, options.accessCode);
 
   // Codes are compared as HMAC digests under a per-process random key: both sides are always
   // 32 bytes, so neither the comparison time nor an early length check reveals the code length.

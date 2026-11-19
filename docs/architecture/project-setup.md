@@ -1,6 +1,6 @@
 # การตั้งโปรเจกต์
 
-> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-18
+> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-19
 
 เอกสารนี้กำหนดทุกไฟล์ config, dependency, โครงโฟลเดอร์, Docker, CI และค่าคงที่ของระบบ ให้สร้างโปรเจกต์ได้โดยไม่ต้องตัดสินใจเพิ่ม สิ่งที่ยังไม่ได้ตรวจกับเอกสารภายนอกเขียนกำกับว่า "ต้องยืนยัน" พร้อมสมมติฐานที่ใช้ และรวมไว้ในหัวข้อสุดท้าย
 
@@ -240,7 +240,7 @@ Path ของหน้าเว็บ (`/welcome`, `/chats`, `/chats/[contactId
 | Route segment config | ทุก `route.ts` export `runtime = 'nodejs'` และ `dynamic = 'force-dynamic'` ทุก `page.tsx` export `dynamic = 'force-dynamic'` |
 | `cacheComponents` | ไม่เปิด เพราะเมื่อเปิด Next.js 16 ไม่รับ `export const dynamic` (ต้องยืนยัน) |
 | งานหลังตอบ | `after()` จาก `next/server` ห่อด้วยตัวดัก error กลางใน `src/composition/route.ts` |
-| `maxDuration` | `app/api/line/webhook/route.ts` export ค่าของ `WEBHOOK_MAX_DURATION_S` และ `app/api/knowledge/documents/route.ts` กับ `app/api/knowledge/documents/[id]/retry/route.ts` export ค่าของ `KNOWLEDGE_MAX_DURATION_S` (หัวข้อ 10) เขียนเป็น literal ในไฟล์ route เพราะ Next.js อ่านค่านี้แบบ static พร้อม comment ชื่อ constant ค่าของ PDF ต้องยืนยันกับเพดานของ Vercel ([แผนการสร้าง](../plans/implementation-plan.md)) ถ้าเพดานต่ำกว่า ให้ลด `PDF_MAX_PAGES` และ `CLAUDE_EXTRACT_TIMEOUT_MS` ให้รวมกันไม่เกิน |
+| `maxDuration` | `app/api/line/webhook/route.ts` export ค่าของ `WEBHOOK_MAX_DURATION_S` และ `app/api/knowledge/documents/route.ts` กับ `app/api/knowledge/documents/[id]/retry/route.ts` export ค่าของ `KNOWLEDGE_MAX_DURATION_S` (หัวข้อ 10) เขียนเป็น literal ในไฟล์ route เพราะ Next.js อ่านค่านี้แบบ static พร้อม comment ชื่อ constant ค่าทั้งสองต้องยืนยันกับเพดานของ Vercel ([แผนการสร้าง](../plans/implementation-plan.md)) `src/composition/timing-budget.spec.ts` อ่าน literal ของทั้งสามไฟล์และตรึงว่าเวลาแย่ที่สุดของงานหลังตอบอยู่ใต้ค่านี้ (หัวข้อ 10.4 "เวลาแย่ที่สุด") ถ้าเพดานต่ำกว่า ให้ลดค่าในไฟล์ route แล้วลด timeout หรือจำนวนครั้งที่ลองจน test ผ่าน |
 | ตรวจ environment variable | `instrumentation.ts` export `register()` ที่เรียก `assertEnv()` จาก composition เมื่อ `process.env.NEXT_RUNTIME === 'nodejs'` และไม่อยู่ในช่วง build (`process.env.NEXT_PHASE !== 'phase-production-build'`) ขาดตัวไหน process ล้มพร้อมบอกชื่อ ตาม [infrastructure](infrastructure.md) |
 | Lint | Next.js 16 ไม่มี `next lint` และ `next build` ไม่รัน lint จึงรัน `eslint` ตรง |
 | รูป | ใช้ `<img>` ธรรมดา ไม่ใช้ `next/image` จึงไม่มี config ของ image optimization |
@@ -283,6 +283,9 @@ Path ของหน้าเว็บ (`/welcome`, `/chats`, `/chats/[contactId
     "db:seed": "tsx --conditions=react-server prisma/seed.ts",
     "stubs": "node stubs/server.ts",
     "ai:eval": "tsx scripts/ai-eval.ts",
+    "migrations:immutable": "tsx scripts/check-migrations-immutable.ts",
+    "migrations:destructive": "tsx scripts/check-migrations-destructive.ts",
+    "docs:check": "tsx scripts/docs-check.ts",
     "vercel-build": "if [ \"$VERCEL_ENV\" = \"production\" ]; then prisma migrate deploy; fi && prisma generate && next build",
     "postinstall": "prisma generate"
   }
@@ -301,6 +304,9 @@ Path ของหน้าเว็บ (`/welcome`, `/chats`, `/chats/[contactId
 | `db:migrate` | ใช้สร้าง migration ใหม่ในเครื่อง dev เท่านั้น migration ที่ลบหรือเปลี่ยนชนิดคอลัมน์ต้องถามก่อน ตาม `AGENTS.md` เมื่อไม่มี TTY (เช่น agent หรือ CI) สร้างไฟล์โดยไม่ apply ด้วย `pnpm exec prisma migrate dev --create-only --name <name> </dev/null` **คำเตือน:** ทุก migration ที่ Prisma สร้างมีคำสั่ง `DROP SEQUENCE "change_seq"` (พร้อม `SET`/`DROP DEFAULT` ของ `"Message"."seq"`) ที่ไม่ควรมี เพราะ Prisma อ่านค่าเริ่มต้น `nextval` แบบ `dbgenerated` ของ migration `init` ไม่ได้ ต้องลบคำสั่งเหล่านั้นด้วยมือก่อน apply ไม่เช่นนั้น polling ใช้ไม่ได้ (ดู comment บนสุดของ `prisma/migrations/*_topic_guard/migration.sql` และ [data-model](data-model.md#migration-ที่สอง-ขอบเขตหัวข้อ)) |
 | `ai:eval` | เรียก Claude จริงและเสียเงิน สคริปต์ปฏิเสธการทำงานถ้าไม่ได้ส่ง `--confirm` (`pnpm ai:eval -- --confirm`) ไม่อยู่ใน CI และ agent ไม่รันเอง ดู [test-strategy](../qa/test-strategy.md) |
 | `vercel-build` | หัวข้อ 9 |
+| `migrations:immutable` | ล้มเมื่อการเปลี่ยนแก้ ลบ เปลี่ยนชื่อ หรือเพิ่มไฟล์ใน `prisma/migrations/<name>/` ที่มีอยู่แล้วบน base เพิ่ม directory ใหม่ได้ base คือ first parent ของ HEAD เมื่ออยู่บน `main` และ merge base กับ `origin/main` เมื่ออยู่ branch อื่น (ต้องมีประวัติครบ: `git fetch origin main`) ส่ง `--base <ref>` หรือ `CHECK_BASE_REF` เพื่อเลือก base เอง ตรวจรวมไฟล์ที่ยังไม่ commit กฎอยู่ใน `scripts/migrations.logic.ts` |
+| `migrations:destructive` | ล้มเมื่อไฟล์ `.sql` ของ migration ที่การเปลี่ยนนี้เพิ่มมี `DROP TABLE`, `DROP COLUMN`, `ALTER COLUMN ... TYPE`, `RENAME`, `TRUNCATE` หรือ `DELETE FROM` ที่ไม่มี `WHERE` (ไม่นับใน comment และ string literal) โดยไม่มีบรรทัดยืนยันรูปแบบ `-- approved-destructive: <เหตุผล>` อยู่ต้นบรรทัด เหตุผลต้องไม่ว่าง ใส่ได้หลังเจ้าของงานอนุมัติแล้วเท่านั้น ตาม `AGENTS.md` ใช้ base เดียวกับ `migrations:immutable` |
+| `docs:check` | ล้มเมื่อลิงก์ relative หรือ `#anchor` ใน `docs/**`, `README.md` และ `AGENTS.md` ชี้ไปไม่ถึง (anchor ใช้กฎ slug ของ GitHub รวมอักษรไทย) เมื่อค่าในตารางหัวข้อ 10 ไม่ตรงกับค่าคงที่ในโค้ด หรือเมื่อ YAML ในหัวข้อ 8 ไม่เหมือน `.github/workflows/ci.yml` พิมพ์ไฟล์และบรรทัดของทุกจุดที่ไม่ตรง อ่านโค้ดเป็นข้อความ (ไม่ import) จึงไม่ต้องมี build ส่ง `--root <dir>` เพื่อตรวจสำเนาของ repo ที่อยู่ในโฟลเดอร์อื่น |
 | `postinstall` | สร้าง client ของ Prisma หลังติดตั้ง Docker ข้ามด้วย `--ignore-scripts` แล้วสั่ง `db:generate` เอง |
 
 ## 6. ไฟล์ config
@@ -724,6 +730,11 @@ POLL_INTERVAL_MS=2000
 AI_DEBOUNCE_MS=2500
 # Multiplies every rate limit except unlock. Never set in production.
 RATE_LIMIT_SCALE=1
+
+# Set by Vercel (production, preview, development); leave unset here. When it is
+# production, startup fails if a stub base URL above is set, FILE_STORAGE=local, or
+# RATE_LIMIT_SCALE is not 1.
+VERCEL_ENV=
 ```
 
 ข้อกำหนดของ `src/composition/env.ts`:
@@ -735,7 +746,8 @@ RATE_LIMIT_SCALE=1
 | `DIRECT_URL` | ไม่บังคับในแอป (ใช้โดย `prisma.config.ts`) | |
 | `LINE_API_BASE_URL`, `LINE_DATA_API_BASE_URL`, `ANTHROPIC_BASE_URL` | ไม่บังคับ | ค่าเริ่มต้น `https://api.line.me`, `https://api-data.line.me` และค่าเริ่มต้นของ SDK ตามลำดับ |
 | `POLL_INTERVAL_MS`, `AI_DEBOUNCE_MS` | ไม่บังคับ | จำนวนเต็มบวก ค่าเริ่มต้นตามหัวข้อ 10 |
-| `RATE_LIMIT_SCALE` | ไม่บังคับ | จำนวนเต็ม ≥ 1 ค่าเริ่มต้น 1 คูณทุกค่าจำกัดความถี่ยกเว้น `RATE_LIMIT_UNLOCK` compose ตั้ง 10 ห้ามตั้งใน production |
+| `RATE_LIMIT_SCALE` | ไม่บังคับ | จำนวนเต็ม ≥ 1 ค่าเริ่มต้น 1 คูณทุกค่าจำกัดความถี่ยกเว้น `RATE_LIMIT_UNLOCK` และ `RATE_LIMIT_UNLOCK_NO_IP` compose ตั้ง 10 ห้ามตั้งใน production |
+| `VERCEL_ENV` | ไม่บังคับ (Vercel ตั้งให้เอง) | สตริงใดก็ได้ เมื่อเป็น `production` schema ปฏิเสธเพิ่ม: `LINE_API_BASE_URL`, `LINE_DATA_API_BASE_URL` หรือ `ANTHROPIC_BASE_URL` ที่ถูกตั้ง (ไม่ว่าค่าใด เพราะ production ใช้ค่าเริ่มต้นซึ่งเป็น host ทางการ), `FILE_STORAGE=local` และ `RATE_LIMIT_SCALE` ที่ไม่ใช่ 1 แต่ละตัวที่ผิดอยู่ในรายชื่อของ `InvalidEnvError` โดยไม่มีค่า ค่าอื่นของ `VERCEL_ENV` หรือไม่ตั้ง (Docker, CI, `pnpm dev`) ไม่มีการตรวจข้อนี้ จึงใช้ stub ได้ตามเดิม |
 
 Adapter ต่อ path ของ API ท้าย base URL เช่น `${LINE_API_BASE_URL}/v2/bot/message/push` stub จึงต้องรับ path ของ API จริงใต้ prefix `/line`, `/line-data` และ `/anthropic` ตาม [stubs-and-fixtures](../qa/stubs-and-fixtures.md#2-การต่อกับแอป)
 
@@ -965,11 +977,17 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
+      # Full history: the migration checks compare the pushed commit with its first parent, and a
+      # branch run with the merge base of origin/main, which a shallow clone does not have.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { fetch-depth: 0 }
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      - run: pnpm migrations:immutable
+      - run: pnpm migrations:destructive
+      - run: pnpm docs:check
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
@@ -1052,6 +1070,10 @@ jobs:
 | เรื่อง | ข้อกำหนด |
 | --- | --- |
 | การล็อก action | ทุก action ล็อกด้วย commit SHA เต็มของรุ่นที่ระบุใน comment ท้ายบรรทัด: `actions/checkout` v7.0.1, `pnpm/action-setup` v6.1.1, `actions/setup-node` v7.1.0, `actions/upload-artifact` v7.0.2 และไฟล์ release ของ gitleaks v8.30.1 ล็อกด้วย SHA-256 การอัปเดตเปลี่ยนรุ่นและค่า hash พร้อมกัน |
+| ประวัติของ git | งาน `check` ใช้ `fetch-depth: 0` เพราะ `migrations:immutable` และ `migrations:destructive` ต้องใช้ first parent ของ commit ที่ push และ merge base กับ `origin/main` ซึ่ง clone แบบตื้นไม่มี |
+| migration เดิมแก้ไม่ได้ | ขั้น `pnpm migrations:immutable` ล้มเมื่อไฟล์ใน migration ที่มีอยู่แล้วบน base ถูกแก้ ลบ เปลี่ยนชื่อ หรือมีไฟล์เพิ่ม ([D1](../guidelines/pitfalls-and-prevention.md#d1-แก้หรือลบ-migration-ที่-apply-ไปแล้ว)) |
+| migration ที่ลบข้อมูล | ขั้น `pnpm migrations:destructive` สแกนเฉพาะไฟล์ migration ที่เพิ่มใหม่ และล้มเมื่อมีคำสั่งทำลายข้อมูลโดยไม่มีบรรทัด `-- approved-destructive: <เหตุผล>` ซึ่งใส่ได้หลังเจ้าของงานอนุมัติเท่านั้น ([D2](../guidelines/pitfalls-and-prevention.md#d2-migration-ที่ทำให้ย้อนกลับไม่ได้)) |
+| เอกสารตรงกับโค้ด | ขั้น `pnpm docs:check` ตรวจลิงก์ anchor ค่าคงที่ในหัวข้อ 10 และบล็อก YAML ด้านบนซึ่งต้องเหมือน `ci.yml` ทุกบรรทัด แก้ workflow แล้วต้องคัดลอกลงบล็อกนี้ใน commit เดียวกัน ([P1](../guidelines/pitfalls-and-prevention.md#p1-เอกสารหรือ-comment-ไม่ตรงกับโค้ด)) |
 | Secret | มีตัวเดียวคือ `VERCEL_DEPLOY_HOOK_URL` ตาม [deploy](../runbooks/deploy.md) เมื่อยังไม่ได้ตั้ง งาน `deploy` แจ้งว่าข้ามและจบด้วยสถานะผ่าน สี่งานตรวจยังคุม `main` ตามปกติ |
 | E2E | seed รันแยกด้วย `docker compose run` เพราะ `up --wait` ไม่เหมาะกับ service ที่จบเอง |
 | สแกนความลับ | ดาวน์โหลดไฟล์ release ของ gitleaks ตรวจ SHA-256 แล้วรัน `gitleaks git .` กับประวัติทั้งหมด ไม่ใช้ action ของ gitleaks เพื่อไม่ต้องมี license key กฎเริ่มต้นเปิดครบ ไฟล์ `.gitleaks.toml` ยกเว้นเฉพาะค่า `SESSION_SECRET` และ `CREDENTIALS_ENCRYPTION_KEY` สองค่าของ `docker-compose.yml` ซึ่งใช้ได้เฉพาะ stack ในเครื่อง |
@@ -1084,7 +1106,14 @@ Environment variable ตั้งเฉพาะ Production ตาม [deploy](.
 | `AI_HISTORY_LIMIT` | 20 ข้อความ | `constants.ts` | ประวัติที่ส่งให้โมเดล |
 | `AI_REPLY_MAX_CHARS` | 1000 ตัวอักษร | `constants.ts` | คำตอบของ AI หลังทำความสะอาดยาวกว่านี้ถือว่าไม่ผ่าน schema ([ai-prompt](../specs/ai-prompt.md#6-การทำความสะอาดคำตอบ)) |
 | `AI_MAX_ROUNDS_PER_RUN` | 2 | `constants.ts` | จำนวนรอบที่งานหนึ่งของ `GenerateAiReply` ตอบต่อได้เมื่อมีข้อความใหม่ระหว่างถือล็อก |
-| `AI_STUCK_AFTER_MS` | 300000 ms | `constants.ts` | `aiState = replying` ที่เก่ากว่านี้ถือว่าค้าง ต้องมากกว่าเวลาแย่ที่สุดที่งานหนึ่งถือล็อกตลอดทุกรอบ คือ `AI_MAX_ROUNDS_PER_RUN` × (`GUARD_TIMEOUT_MS` × (1 + `CLAUDE_GUARD_MAX_RETRIES`) เมื่อขอบเขตหัวข้อเปิด + `CLAUDE_REPLY_TIMEOUT_MS` × (1 + `CLAUDE_REPLY_MAX_RETRIES`) + LINE) + `AI_DEBOUNCE_MS` เพื่อให้เงื่อนไขนี้จริงทั้งบน Vercel และใน Docker ที่ไม่มีเพดานเวลาของ function |
+| `AI_STUCK_AFTER_MS` | 300000 ms | `constants.ts` | `aiState = replying` ที่เก่ากว่านี้ถือว่าค้าง ต้องมากกว่าเวลาแย่ที่สุดของงาน `GenerateAiReply` ทั้งงาน (หัวข้อ 10.4 "เวลาแย่ที่สุด") เพื่อให้จริงทั้งบน Vercel และใน Docker ที่ไม่มีเพดานเวลาของ function และไม่น้อยกว่า `WEBHOOK_MAX_DURATION_S` |
+| `KNOWLEDGE_STUCK_AFTER_MS` | 360000 ms | `constants.ts` | `KbDocument` ที่ `processing` และ `updatedAt` เก่ากว่านี้เป็น `failed` ด้วย `knowledge.extract_interrupted` ทุกครั้งที่ `ListDocuments` ทำงาน ([knowledge-base](../specs/knowledge-base.md#ไฟล์ที่ค้าง-กำลังอ่านไฟล์)) ต้องมากกว่า `KNOWLEDGE_MAX_DURATION_S` และเวลาแย่ที่สุดของการแปลง |
+| `MEDIA_STUCK_AFTER_MS` | 360000 ms | `constants.ts` | สื่อขาเข้าที่ `mediaStatus = pending` และ `createdAt` เก่ากว่านี้เป็น `failed` ทุกครั้งที่ `GetMessages` ทำงาน ([line-messaging](../specs/line-messaging.md#สื่อขาเข้า)) ต้องมากกว่า `WEBHOOK_MAX_DURATION_S` และเวลาแย่ที่สุดของการดาวน์โหลด |
+| `MEDIA_JOB_BUDGET_MS` | 255000 ms | `constants.ts` | เวลาสูงสุดของงาน `StoreInboundMedia` นับจากการดาวน์โหลดครั้งแรก งานเริ่มขั้นถัดไปเฉพาะเมื่อเวลาที่ใช้ไปแล้วรวมเวลาแย่ที่สุดของทุกขั้นที่เหลือไม่เกินค่านี้ ([use-cases StoreInboundMedia](use-cases.md#storeinboundmedia)) ต้องไม่น้อยกว่าวิดีโอที่พร้อมทันที (original และภาพตัวอย่าง) และอยู่ในงบของ webhook (หัวข้อ 10.4 "เวลาแย่ที่สุด") |
+| `MEDIA_CONTENT_CALL_WORST_MS` | 100000 ms | `constants.ts` | ค่าสำรองของการดาวน์โหลดไฟล์จาก LINE หนึ่งครั้งที่แกนกลางใช้คิดงบ ต้องไม่น้อยกว่าเวลาแย่ที่สุดของ adapter (`LINE_CONTENT_TIMEOUT_MS` × 3 + `LINE_RETRY_AFTER_MAX_MS` × 2) |
+| `MEDIA_STATUS_CALL_WORST_MS` | 5000 ms | `constants.ts` | ค่าสำรองของการถามสถานะ transcoding หนึ่งครั้ง ต้องไม่น้อยกว่า `LINE_REQUEST_TIMEOUT_MS` (เรียกครั้งเดียว ไม่ retry) |
+| `MEDIA_NOT_READY_POLL_MS` | 5000 ms | `constants.ts` | เวลารอก่อนถามสถานะแต่ละครั้งเมื่อ LINE ตอบ 202 ว่ายังเตรียมไฟล์ไม่เสร็จ |
+| `SEND_STUCK_AFTER_MS` | 360000 ms | `constants.ts` | ข้อความขาออกที่ `deliveryStatus = pending` และเริ่มส่งรอบนี้ก่อนช่วงนี้เป็น `failed` ด้วย `line.send_interrupted` ทุกครั้งที่ `GetMessages` ทำงาน ([line-messaging](../specs/line-messaging.md#งานส่งที่ค้าง)) ต้องมากกว่า `WEBHOOK_MAX_DURATION_S` และเวลาแย่ที่สุดของการส่ง |
 | `AI_MAX_TOKENS` | 16000 | `constants.ts` | `max_tokens` ของการตอบแชท (คำขอแบบไม่ stream) |
 | `AI_EXTRACT_MAX_TOKENS` | 64000 | `constants.ts` | `max_tokens` ของการแปลง PDF (คำขอแบบ stream) |
 | `LINE_LOADING_SECONDS` | 20 วินาที (ต้องยืนยันช่วงที่ LINE รับ) | `constants.ts` | loading ฝั่ง LINE ทั้งขณะ AI ตอบและขณะแอดมินพิมพ์ |
@@ -1098,6 +1127,8 @@ Environment variable ตั้งเฉพาะ Production ตาม [deploy](.
 | `LINE_TEXT_MAX_CHARS` | 5000 ตัวอักษร (ต้องยืนยันวิธีนับ) | `constants.ts` | การแบ่งข้อความยาวใน domain |
 | `LINE_MAX_PARTS_PER_REQUEST` | 5 (ต้องยืนยัน) | `constants.ts` | จำนวนข้อความต่อคำขอ reply หรือ push |
 | `REPLY_TOKEN_USABLE_MS` | 50000 ms (ต้องยืนยันอายุของ reply token) | `constants.ts` | `replyTokenExpiresAt` = เวลาของ event + ค่านี้ |
+| `LINE_RETRY_KEY_WINDOW_MS` | 86400000 ms (24 ชั่วโมง ระยะที่ LINE จำ retry key) | `constants.ts` | "ส่งอีกครั้ง" ถูกปฏิเสธด้วย `message.retry_expired` ตั้งแต่ `Message.firstPushAt` + ค่านี้ และหน้าเว็บซ่อนปุ่มจาก `delivery.retryExpiresAt` ([line-messaging](../specs/line-messaging.md#ส่งข้อความ) ข้อ 5) |
+| `LINE_CHANNEL_ID_MAX_CHARS` | 20 หลัก | `constants.ts` | Channel ID เป็นตัวเลขเท่านั้นไม่เกินค่านี้ ทั้ง API (`LINE_CHANNEL_ID_PATTERN`) และฟอร์ม |
 | `ADMIN_TEXT_MAX_CHARS` | 5000 ตัวอักษร | `constants.ts` | ข้อความที่แอดมินพิมพ์ |
 | `PREVIEW_TEXT_MAX_CHARS` | 100 ตัวอักษร | `constants.ts` | ข้อความล่าสุดในรายชื่อ |
 | `MESSAGE_PAGE_LIMIT` | 50 | `constants.ts` | `GetMessages` และหน้าแชท |
@@ -1128,11 +1159,12 @@ Environment variable ตั้งเฉพาะ Production ตาม [deploy](.
 
 ### 10.2 การจำกัดความถี่
 
-Rate limit ทั้งหมดเป็นแบบหน้าต่างคงที่ (fixed window) นับใน `RateLimitBucket` วิธีนับอยู่ใน [data-model](data-model.md#กฎของ-repository) endpoint และรหัส error ของแต่ละ action อยู่ใน [api-contract](api-contract.md#การจำกัดความถี่) ค่าจำกัดจริงคือค่าในตาราง × `RATE_LIMIT_SCALE` ยกเว้น `RATE_LIMIT_UNLOCK` ซึ่งไม่คูณ
+Rate limit ทั้งหมดเป็นแบบหน้าต่างคงที่ (fixed window) นับใน `RateLimitBucket` วิธีนับอยู่ใน [data-model](data-model.md#กฎของ-repository) endpoint และรหัส error ของแต่ละ action อยู่ใน [api-contract](api-contract.md#การจำกัดความถี่) ค่าจำกัดจริงคือค่าในตาราง × `RATE_LIMIT_SCALE` ยกเว้น `RATE_LIMIT_UNLOCK` และ `RATE_LIMIT_UNLOCK_NO_IP` ซึ่งไม่คูณ
 
 | ชื่อ | Action | ค่า | Subject | หมายเหตุ |
 | --- | --- | --- | --- | --- |
 | `RATE_LIMIT_UNLOCK` | `unlock` | 5 ครั้งต่อ 60 วินาที | IP | นับเฉพาะรหัสผิด ตาม [access-gate](../specs/access-gate.md) |
+| `RATE_LIMIT_UNLOCK_NO_IP` | `unlock_no_ip` | 5 ครั้งต่อ 300 วินาที | ทุกคำขอที่ไม่มี IP รวมกัน (subject `no-client-ip`) | นับเฉพาะรหัสผิด ไม่คูณ `RATE_LIMIT_SCALE` เข้มกว่าแถวบนเพราะคำขอเหล่านี้แยกกันไม่ได้ ([infrastructure](infrastructure.md#ip-ของผู้เรียก)) |
 | `RATE_LIMIT_SEND_MESSAGE` | `send_message` | 30 ครั้งต่อ 60 วินาที | IP | `SendAdminMessage`, `RetryMessage` |
 | `RATE_LIMIT_UPLOAD_TICKET` | `upload_ticket` | 20 ครั้งต่อ 60 วินาที | IP | `IssueUpload` |
 | `RATE_LIMIT_PDF_INGEST` | `pdf_ingest` | 5 ครั้งต่อ 3600 วินาที | IP | `IngestDocument` รวมการลองใหม่ |
@@ -1146,7 +1178,7 @@ Rate limit ทั้งหมดเป็นแบบหน้าต่างค
 | ชื่อ | ค่าเริ่มต้น | อยู่ที่ | ใช้ที่ |
 | --- | --- | --- | --- |
 | `POLL_INTERVAL_MS` | 2000 ms | `src/composition/env.ts` | ช่วง polling ของหน้าเว็บ หน้าเว็บได้ค่าจาก `GET /api/settings` (`client.pollIntervalMs`) |
-| `AI_DEBOUNCE_MS` | 2500 ms | `src/composition/env.ts` | ช่วงรวมข้อความรัวใน `GenerateAiReply` |
+| `AI_DEBOUNCE_MS` | 2500 ms | `src/composition/env.ts` | ช่วงรวมข้อความรัวใน `GenerateAiReply` ตั้งได้ไม่เกิน 5000 ms โดยเวลาแย่ที่สุดของ webhook ยังอยู่ในงบ (หัวข้อ 10.4 ตรึงทั้งค่าเริ่มต้นและ 5000) |
 | `RATE_LIMIT_SCALE` | 1 | `src/composition/env.ts` | หัวข้อ 10.2 |
 
 ### 10.4 Adapter และ route
@@ -1157,15 +1189,36 @@ Rate limit ทั้งหมดเป็นแบบหน้าต่างค
 | `LINE_PROFILE_TIMEOUT_MS` | 3000 ms | `line.constants.ts` | `getProfile` ไม่ retry เพราะเรียกก่อนตอบ webhook |
 | `LINE_CONTENT_TIMEOUT_MS` | 30000 ms | `line.constants.ts` | ดาวน์โหลดสื่อขาเข้า |
 | `LINE_MAX_RETRIES` | 2 | `line.constants.ts` | retry เฉพาะเครือข่ายล่ม, 5xx และ 429 |
+| `LINE_LOADING_MAX_RETRIES` | 0 | `line.constants.ts` | `showLoading` ไม่ retry เพราะความล้มเหลวของมันแค่ถูก log |
 | `LINE_RETRY_BASE_DELAY_MS` | 250 ms | `line.constants.ts` | เวลารอก่อน retry ครั้งที่ n (เริ่มที่ 1) เมื่อ LINE ไม่ส่ง `Retry-After`: ค่านี้ × 2^(n-1) |
 | `LINE_RETRY_AFTER_MAX_MS` | 5000 ms | `line.constants.ts` | `Retry-After` ที่ยาวกว่านี้ไม่รอ คำขอจบด้วย error ที่มี `retryAfterSeconds` |
-| `CLAUDE_REPLY_TIMEOUT_MS` | 45000 ms | `src/adapters/claude/claude.constants.ts` | option `timeout` ของ SDK สำหรับการตอบแชท |
+| `CLAUDE_REPLY_TIMEOUT_MS` | 25000 ms | `src/adapters/claude/claude.constants.ts` | option `timeout` ของ SDK สำหรับการตอบแชท (เดิม 45000 ลดเพื่อให้สองรอบของ AI อยู่ในงบของ webhook คำตอบแบบไม่ stream ที่ effort `low` ปกติใช้เวลาไม่กี่วินาที) |
 | `CLAUDE_REPLY_MAX_RETRIES` | 1 | `claude.constants.ts` | option `maxRetries` ของ SDK สำหรับการตอบแชท |
-| `CLAUDE_EXTRACT_TIMEOUT_MS` | 240000 ms | `claude.constants.ts` | การแปลง PDF (ต้องยืนยันกับเพดานเวลาของ function) |
+| `CLAUDE_EXTRACT_TIMEOUT_MS` | 120000 ms | `claude.constants.ts` | การแปลง PDF ต่อ attempt (เดิม 240000 ซึ่งสองครั้งรวมเกิน `KNOWLEDGE_MAX_DURATION_S`) stream ที่เริ่มแล้วใช้ได้ถึง `callDeadlineMs` ของการแปลงทั้งหมด |
 | `CLAUDE_EXTRACT_MAX_RETRIES` | 1 | `claude.constants.ts` | การแปลง PDF |
 | `CLAUDE_GUARD_MAX_RETRIES` | 1 | `claude.constants.ts` | option `maxRetries` ของ SDK สำหรับการคัดกรองขอบเขตหัวข้อ (timeout มาจาก `GUARD_TIMEOUT_MS` ในคำขอ) |
-| `WEBHOOK_MAX_DURATION_S` | 120 | `app/api/line/webhook/route.ts` (`maxDuration`) | หัวข้อ 4 เมื่อขอบเขตหัวข้อเปิด เวลาแย่ที่สุดของหนึ่งรอบคือ 20 วินาทีของการคัดกรองบวก 90 วินาทีของการตอบแชท รวม 110 วินาที จึงต่ำกว่าค่านี้ |
+| `CLAUDE_COUNT_TOKENS_TIMEOUT_MS` | 10000 ms | `claude.constants.ts` | `timeout` ของ count_tokens ต่อ attempt retry `CLAUDE_EXTRACT_MAX_RETRIES` ครั้ง |
+| `CLAUDE_RETRY_WAIT_MAX_MS` | 1000 ms | `claude.constants.ts` | เวลาที่เผื่อก่อน retry แต่ละครั้งภายในเวลาสูงสุดของการเรียก `callDeadlineMs` = timeout × (1 + retry) + ค่านี้ × retry ([domain-and-ports](domain-and-ports.md#เวลาสูงสุดของการเรียกหนึ่งครั้ง)) backoff ของ SDK ก่อน retry ครั้งแรกไม่เกิน 500 ms ส่วน `Retry-After` ที่ยาวกว่านั้นทำให้การเรียกจบด้วย `ai.no_response` |
+| `WEBHOOK_MAX_DURATION_S` | 300 (ต้องยืนยันกับ Vercel) | `app/api/line/webhook/route.ts` (`maxDuration`) | หัวข้อ 4 (เดิม 120 ซึ่งสองรอบของ AI ไม่พอดี) ใช้เพดานเดียวกับ route PDF |
 | `KNOWLEDGE_MAX_DURATION_S` | 300 (ต้องยืนยันกับ Vercel) | `app/api/knowledge/documents/**/route.ts` (`maxDuration`) | หัวข้อ 4 |
+| `JOB_BUDGET_SHARE` | 0.9 | `src/composition/timing-budget.ts` | สัดส่วนของ `maxDuration` ที่เวลาแย่ที่สุดของงานใช้ได้ ส่วนที่เหลือเผื่อสิ่งที่ไม่มี timeout ของตัวเอง: ฐานข้อมูล (รวม Neon ตื่นจากการหลับ), ที่เก็บไฟล์ และงานก่อนตอบ |
+
+#### เวลาแย่ที่สุด
+
+คำนวณจากค่าคงที่ข้างบนใน `src/composition/timing-budget.ts` และ `timing-budget.spec.ts` ตรึงทุกบรรทัด การเปลี่ยน timeout จำนวนครั้งที่ลอง หรือจำนวนรอบที่ทำให้ไม่พอดีจึงทำให้ build ล้ม ทุกการเรียกภายนอกมีเพดานของตัวเอง: LINE หนึ่งครั้ง = timeout × (1 + retry) + `LINE_RETRY_AFTER_MAX_MS` × retry และ Claude หนึ่งครั้ง = `callDeadlineMs`
+
+| งาน | สูตร | ค่า | เพดาน |
+| --- | --- | --- | --- |
+| ส่งข้อความของ AI หนึ่งชิ้น | reply ที่ token ถูกปฏิเสธหลังลองครบ (25 วินาที) แล้ว push (25 วินาที) | 50 วินาที | |
+| หนึ่งรอบของ AI (ขอบเขตหัวข้อเปิด) | loading 5 + คัดกรอง `callDeadlineMs(10000, 1)` 21 + ตอบแชท `callDeadlineMs(25000, 1)` 51 + ส่ง 50 | 127 วินาที | |
+| งาน `GenerateAiReply` ทั้งงาน | `AI_DEBOUNCE_MS` × `AI_MAX_ROUNDS_PER_RUN` + หนึ่งรอบ × `AI_MAX_ROUNDS_PER_RUN` = 2.5 × 2 + 127 × 2 | 259 วินาที | น้อยกว่า `AI_STUCK_AFTER_MS` (300 วินาที) |
+| ดาวน์โหลดไฟล์จาก LINE หนึ่งครั้ง | `LINE_CONTENT_TIMEOUT_MS` × 3 + 5 × 2 | 100 วินาที | ไม่เกิน `MEDIA_CONTENT_CALL_WORST_MS` |
+| ถามสถานะ transcoding หนึ่งครั้ง | `LINE_REQUEST_TIMEOUT_MS` ไม่ retry | 5 วินาที | ไม่เกิน `MEDIA_STATUS_CALL_WORST_MS` |
+| งาน `StoreInboundMedia` | วิดีโอที่พร้อมทันที: original + ภาพตัวอย่าง = 200 วินาที เมื่อ LINE ตอบ 202 งานรอ `MEDIA_NOT_READY_POLL_MS` และถามสถานะเฉพาะเมื่อเวลาที่ใช้ไป + 5 + 5 + การดาวน์โหลดที่เหลือไม่เกินงบ | `MEDIA_JOB_BUDGET_MS` 255 วินาที | น้อยกว่า `MEDIA_STUCK_AFTER_MS` |
+| Webhook ทั้งคำขอ | โปรไฟล์ `LINE_PROFILE_TIMEOUT_MS` 3 + งานที่นานที่สุด (งานใน `after()` ทำพร้อมกัน) | 262 วินาที (267 เมื่อ `AI_DEBOUNCE_MS` = 5000) | ไม่เกิน 0.9 × `WEBHOOK_MAX_DURATION_S` = 270 วินาที |
+| แปลง PDF | `callDeadlineMs(120000, 1)` 241 + count_tokens `callDeadlineMs(10000, 1)` 21 | 262 วินาที | ไม่เกิน 0.9 × `KNOWLEDGE_MAX_DURATION_S` = 270 วินาที และน้อยกว่า `KNOWLEDGE_STUCK_AFTER_MS` |
+
+ทางเลือกที่ไม่ใช้: ลด `AI_MAX_ROUNDS_PER_RUN` เป็น 1 (ข้อความที่ลูกค้าส่งระหว่างรอคำตอบจะกลายเป็นรอแอดมินแทนที่ AI ตอบต่อ ซึ่งเกิดบ่อยกว่า timeout มาก) และตัด retry ของการตอบแชท (529 ของผู้ให้บริการเกิดได้บ่อยและ retry หนึ่งครั้งแก้ได้) การเพิ่ม `maxDuration` ของ webhook จาก 120 เป็น 300 ไม่เปลี่ยนพฤติกรรมปกติ ส่วน `CLAUDE_REPLY_TIMEOUT_MS` ที่ลดลงกระทบเฉพาะคำตอบที่ช้ากว่า 25 วินาที ซึ่งเดิมก็เกินงบแล้ว ข้อความของแอดมินส่งในคำขอของหน้าเว็บ ซึ่งไม่ตั้ง `maxDuration` และใช้ค่าเริ่มต้นของแผน การส่งหนึ่งชิ้นใช้ไม่เกิน 50 วินาที
 
 ### 10.5 หน้าจอ
 

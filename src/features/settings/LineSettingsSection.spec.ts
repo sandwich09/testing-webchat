@@ -8,7 +8,9 @@ import {
   lineAccountText,
   lineFailureResult,
   lineStatusView,
+  secretStatusView,
   testOkText,
+  testResult,
 } from './LineSettingsSection';
 
 describe('lineStatusView', () => {
@@ -71,7 +73,46 @@ describe('results', () => {
   });
 
   it('has a message for each required credential', () => {
+    expect(credentialErrorText('channelId')).toBe('ใส่ Channel ID');
     expect(credentialErrorText('channelSecret')).toBe('ใส่ Channel secret');
     expect(credentialErrorText('channelAccessToken')).toBe('ใส่ Channel access token');
+  });
+
+  it('says what a Channel ID may hold, with the documented maximum', () => {
+    expect(credentialErrorText('channelId', 'invalid')).toBe(
+      'Channel ID เป็นตัวเลขเท่านั้น ไม่เกิน 20 หลัก',
+    );
+  });
+
+  it('names the Channel ID and channel secret pair LINE refused', () => {
+    expect(lineFailureResult(new ApiError('line.channel_secret_invalid', 422))).toEqual({
+      kind: 'error',
+      code: 'line.channel_secret_invalid',
+      text: 'Channel ID กับ Channel secret ไม่ตรงกัน ตรวจว่าคัดลอกทั้งสองค่ามาจาก channel เดียวกัน',
+    });
+  });
+});
+
+describe('secret status', () => {
+  it('has a text and a tone for each documented state', () => {
+    expect(secretStatusView('verified')).toEqual({
+      text: 'LINE ยืนยันแล้วว่า Channel secret ตรงกับ Channel ID',
+      tone: 'muted',
+    });
+    expect(secretStatusView('unchecked').tone).toBe('warn');
+    expect(secretStatusView('unchecked').text).toContain('ทดสอบการเชื่อมต่อ');
+    expect(secretStatusView('no_channel_id').tone).toBe('warn');
+    expect(secretStatusView('no_channel_id').text).toContain('Channel ID');
+  });
+
+  it('makes a passed test a warning unless LINE confirmed the secret now', () => {
+    expect(testResult({ botName: 'Tonhom Cafe', secretStatus: 'verified' })).toEqual({
+      kind: 'ok',
+      text: 'เชื่อมต่อได้ OA ชื่อ Tonhom Cafe · LINE ยืนยันแล้วว่า Channel secret ตรงกับ Channel ID',
+    });
+    expect(testResult({ botName: 'Tonhom Cafe', secretStatus: 'unchecked' }).kind).toBe('warning');
+    expect(testResult({ botName: 'Tonhom Cafe', secretStatus: 'no_channel_id' }).kind).toBe(
+      'warning',
+    );
   });
 });

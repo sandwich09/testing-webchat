@@ -7,7 +7,12 @@ import type {
   Message,
   MessageAuthor,
 } from '@/core/domain';
-import { PRICE_TABLE, RATE_LIMIT_SEND_MESSAGE, REPLY_TOKEN_USABLE_MS } from '@/core/domain';
+import {
+  LINE_RETRY_KEY_WINDOW_MS,
+  PRICE_TABLE,
+  RATE_LIMIT_SEND_MESSAGE,
+  REPLY_TOKEN_USABLE_MS,
+} from '@/core/domain';
 import type { NewMessage } from '@/core/ports';
 import {
   FAKE_LINE_ACCESS_TOKEN,
@@ -68,6 +73,7 @@ describe('RetryMessage', () => {
         channelAccessTokenEnc: cipher.encrypt(FAKE_LINE_ACCESS_TOKEN),
       },
       { botName: 'Shop', basicId: '@shop' },
+      { channelId: '1000000001', secretVerifiedAt: null },
     );
   });
 
@@ -169,6 +175,71 @@ describe('RetryMessage', () => {
 
     expect(result).toMatchObject({ ok: true, value: { deliveryStatus: 'sent' } });
     expect(gateway.pushes).toHaveLength(1);
+  });
+
+  describe('retry key window', () => {
+    /** A failed message whose first push was attempted now. */
+    const givenPushedAndFailed = async (contactId: ContactId): Promise<Message> => {
+      const m = await givenFailed(contactId);
+      await messages.recordFirstPush(m.id, clock.now());
+      return (await messages.findById(m.id)) ?? m;
+    };
+
+    it('sends again just inside LINE_RETRY_KEY_WINDOW_MS of the first push', async () => {
+      const c = await givenContact();
+      const m = await givenPushedAndFailed(c.id);
+      clock.advance(LINE_RETRY_KEY_WINDOW_MS - 1);
+
+      const result = await retryWith()({ contactId: c.id, messageId: m.id }, ctx);
+
+      expect(result).toMatchObject({ ok: true, value: { deliveryStatus: 'sent' } });
+      expect(gateway.pushes).toHaveLength(1);
+    });
+
+    it('refuses with message.retry_expired once the window has passed, and pushes nothing', async () => {
+      const c = await givenContact();
+      const m = await givenPushedAndFailed(c.id);
+      clock.advance(LINE_RETRY_KEY_WINDOW_MS);
+
+      const result = await retryWith()({ contactId: c.id, messageId: m.id }, ctx);
+
+      expect(result).toMatchObject({ ok: false, error: { code: 'message.retry_expired' } });
+      expect(gateway.pushes).toEqual([]);
+      // The row stays failed with its reason, so the bubble keeps showing it.
+      expect(await messages.findById(m.id)).toMatchObject({
+        deliveryStatus: 'failed',
+        deliveryError: 'line.unavailable',
+      });
+      expect(logger.entries).toContainEqual(
+        expect.objectContaining({ event: 'line.send.retry_expired', messageId: m.id }),
+      );
+    });
+
+    it('counts from the first push, not from a later retry', async () => {
+      const c = await givenContact();
+      const m = await givenPushedAndFailed(c.id);
+      clock.advance(LINE_RETRY_KEY_WINDOW_MS / 2);
+      gateway.failNext('push', 'line.unavailable');
+      const retried = await retryWith()({ contactId: c.id, messageId: m.id }, ctx);
+      expect(retried).toMatchObject({ ok: true, value: { deliveryStatus: 'failed' } });
+
+      clock.advance(LINE_RETRY_KEY_WINDOW_MS / 2);
+      const late = await retryWith()({ contactId: c.id, messageId: m.id }, ctx);
+      expect(late).toMatchObject({ ok: false, error: { code: 'message.retry_expired' } });
+    });
+
+    it('has no window while no push was attempted (a reply failed): send again pushes', async () => {
+      const c = await givenContact();
+      const m = await givenFailed(c.id);
+      clock.advance(LINE_RETRY_KEY_WINDOW_MS * 3);
+
+      const result = await retryWith()({ contactId: c.id, messageId: m.id }, ctx);
+
+      expect(result).toMatchObject({
+        ok: true,
+        value: { deliveryStatus: 'sent', firstPushAt: clock.now() },
+      });
+    });
   });
 
   it('still pushes when the contact holds a usable reply token', async () => {

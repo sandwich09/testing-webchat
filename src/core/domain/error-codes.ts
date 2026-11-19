@@ -18,6 +18,7 @@ export const ERROR_CODES = [
   'line.not_configured',
   'line.credentials_unreadable',
   'line.credentials_invalid',
+  'line.channel_secret_invalid',
   'line.unauthorized',
   'line.quota_exceeded',
   'line.rate_limited',
@@ -27,12 +28,15 @@ export const ERROR_CODES = [
   'line.reply_token_invalid',
   'line.profile_unavailable',
   'line.content_unavailable',
+  'line.content_not_ready',
   'line.loading_failed',
+  'line.send_interrupted',
   // Contacts and messages
   'contact.not_found',
   'contact.unfollowed',
   'message.not_found',
   'message.not_retryable',
+  'message.retry_expired',
   'message.id_conflict',
   'message.rate_limited',
   // Uploads and media
@@ -55,6 +59,8 @@ export const ERROR_CODES = [
   'ai.rate_limited',
   'ai.auth_failed',
   'ai.bad_request',
+  'ai.no_response',
+  'ai.link_not_allowed',
   // Settings
   'settings.guard_topics_required',
   'settings.guard_rate_limited',
@@ -70,6 +76,7 @@ export const ERROR_CODES = [
   'knowledge.extract_failed',
   'knowledge.extract_empty',
   'knowledge.extract_refused',
+  'knowledge.extract_interrupted',
   // Canned replies
   'canned_reply.not_found',
   'canned_reply.limit_reached',

@@ -1,10 +1,14 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { AiModelId, Result, TokenUsage } from '@/core/domain';
 import { err } from '@/core/domain';
-import { CLAUDE_DEFAULT_BASE_URL, CLAUDE_FALLBACK_BETA } from './claude.constants';
+import {
+  CLAUDE_DEFAULT_BASE_URL,
+  CLAUDE_FALLBACK_BETA,
+  CLAUDE_RETRY_WAIT_MAX_MS,
+} from './claude.constants';
 
 export type ClaudeErrorCode =
-  'ai.unavailable' | 'ai.rate_limited' | 'ai.auth_failed' | 'ai.bad_request';
+  'ai.unavailable' | 'ai.no_response' | 'ai.rate_limited' | 'ai.auth_failed' | 'ai.bad_request';
 
 /** What both Claude factories take. The adapters never read `process.env`. */
 export interface ClaudeAdapterOptions {
@@ -29,6 +33,26 @@ export const createClaudeClient = (
     logLevel: 'off',
     openTelemetry: false,
   });
+
+/**
+ * The longest one call may take: every attempt at its full timeout plus CLAUDE_RETRY_WAIT_MAX_MS
+ * before each retry. The SDK timeout only covers the wait for the response headers, so a stream
+ * could otherwise run on, and a Retry-After header could make the SDK wait without limit.
+ */
+export const callDeadlineMs = (limits: { timeoutMs: number; maxRetries: number }): number =>
+  limits.timeoutMs * (1 + limits.maxRetries) + CLAUDE_RETRY_WAIT_MAX_MS * limits.maxRetries;
+
+/**
+ * Per-call request options: the attempt timeout and a signal that ends the whole call at
+ * callDeadlineMs. An aborted call maps to `ai.no_response`.
+ */
+export const callOptions = (limits: {
+  timeoutMs: number;
+  maxRetries: number;
+}): { timeout: number; signal: AbortSignal } => ({
+  timeout: limits.timeoutMs,
+  signal: AbortSignal.timeout(callDeadlineMs(limits)),
+});
 
 /**
  * Whether a request carries the server-side refusal fallback (domain-and-ports, Claude adapter).
@@ -121,6 +145,38 @@ export const toTokenUsage = (message: AnyMessage): TokenUsage => {
   };
 };
 
+/** Connection errors raised before any byte of the request left this machine. */
+const NOT_SENT_CODES: ReadonlySet<string> = new Set([
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+]);
+
+/** The `code` of an error or of any error in its `cause` chain (undici nests them). */
+const causeCodes = (error: unknown): string[] => {
+  const codes: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && typeof current === 'object' && current !== null; depth += 1) {
+    if ('code' in current && typeof current.code === 'string') codes.push(current.code);
+    if (current instanceof AggregateError) codes.push(...current.errors.flatMap(causeCodes));
+    current = 'cause' in current ? current.cause : undefined;
+  }
+  return codes;
+};
+
+/**
+ * Whether the request may have reached the provider although no answer came back: a timeout, an
+ * abort at the call deadline, a connection that dropped, or a stream cut off. The provider may
+ * bill such a call (usage-cost "การเรียกที่ไม่ได้คำตอบ"). A refused connection or a DNS failure
+ * never sent anything.
+ */
+const mayHaveBeenSent = (error: InstanceType<typeof Anthropic.AnthropicError>): boolean =>
+  !(error instanceof Anthropic.APIConnectionError) ||
+  error instanceof Anthropic.APIConnectionTimeoutError ||
+  !causeCodes(error).some((code) => NOT_SENT_CODES.has(code));
+
 /**
  * Maps an SDK error to the port's codes, most specific first. Only SDK errors are mapped; anything
  * else is a bug in this code and is rethrown. `detail` carries the status and class only, never the
@@ -130,7 +186,8 @@ export const mapClaudeError = (error: unknown): Result<never, ClaudeErrorCode> =
   if (!(error instanceof Anthropic.AnthropicError)) throw error;
   if (!(error instanceof Anthropic.APIError) || error.status === undefined) {
     // APIConnectionError, APIConnectionTimeoutError, APIUserAbortError, or a broken stream.
-    return err('ai.unavailable', error.constructor.name);
+    const code = mayHaveBeenSent(error) ? 'ai.no_response' : 'ai.unavailable';
+    return err(code, error.constructor.name);
   }
   const detail = `${error.constructor.name} ${String(error.status)}`;
   if (error instanceof Anthropic.RateLimitError) {

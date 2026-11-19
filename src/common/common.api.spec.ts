@@ -56,6 +56,8 @@ const settings = {
     status: 'connected',
     botName: 'ร้านมะลิ',
     basicId: '@mali',
+    channelId: null,
+    secretStatus: 'no_channel_id',
     webhookUrl: 'https://example.test/api/line/webhook',
     lastWebhookAt: null,
   },

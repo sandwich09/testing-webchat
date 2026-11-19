@@ -116,6 +116,7 @@ export const toUpdateSettingsInput = (
 export const toSetLineCredentialsInput = (
   body: SetLineCredentialsBody,
 ): SetLineCredentialsInput => ({
+  channelId: body.channelId,
   channelSecret: body.channelSecret,
   channelAccessToken: body.channelAccessToken as LineAccessToken,
 });

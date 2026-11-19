@@ -1,7 +1,12 @@
 import { randomBytes } from 'node:crypto';
 import { createContactWithMessage } from './helpers/contact';
 import { bubbleBlock, bubbles, openChat, sendText, uniqueSuffix } from './helpers/inbox';
-import { stubLineDelayNext, stubLineFailNext, stubLineRequests } from './helpers/stub';
+import {
+  lineRetryKeyOf,
+  stubLineDelayNext,
+  stubLineFailNext,
+  stubLineRequests,
+} from './helpers/stub';
 import { testIds } from './helpers/test-ids';
 import { expect, test } from './helpers/test';
 
@@ -42,11 +47,15 @@ test('journey 7: a failed send shows the error and the retry sends it with the s
   await expect(block.getByTestId(testIds.messageError)).toHaveAttribute('data-code', /^line\./);
   await expect(block.getByTestId(testIds.messageRetry)).toBeVisible();
 
-  // 7.4
+  // 7.4: the key is the version-5 UUID derived from the message id, not the UUIDv7 id itself.
   const firstTry = await pushesToCustomer();
   expect(firstTry).toHaveLength(1);
   const k = firstTry[0]?.headers.xLineRetryKey;
-  expect(k).toBeTruthy();
+  const messageId = await failed.getAttribute('data-message-id');
+  expect(messageId).toBeTruthy();
+  expect(k).toBe(lineRetryKeyOf(messageId ?? ''));
+  expect(k).not.toBe(messageId);
+  expect(k).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 
   // 7.5: hold the retried push so the pending state is visible for sure.
   await stubLineDelayNext({ endpoint: 'push', match: { to: v.userId }, ms: 1500 });

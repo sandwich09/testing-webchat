@@ -205,7 +205,7 @@ export function useSendMessage(contactId: string) {
         .getQueryData<ThreadState>(qk.messages(contactId))
         ?.items.find((m) => m.id === messageId);
       if (row === undefined) return;
-      const plan = retryPlan(row);
+      const plan = retryPlan(row, new Date());
       if (plan === null) return;
       if (plan === 'resend') {
         const body = outbox.get(messageId) ?? bodyFromRow(row);

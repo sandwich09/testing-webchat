@@ -112,6 +112,20 @@ export class FakeKnowledgeRepository implements KnowledgeRepository {
     return Promise.resolve(true);
   };
 
+  readonly failStuckProcessing: KnowledgeRepository['failStuckProcessing'] = (staleBefore, now) => {
+    const stuck = [...this.rows.values()].filter(
+      (d) => d.status === 'processing' && d.updatedAt.getTime() < staleBefore.getTime(),
+    );
+    for (const d of stuck) {
+      Object.assign(d, {
+        status: 'failed',
+        error: 'knowledge.extract_interrupted',
+        updatedAt: now,
+      } satisfies Partial<KbDocumentWithText>);
+    }
+    return Promise.resolve(stuck.map((d) => d.id));
+  };
+
   readonly delete: KnowledgeRepository['delete'] = (id) => Promise.resolve(this.rows.delete(id));
 
   readonly sumReadyTokens: KnowledgeRepository['sumReadyTokens'] = () => {

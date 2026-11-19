@@ -5,6 +5,7 @@ import {
   DOCUMENT_STATUSES,
   EVENT_CODES,
   HANDOFF_REASONS,
+  LINE_SECRET_STATUSES,
   MEDIA_STATUSES,
   MODEL_HANDOFF_REASONS,
   OTHER_KINDS,
@@ -46,6 +47,7 @@ describe('enum value sets (domain-and-ports.md, Enum)', () => {
 
   it('MediaStatus', () => {
     expect([...MEDIA_STATUSES]).toEqual(['pending', 'ready', 'failed', 'too_large']);
+    expect([...LINE_SECRET_STATUSES]).toEqual(['verified', 'unchecked', 'no_channel_id']);
   });
 
   it('OtherKind', () => {
@@ -77,6 +79,7 @@ describe('enum value sets (domain-and-ports.md, Enum)', () => {
     expect([...AI_MODEL_IDS]).toEqual(['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5']);
     expect([...RATE_LIMIT_ACTIONS]).toEqual([
       'unlock',
+      'unlock_no_ip',
       'send_message',
       'upload_ticket',
       'pdf_ingest',

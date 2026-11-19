@@ -55,6 +55,10 @@ export interface MessagingGateway {
     >
   >;
 
+  /**
+   * Only an HTTP 200 carries the file. Any other 2xx (LINE answers 202 while it still prepares a
+   * video) is `line.content_not_ready`: nothing is read and the caller may ask again later.
+   */
   downloadContent(
     token: LineAccessToken,
     lineMessageId: LineMessageId,
@@ -67,7 +71,22 @@ export interface MessagingGateway {
         contentType: string | null;
         sizeBytes: number | null;
       },
-      'line.content_unavailable' | 'media.too_large' | 'line.unauthorized' | 'line.unavailable'
+      | 'line.content_unavailable'
+      | 'line.content_not_ready'
+      | 'media.too_large'
+      | 'line.unauthorized'
+      | 'line.unavailable'
+    >
+  >;
+
+  /** Whether LINE has finished preparing the content of a message. One attempt, no retry. */
+  getContentStatus(
+    token: LineAccessToken,
+    lineMessageId: LineMessageId,
+  ): Promise<
+    Result<
+      'processing' | 'succeeded' | 'failed',
+      'line.content_unavailable' | 'line.unauthorized' | 'line.unavailable'
     >
   >;
 
@@ -76,6 +95,17 @@ export interface MessagingGateway {
     userId: LineUserId,
     seconds: number,
   ): Promise<Result<void, 'line.loading_failed' | 'line.unauthorized' | 'line.unavailable'>>;
+
+  /**
+   * Checks that the channel secret belongs to the Channel ID by asking LINE for a short-lived
+   * token, which is revoked at once and never returned, stored or logged. A wrong pair is
+   * `line.channel_secret_invalid`; 429, 5xx, a timeout or no network is `line.unavailable`
+   * ("could not check").
+   */
+  verifyChannelSecret(
+    channelId: string,
+    channelSecret: string,
+  ): Promise<Result<void, 'line.channel_secret_invalid' | 'line.unavailable'>>;
 
   /** Used to check an access token both when saving and when testing the connection. */
   getBotInfo(

@@ -8,6 +8,7 @@ import { describeMessagingGatewaySuite, type MessagingGatewayHarness } from '@/a
 import { ADAPTER_TEST_STUB_URL } from '../../../test-support/adapters.constants';
 import {
   STUB_CHANNEL_ACCESS_TOKEN,
+  STUB_CHANNEL_ID,
   STUB_CHANNEL_SECRET,
 } from '../../../e2e/fixtures/line/credentials';
 import { newFixtureVars, renderFixture } from '../../../e2e/helpers/line-webhook';
@@ -62,7 +63,8 @@ const recorded = async (query: { endpoint?: string; to?: string }): Promise<Reco
 const failNext = (o: {
   endpoint: string;
   match?: Record<string, string>;
-  status: number;
+  preset?: 'invalid_reply_token' | 'validation';
+  status?: number;
   body?: unknown;
   headers?: Record<string, string>;
   times?: number;
@@ -90,7 +92,15 @@ interface Seeded {
   preview?: Uint8Array;
   contentType: string;
   knownSize: boolean;
+  /** "Not ready" answers left: a 202 of the original or a `processing` status uses one. */
+  notReadyTimes?: number;
 }
+
+const takeNotReady = (item: Seeded): boolean => {
+  if (item.notReadyTimes === undefined || item.notReadyTimes <= 0) return false;
+  item.notReadyTimes -= 1;
+  return true;
+};
 const seeded = new Map<string, Seeded>();
 let contentServer: Server;
 let contentBase = '';
@@ -104,8 +114,19 @@ const startContentServer = (): Promise<void> =>
         res.writeHead(401, { 'content-type': 'application/json' }).end('{"message":"auth"}');
         return;
       }
-      const m = /^\/line-data\/v2\/bot\/message\/([^/]+)\/content(\/preview)?$/.exec(req.url ?? '');
+      const m = /^\/line-data\/v2\/bot\/message\/([^/]+)\/content(\/preview|\/transcoding)?$/.exec(
+        req.url ?? '',
+      );
       const item = m?.[1] === undefined ? undefined : seeded.get(m[1]);
+      if (item !== undefined && m?.[2] === '/transcoding') {
+        const status = takeNotReady(item) ? 'processing' : 'succeeded';
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ status }));
+        return;
+      }
+      if (item !== undefined && m?.[2] === undefined && takeNotReady(item)) {
+        res.writeHead(202, { 'content-type': 'application/json' }).end('{}');
+        return;
+      }
       const bytes = m?.[2] === undefined ? item?.original : item?.preview;
       if (item === undefined || bytes === undefined) {
         res.writeHead(404, { 'content-type': 'application/json' }).end('{"message":"Not found"}');
@@ -170,7 +191,7 @@ const makeHarness = async (): Promise<MessagingGatewayHarness> => {
     freshReplyToken: () => Promise.resolve(hex()),
     invalidReplyToken: `expired-${hex()}`,
     seedContent: (c) => {
-      seeded.set(c.lineMessageId, c);
+      seeded.set(c.lineMessageId, { ...c });
       return Promise.resolve();
     },
     missingMessageId: `gone${hex()}` as LineMessageId,
@@ -184,6 +205,9 @@ const makeHarness = async (): Promise<MessagingGatewayHarness> => {
       }),
     deliveredPushCount: async (to) =>
       (await recorded({ endpoint: 'push', to })).filter((r) => r.status === 200).length,
+    channelId: STUB_CHANNEL_ID,
+    failNextSecretCheck: () =>
+      failNext({ endpoint: 'oauth-token', match: { channelId: STUB_CHANNEL_ID }, status: 503 }),
   };
 };
 
@@ -213,10 +237,11 @@ describe('LINE adapter: push', () => {
     const result = await gatewayFor().push(TOKEN, to, text('hi'), key);
     expect(result).toEqual({ ok: true, value: { alreadyAccepted: false } });
     const pushes = await recorded({ endpoint: 'push', to });
+    const header = toLineRetryKey(key);
     expect(pushes.map((p) => [p.status, p.headers.xLineRetryKey])).toEqual([
-      [500, key],
-      [500, key],
-      [200, key],
+      [500, header],
+      [500, header],
+      [200, header],
     ]);
     expect(pushes[0]?.body).toEqual({ to, messages: [{ type: 'text', text: 'hi' }] });
     expect(pushes[0]?.headers.authorization).toBe('bearer');
@@ -364,13 +389,32 @@ describe('LINE adapter: parseEvents', () => {
 });
 
 describe('toLineRetryKey', () => {
-  it('keeps a UUID and maps any other key to one stable UUID', () => {
-    const uuid = randomUUID();
-    expect(toLineRetryKey(uuid)).toBe(uuid);
-    const mapped = toLineRetryKey('rk-1');
-    expect(mapped).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-    expect(toLineRetryKey('rk-1')).toBe(mapped);
-    expect(toLineRetryKey('rk-2')).not.toBe(mapped);
+  const V5 = /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  const MESSAGE_ID = '019a8f6e-4b2c-7d10-8a3b-5c6d7e8f9a0b'; // a UUIDv7, as message ids are
+
+  it('maps every key, UUIDv7 message ids included, to a version-5 UUID with the RFC 4122 variant', () => {
+    for (const key of [MESSAGE_ID, randomUUID(), 'rk-1']) {
+      const mapped = toLineRetryKey(key);
+      expect(mapped).toMatch(V5);
+      expect(mapped).not.toBe(key);
+    }
+  });
+
+  it('is the first 16 bytes of SHA-256 of the key with the version and variant bits set', () => {
+    expect(toLineRetryKey(MESSAGE_ID)).toBe(toLineRetryKey(MESSAGE_ID));
+    expect(toLineRetryKey('rk-1')).not.toBe(toLineRetryKey('rk-2'));
+    // Fixed value: a change of the derivation would change every key LINE has already seen.
+    expect(toLineRetryKey(MESSAGE_ID)).toBe('83d5f8df-0164-53d1-93a6-d4befa9b625b');
+  });
+
+  it('is accepted by the stub, which takes version 4 and 5 keys only', async () => {
+    const to = newUser();
+    expect(await gatewayFor().push(TOKEN, to, text('hi'), MESSAGE_ID)).toEqual({
+      ok: true,
+      value: { alreadyAccepted: false },
+    });
+    const [push] = await recorded({ endpoint: 'push', to });
+    expect(push?.headers.xLineRetryKey).toBe(toLineRetryKey(MESSAGE_ID));
   });
 });
 
@@ -406,6 +450,40 @@ describe('LINE adapter: reply', () => {
     await failNext({ endpoint: 'reply', match: { replyToken }, status: 500, times: 5 });
     const result = await gatewayFor().reply(TOKEN, replyToken, text('x'));
     expect(result).toMatchObject({ ok: false, error: { code: 'line.unavailable' } });
+  });
+
+  it('returns reply_token_invalid only for a 400 whose message says the token is invalid', async () => {
+    const used = hex();
+    expect((await gatewayFor().reply(TOKEN, used, text('one'))).ok).toBe(true);
+    // The stub answers a used token with {"message":"Invalid reply token"}.
+    expect(await gatewayFor().reply(TOKEN, used, text('two'))).toMatchObject({
+      ok: false,
+      error: { code: 'line.reply_token_invalid' },
+    });
+    const token = hex();
+    await failNext({
+      endpoint: 'reply',
+      match: { replyToken: token },
+      preset: 'invalid_reply_token',
+    });
+    expect(await gatewayFor().reply(TOKEN, token, text('x'))).toMatchObject({
+      ok: false,
+      error: { code: 'line.reply_token_invalid' },
+    });
+  });
+
+  it('returns line.reply_failed for a validation 400, which a push of the same payload would repeat', async () => {
+    const replyToken = hex();
+    await failNext({ endpoint: 'reply', match: { replyToken }, preset: 'validation' });
+    const result = await gatewayFor().reply(TOKEN, replyToken, text('x'));
+    expect(result).toMatchObject({ ok: false, error: { code: 'line.reply_failed' } });
+    // A 400 without a message is not about the token either.
+    const other = hex();
+    await failNext({ endpoint: 'reply', match: { replyToken: other }, status: 400, body: {} });
+    expect(await gatewayFor().reply(TOKEN, other, text('x'))).toMatchObject({
+      ok: false,
+      error: { code: 'line.reply_failed' },
+    });
   });
 
   it('keeps reply_token_invalid after retries that LINE definitely refused (429)', async () => {
@@ -522,6 +600,45 @@ describe('LINE stub content', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'line.content_unavailable' } });
   });
 
+  it('answers line.content_not_ready while the stub transcodes, and reports the status', async () => {
+    const id = idOf('vid');
+    await control('/line/transcoding', { messageId: id, notReadyTimes: 2 });
+    const first = await gatewayFor().downloadContent(TOKEN, id, 'original', VIDEO_MAX_BYTES);
+    expect(first).toMatchObject({ ok: false, error: { code: 'line.content_not_ready' } });
+    expect(await gatewayFor().getContentStatus(TOKEN, id)).toEqual({
+      ok: true,
+      value: 'processing',
+    });
+    expect(await gatewayFor().getContentStatus(TOKEN, id)).toEqual({
+      ok: true,
+      value: 'succeeded',
+    });
+    const ready = await gatewayFor().downloadContent(TOKEN, id, 'original', VIDEO_MAX_BYTES);
+    expect(ready.ok).toBe(true);
+    if (ready.ok) expect((await readAll(ready.value.stream)).length).toBe(ready.value.sizeBytes);
+    const statuses = (await recorded({ endpoint: 'content' }))
+      .filter((r) => r.path.includes(id))
+      .map((r) => r.status);
+    expect(statuses).toEqual([202, 200]);
+    const [poll] = (await recorded({ endpoint: 'content-transcoding' })).filter((r) =>
+      r.path.includes(id),
+    );
+    expect(poll?.path).toBe(`/line-data/v2/bot/message/${id}/content/transcoding`);
+  });
+
+  it('treats any 2xx but 200 as not ready and never reads it as the file', async () => {
+    const id = idOf('img');
+    await failNext({ endpoint: 'content', match: { messageId: id }, status: 204 });
+    const result = await gatewayFor().downloadContent(TOKEN, id, 'original', IMAGE_MAX_BYTES);
+    expect(result).toMatchObject({ ok: false, error: { code: 'line.content_not_ready' } });
+  });
+
+  it('reports a failed transcoding', async () => {
+    const id = idOf('vid');
+    await control('/line/transcoding', { messageId: id, failed: true });
+    expect(await gatewayFor().getContentStatus(TOKEN, id)).toEqual({ ok: true, value: 'failed' });
+  });
+
   it('retries a 5xx download and then streams it', async () => {
     const id = idOf('img');
     await failNext({ endpoint: 'content', match: { messageId: id }, status: 502 });
@@ -556,6 +673,86 @@ describe('LINE stub content', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'line.content_unavailable' } });
     const items = (await recorded({ endpoint: 'content' })).filter((r) => r.path.includes(id));
     expect(items).toHaveLength(1);
+  });
+});
+
+describe('LINE adapter: verifyChannelSecret', () => {
+  type FormCall = { url: string; body: string; headers: Record<string, string> };
+  const recordingFetch =
+    (calls: FormCall[]): FetchFn =>
+    (input, init) => {
+      calls.push({
+        url: input,
+        body: typeof init.body === 'string' ? init.body : '',
+        headers: init.headers as Record<string, string>, // set as a plain object by the adapter
+      });
+      return fetch(input, init);
+    };
+
+  it('asks for a client-credentials token as form fields and revokes it at once', async () => {
+    const calls: FormCall[] = [];
+    const result = await gatewayFor({ fetch: recordingFetch(calls) }).verifyChannelSecret(
+      STUB_CHANNEL_ID,
+      STUB_CHANNEL_SECRET,
+    );
+    expect(result).toEqual({ ok: true, value: undefined });
+    expect(calls.map((c) => c.url)).toEqual([
+      `${STUB}/line/v2/oauth/accessToken`,
+      `${STUB}/line/v2/oauth/revoke`,
+    ]);
+    const form = new URLSearchParams(calls[0]?.body);
+    expect(Object.fromEntries(form)).toEqual({
+      grant_type: 'client_credentials',
+      client_id: STUB_CHANNEL_ID,
+      client_secret: STUB_CHANNEL_SECRET,
+    });
+    expect(calls[0]?.headers).toEqual({ 'content-type': 'application/x-www-form-urlencoded' });
+    // The stub answers 200 to a revoke only for a token it issued and has not revoked yet.
+    const revokes = await recorded({ endpoint: 'oauth-revoke' });
+    expect(revokes.at(-1)?.status).toBe(200);
+    expect(new URLSearchParams(calls[1]?.body).get('access_token')).toMatch(/^stub-issued-/);
+  });
+
+  it('never records the secret or the issued token in what the stub keeps', async () => {
+    await gatewayFor().verifyChannelSecret(STUB_CHANNEL_ID, STUB_CHANNEL_SECRET);
+    const kept = JSON.stringify([
+      ...(await recorded({ endpoint: 'oauth-token' })),
+      ...(await recorded({ endpoint: 'oauth-revoke' })),
+    ]);
+    expect(kept).not.toContain(STUB_CHANNEL_SECRET);
+    expect(kept).not.toContain('stub-issued-');
+  });
+
+  it('returns line.channel_secret_invalid for a wrong pair, without a revoke', async () => {
+    const before = (await recorded({ endpoint: 'oauth-revoke' })).length;
+    const result = await gatewayFor().verifyChannelSecret(STUB_CHANNEL_ID, 'wrong-secret');
+    expect(result).toMatchObject({ ok: false, error: { code: 'line.channel_secret_invalid' } });
+    expect(await recorded({ endpoint: 'oauth-revoke' })).toHaveLength(before);
+  });
+
+  it.each([429, 500, 503])(
+    'returns line.unavailable ("could not check") for %i, after one attempt',
+    async (status) => {
+      const channelId = String(2_000_000_000 + status);
+      const before = (await recorded({ endpoint: 'oauth-token' })).length;
+      await failNext({ endpoint: 'oauth-token', match: { channelId }, status, times: 3 });
+      const result = await gatewayFor().verifyChannelSecret(channelId, STUB_CHANNEL_SECRET);
+      expect(result).toMatchObject({ ok: false, error: { code: 'line.unavailable' } });
+      const calls = (await recorded({ endpoint: 'oauth-token' })).slice(before);
+      expect(calls.map((r) => r.status)).toEqual([status]);
+    },
+  );
+
+  it('returns line.unavailable when LINE cannot be reached', async () => {
+    const gateway = createLineMessagingGateway({
+      apiBaseUrl: 'http://127.0.0.1:9/line',
+      dataApiBaseUrl: 'http://127.0.0.1:9/line-data',
+      sleep: () => Promise.resolve(),
+    });
+    expect(await gateway.verifyChannelSecret(STUB_CHANNEL_ID, STUB_CHANNEL_SECRET)).toMatchObject({
+      ok: false,
+      error: { code: 'line.unavailable' },
+    });
   });
 });
 

@@ -4,9 +4,15 @@ import {
   DEFAULT_GUARD_REFUSAL_TEXT,
   GUARD_MAX_TOPICS,
   GUARD_MODEL,
+  LINE_CHANNEL_ID_MAX_CHARS,
   handoffText,
   type PoliteParticle,
 } from '../src/core/domain';
+import {
+  STUB_CHANNEL_ACCESS_TOKEN,
+  STUB_CHANNEL_ID,
+  STUB_CHANNEL_SECRET,
+} from './fixtures/line/credentials';
 import { AUTH_STATE_PATH } from './helpers/auth';
 import { expectNoA11yViolations } from './helpers/axe';
 import { createContactWithMessage, nextEventVars } from './helpers/contact';
@@ -334,8 +340,43 @@ test.describe('journey 4: kill switch', () => {
       await openChat(page, name);
       await expect(aiSwitch).toBeEnabled();
       await expect(aiSwitch).toHaveAttribute('aria-checked', 'true');
+
+      // 4.7: the LINE section shows the saved Channel ID (not secret) and that LINE confirmed the
+      // pair; saving the same values again checks the secret with LINE and keeps the Channel ID.
+      await page.goto('/settings');
+      const line = page.getByTestId(testIds.settingsSectionLine);
+      const channelId = line.getByTestId(testIds.lineChannelId);
+      await expect(channelId).toHaveValue(STUB_CHANNEL_ID);
+      await expect(line.getByTestId(testIds.lineSecretStatus)).toHaveAttribute(
+        'data-status',
+        'verified',
+      );
+      await expect(line.getByTestId(testIds.lineChannelSecret)).toHaveValue('');
+      await channelId.fill('12ab');
+      await line.getByTestId(testIds.lineSave).click();
+      await expect(
+        line.getByText(
+          uiCopy('settings.line.error.channelIdInvalid', { max: LINE_CHANNEL_ID_MAX_CHARS }),
+        ),
+      ).toBeVisible();
+      const oauthBefore = (await stubLineRequests({ endpoint: 'oauth-token' })).length;
+      await channelId.fill(STUB_CHANNEL_ID);
+      await line.getByTestId(testIds.lineChannelSecret).fill(STUB_CHANNEL_SECRET);
+      await line.getByTestId(testIds.lineAccessToken).fill(STUB_CHANNEL_ACCESS_TOKEN);
+      await line.getByTestId(testIds.lineSave).click();
+      await expect(toastWith(page, uiCopy('settings.line.savedToast'), 'success')).toBeVisible();
+      const oauth = (await stubLineRequests({ endpoint: 'oauth-token' })).slice(oauthBefore);
+      expect(oauth.map((r) => r.status)).toEqual([200]);
+      await page.reload();
+      await expect(channelId).toHaveValue(STUB_CHANNEL_ID);
+      await expect(line.getByTestId(testIds.lineChannelSecret)).toHaveValue('');
+      await expect(line.getByTestId(testIds.lineAccessToken)).toHaveValue('');
+      await expect(line.getByTestId(testIds.lineSecretStatus)).toHaveAttribute(
+        'data-status',
+        'verified',
+      );
     } finally {
-      // 4.7
+      // 4.8
       if (!(await getSettings(request)).ai.enabled)
         await patchSettings(request, { aiEnabled: true });
       expect((await getSettings(request)).ai.enabled).toBe(true);

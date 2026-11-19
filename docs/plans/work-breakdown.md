@@ -170,6 +170,7 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 | T-6.1 | E2E harness and journeys 1, 2, 7, 8 | 6 |
 | T-6.2 | E2E journeys 3, 4, 5, 6, 9 | 6 |
 | T-7.1 | Final integration, axe fixes, README, exit criteria | 7 |
+| T-7.2 | LINE hardening: media 202, retry key, reply 400, retry window, Channel ID, webhook redelivery | 7 |
 
 ## 3. Ticket
 
@@ -1178,6 +1179,27 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 เกณฑ์รับ: ทุกข้อในหัวข้อ 5.1
 
 ตรวจ: V0, VC, VA, VB, VE
+
+### T-7.2 LINE hardening: media 202, retry key, reply 400, retry window, Channel ID, webhook redelivery
+
+| | |
+| --- | --- |
+| Wave | 7 (เจ้าของงานอนุมัติทั้งหกเรื่อง รวม migration แบบเพิ่ม ช่องตั้งค่าใหม่ และการแก้ spec) |
+| พึ่ง | T-7.1 |
+| เขียนได้ | `src/adapters/line/**`, `src/adapters/fakes/**`, `src/adapters/prisma/{message,settings}.*`, `src/core/**` ที่เกี่ยวกับ LINE, `src/composition/{to-dto,http-errors,from-request,timing-budget}.*`, `src/contracts/{dto,settings,limits}.contract.*`, `src/features/settings/**` ส่วน LINE, `src/features/inbox/**` ส่วนสถานะการส่ง, `src/common/{error-messages,test-ids}.ts`, `app/api/settings/line*/**`, `prisma/{schema.prisma,seed.ts}` และ migration ใหม่, `stubs/server.ts`, `e2e/**` ที่เกี่ยวข้อง, `scripts/docs-check.ts` และเอกสารที่เกี่ยวข้อง |
+| อ่านก่อน | [ADR 0023](../adr/0023-retry-key-v5-window-and-reply-400.md), [line-messaging](../specs/line-messaging.md), [admin-backoffice](../specs/admin-backoffice.md#ส่วน-line-official-account), [use-cases](../architecture/use-cases.md), [data-model Migration ที่สี่](../architecture/data-model.md#migration-ที่สี่-channel-id-และ-push-ครั้งแรก) |
+
+เกณฑ์รับ:
+
+- [x] `downloadContent` ถือเฉพาะ 200 เป็นไฟล์ 202 หรือ 2xx อื่นเป็น `line.content_not_ready` และ `StoreInboundMedia` รอและถามสถานะเฉพาะเมื่องบ `MEDIA_JOB_BUDGET_MS` ยังพอ ไม่เช่นนั้นเป็น `failed` ทุกอสมการของ `timing-budget.spec.ts` ยังจริง
+- [x] ทุก `X-Line-Retry-Key` เป็น UUID version 5 จาก SHA-256 ของ id ค่าเดิมทุกครั้ง และ stub รับเฉพาะ version 4 หรือ 5
+- [x] 400 ของ reply เป็น `line.reply_token_invalid` เฉพาะเมื่อข้อความตรง `Invalid reply token` 400 อื่นไม่ push ต่อ
+- [x] "ส่งอีกครั้ง" หลัง `LINE_RETRY_KEY_WINDOW_MS` นับจาก `Message.firstPushAt` ได้ `message.retry_expired` และฟองซ่อนปุ่ม
+- [x] Channel ID ถูกบันทึกและแสดง, คู่ Channel ID กับ secret ถูกตรวจตอนบันทึกและทดสอบ, ตรวจไม่ได้ไม่ขวางการบันทึก
+- [x] Webhook ตอบ 503 เฉพาะเมื่อไม่มีอะไรในก้อนถูกบันทึกเพราะฐานข้อมูลล่ม และก้อนที่ส่งซ้ำถูกบันทึกครั้งเดียว
+- [x] Migration ใหม่เป็นแบบเพิ่ม `pnpm migrations:immutable` และ `pnpm migrations:destructive` ผ่าน
+
+ตรวจ: V0, VA, VB, VC, VE
 
 ## 4. รายการตรวจของ lead ต่อ ticket
 

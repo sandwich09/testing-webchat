@@ -157,7 +157,20 @@ describe('usageReportResponseSchema', () => {
     totalCostUsd: '0.000150',
     replyCount: 0,
     averageCostPerReplyUsd: null,
+    noResponseCount: 2,
   };
+
+  it('requires a whole, non-negative noResponseCount', () => {
+    const without: Record<string, unknown> = { ...report };
+    delete without.noResponseCount;
+    expect(usageReportResponseSchema.safeParse(without).success).toBe(false);
+    expect(usageReportResponseSchema.safeParse({ ...report, noResponseCount: -1 }).success).toBe(
+      false,
+    );
+    expect(usageReportResponseSchema.safeParse({ ...report, noResponseCount: 1.5 }).success).toBe(
+      false,
+    );
+  });
 
   it('has a separate guard row next to ingest', () => {
     expect(usageReportResponseSchema.safeParse(report).success).toBe(true);

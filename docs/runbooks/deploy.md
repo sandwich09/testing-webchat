@@ -1,6 +1,6 @@
 # Deploy
 
-> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-18
+> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-19
 
 ภาพรวมอยู่ใน [infrastructure](../architecture/infrastructure.md) ขั้นตอนตั้งค่าครั้งแรกทำโดยเจ้าของงาน เพราะต้องใช้บัญชีของบริการแต่ละเจ้า
 
@@ -15,7 +15,7 @@
 
 1. สร้างโปรเจกต์จาก repo นี้ และตั้ง region ของ function เป็นสิงคโปร์
 2. สร้าง Blob store แล้วผูกกับโปรเจกต์
-3. ตั้ง environment variable เฉพาะสภาพแวดล้อม Production ตามตารางใน [infrastructure](../architecture/infrastructure.md) โดยสร้าง `SESSION_SECRET` และ `CREDENTIALS_ENCRYPTION_KEY` เป็นค่าสุ่มที่ยาวพอ และไม่ตั้ง `LINE_API_BASE_URL`, `LINE_DATA_API_BASE_URL`, `ANTHROPIC_BASE_URL` และ `RATE_LIMIT_SCALE`
+3. ตั้ง environment variable เฉพาะสภาพแวดล้อม Production ตามตารางใน [infrastructure](../architecture/infrastructure.md) โดยสร้าง `SESSION_SECRET` และ `CREDENTIALS_ENCRYPTION_KEY` เป็นค่าสุ่มที่ยาวพอ และไม่ตั้ง `LINE_API_BASE_URL`, `LINE_DATA_API_BASE_URL`, `ANTHROPIC_BASE_URL` และ `RATE_LIMIT_SCALE` ตั้ง `FILE_STORAGE=blob` (ไม่ใช่ `local`) และไม่ต้องตั้ง `VERCEL_ENV` เพราะ Vercel ตั้งเป็น `production` ให้เอง ถ้ามีค่าที่ใช้เฉพาะการทดสอบหลงอยู่ (`LINE_API_BASE_URL`, `LINE_DATA_API_BASE_URL` หรือ `ANTHROPIC_BASE_URL` ถูกตั้งไม่ว่าค่าใด, `FILE_STORAGE=local` หรือ `RATE_LIMIT_SCALE` ไม่ใช่ 1) แอปไม่เริ่ม และ log ของ function มีบรรทัด `Missing or invalid environment variables: <ชื่อ>` ซึ่งบอกชื่อโดยไม่มีค่า ให้ลบหรือแก้ตัวนั้นแล้ว deploy ใหม่ ([project-setup ข้อ 6.10](../architecture/project-setup.md#610-envexample)) Preview และ Docker ไม่ถูกตรวจข้อนี้ และ preview deployment ปิดอยู่ตามขั้นที่ 4
 4. ปิดการ deploy อัตโนมัติจาก Git และ preview deployment
 5. สร้าง Deploy Hook ของ branch `main` แล้วคัดลอก URL
 

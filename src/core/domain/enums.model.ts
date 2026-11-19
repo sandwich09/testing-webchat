@@ -25,6 +25,10 @@ export type MediaStatus = (typeof MEDIA_STATUSES)[number];
 export const DELIVERY_STATUSES = ['pending', 'sent', 'failed'] as const;
 export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
 
+/** What is known about the stored LINE channel secret (admin-backoffice, LINE section). */
+export const LINE_SECRET_STATUSES = ['verified', 'unchecked', 'no_channel_id'] as const;
+export type LineSecretStatus = (typeof LINE_SECRET_STATUSES)[number];
+
 export const DOCUMENT_STATUSES = ['processing', 'ready', 'failed'] as const;
 export type DocumentStatus = (typeof DOCUMENT_STATUSES)[number];
 
@@ -56,6 +60,7 @@ export type SendChannel = (typeof SEND_CHANNELS)[number];
 
 export const RATE_LIMIT_ACTIONS = [
   'unlock',
+  'unlock_no_ip',
   'send_message',
   'upload_ticket',
   'pdf_ingest',

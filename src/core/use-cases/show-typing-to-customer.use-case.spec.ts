@@ -67,6 +67,7 @@ describe('ShowTypingToCustomer', () => {
         channelAccessTokenEnc: cipher.encrypt(FAKE_LINE_ACCESS_TOKEN),
       },
       { botName: 'Shop', basicId: '@shop' },
+      { channelId: '1000000001', secretVerifiedAt: null },
     );
     typing = build();
   });

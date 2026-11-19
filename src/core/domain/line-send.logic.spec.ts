@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   LINE_MAX_PARTS_PER_REQUEST,
+  LINE_RETRY_KEY_WINDOW_MS,
   LINE_TEXT_MAX_CHARS,
   REPLY_TOKEN_USABLE_MS,
 } from './constants';
 import {
   chooseSendChannel,
+  isRetryKeyExpired,
+  lineSecretStatus,
   previewOf,
+  retryKeyExpiresAt,
   replyTokenExpiry,
   splitLineText,
   toOutboundParts,
@@ -22,6 +26,52 @@ describe('replyTokenExpiry', () => {
 
   it('returns null on a redelivery', () => {
     expect(replyTokenExpiry(at('2026-11-18T05:00:00Z'), true)).toBeNull();
+  });
+});
+
+describe('retry key window', () => {
+  const first = at('2026-11-18T05:00:00Z');
+
+  it('ends LINE_RETRY_KEY_WINDOW_MS after the first push', () => {
+    expect(LINE_RETRY_KEY_WINDOW_MS).toBe(24 * 60 * 60 * 1000);
+    expect(retryKeyExpiresAt({ firstPushAt: first })?.getTime()).toBe(
+      first.getTime() + LINE_RETRY_KEY_WINDOW_MS,
+    );
+  });
+
+  it('has no end while no push was attempted, so a retry is always allowed', () => {
+    expect(retryKeyExpiresAt({ firstPushAt: null })).toBeNull();
+    expect(isRetryKeyExpired({ firstPushAt: null }, at('2030-01-01T00:00:00Z'))).toBe(false);
+  });
+
+  it('allows a retry just inside the window and refuses it from the end on', () => {
+    const end = first.getTime() + LINE_RETRY_KEY_WINDOW_MS;
+    expect(isRetryKeyExpired({ firstPushAt: first }, new Date(end - 1))).toBe(false);
+    expect(isRetryKeyExpired({ firstPushAt: first }, new Date(end))).toBe(true);
+    expect(isRetryKeyExpired({ firstPushAt: first }, new Date(end + 1))).toBe(true);
+  });
+});
+
+describe('lineSecretStatus', () => {
+  it('is no_channel_id without a Channel ID, whatever else is stored', () => {
+    expect(lineSecretStatus({ lineChannelId: null, lineSecretVerifiedAt: null })).toBe(
+      'no_channel_id',
+    );
+    expect(
+      lineSecretStatus({ lineChannelId: null, lineSecretVerifiedAt: at('2026-11-18T05:00:00Z') }),
+    ).toBe('no_channel_id');
+  });
+
+  it('is unchecked with a Channel ID that LINE has not confirmed, verified once it has', () => {
+    expect(lineSecretStatus({ lineChannelId: '1234567890', lineSecretVerifiedAt: null })).toBe(
+      'unchecked',
+    );
+    expect(
+      lineSecretStatus({
+        lineChannelId: '1234567890',
+        lineSecretVerifiedAt: at('2026-11-18T05:00:00Z'),
+      }),
+    ).toBe('verified');
   });
 });
 

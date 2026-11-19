@@ -10,7 +10,12 @@ import {
   EXTRACT_USER_TEXT,
 } from './claude-document-extractor.adapter';
 import { CLAUDE_FALLBACK_BETA } from './claude.constants';
-import { createStubControl, STUB_ANTHROPIC_KEY, STUB_ERRORS } from './claude-stub.test-helper';
+import {
+  createStubControl,
+  refusedBaseUrl,
+  STUB_ANTHROPIC_KEY,
+  STUB_ERRORS,
+} from './claude-stub.test-helper';
 
 const stubControl = createStubControl(ADAPTER_TEST_STUB_URL);
 const STUB_ANTHROPIC_BASE_URL = stubControl.baseURL;
@@ -169,10 +174,10 @@ describe('createClaudeDocumentExtractor response', () => {
     expect(!counted.ok && counted.error.code).toBe('ai.bad_request');
   });
 
-  it('returns ai.unavailable when the API cannot be reached', async () => {
+  it('returns ai.unavailable when the connection is refused, since nothing was sent', async () => {
     const extractor = createClaudeDocumentExtractor({
       apiKey: STUB_ANTHROPIC_KEY,
-      baseURL: 'http://127.0.0.1:9/anthropic',
+      baseURL: await refusedBaseUrl(),
     });
     const extracted = await extractor.extract(request());
     const counted = await extractor.countTokens('claude-opus-5-5', 'x');

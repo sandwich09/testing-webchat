@@ -1,6 +1,6 @@
 # Use case
 
-> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-18
+> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-19
 
 ขั้นตอนของทุก use case ที่ route และงานหลังตอบเรียก type และ port ที่อ้างถึงอยู่ใน [domain-and-ports](domain-and-ports.md) endpoint ที่เรียกแต่ละ use case อยู่ใน [api-contract](api-contract.md) และรหัส error อยู่ใน [error-catalog](error-catalog.md)
 
@@ -12,7 +12,7 @@
 // src/core/use-cases/types.ts
 export interface RequestContext {
   requestId: string;
-  /** IP ของผู้เรียกจาก route (x-forwarded-for ตัวแรกบน Vercel ต้องยืนยัน) null เมื่อไม่รู้ */
+  /** key ของผู้เรียกจาก route: ค่าสุดท้ายของ x-forwarded-for (IPv6 เป็น /64) ตาม infrastructure "IP ของผู้เรียก" null เมื่อไม่มี IP ที่ใช้ได้ */
   clientIp: string | null;
 }
 
@@ -60,9 +60,9 @@ deliverOutbound(message: Message, contact: Contact, access: LineCredentials, mod
 2. ถ้า `mode = auto`: `choice = chooseSendChannel(contact, clock.now())`
    1. ถ้า `choice.channel = reply` และ `contacts.consumeReplyToken(contact.id, choice.replyToken)` ได้ true ให้เรียก `gateway.reply(access.channelAccessToken, choice.replyToken, parts)`
    2. สำเร็จ: `messages.markSent(id, now)`, log `line.send.succeeded` (channel reply) แล้วคืน
-   3. ได้ `line.reply_token_invalid`: log `line.send.reply_token_rejected` แล้วไปข้อ 3
-   4. ได้ error อื่น: `messages.markFailed(id, code)`, `settings.recordLineError({ code, at: now })`, log `line.send.failed` แล้วคืน ห้าม push ต่อ เพราะ `line.unavailable` หมายถึงไม่รู้ว่า reply ไปถึงหรือไม่
-3. `gateway.push(access.channelAccessToken, contact.lineUserId, parts, message.retryKey)`
+   3. ได้ `line.reply_token_invalid` (LINE ตอบ 400 ที่ข้อความตรง `Invalid reply token` เท่านั้น): log `line.send.reply_token_rejected` แล้วไปข้อ 3
+   4. ได้ error อื่น: `messages.markFailed(id, code)`, `settings.recordLineError({ code, at: now })`, log `line.send.failed` แล้วคืน ห้าม push ต่อ เพราะ `line.unavailable` หมายถึงไม่รู้ว่า reply ไปถึงหรือไม่ และ `line.reply_failed` (400 อื่น เช่น body ผิดรูป) หมายถึง push ด้วย payload เดียวกันจะถูกปฏิเสธซ้ำและกินโควตา push
+3. `messages.recordFirstPush(id, now)` (compare-and-set บน null ครั้งแรกเท่านั้น) แล้ว `gateway.push(access.channelAccessToken, contact.lineUserId, parts, message.retryKey)` เวลาถูกบันทึกก่อนเรียกเพราะคำขอที่ไม่รู้ผลอาจถึง LINE แล้ว และ LINE นับอายุของ retry key จากตอนนั้น
    1. สำเร็จ (รวม `alreadyAccepted`): `markSent`, log `line.send.succeeded` (channel push)
    2. ล้มเหลว: `markFailed(id, code)`, `settings.recordLineError({ code, at: now })`, log `line.send.failed`
 
@@ -129,8 +129,9 @@ Test:
 | Port | `RateLimitRepository`, `ContentHasher`, `AccessTokenSigner`, `Clock`, `Logger` |
 | Error | `access.rate_limited`, `access.code_invalid` |
 
-1. `checkRateLimit("unlock", ctx.clientIp, now)` ถ้าครบ `RATE_LIMIT_UNLOCK` แล้ว log `access.unlock.rate_limited` คืน `access.rate_limited` พร้อม `retryAfterSeconds` (รหัสถูกก็ถูกปฏิเสธจนจบหน้าต่าง)
-2. `signer.checkCode(code)` เป็น false: `hitRateLimit("unlock", ctx.clientIp, now)` (นับเฉพาะรหัสผิด ตาม [access-gate](../specs/access-gate.md)), log `access.unlock.failed` คืน `access.code_invalid`
+0. `ctx.clientIp` เป็น null: `action = "unlock_no_ip"`, `subject = "no-client-ip"` (`NO_CLIENT_IP_SUBJECT` ค่าที่ `clientIpOf` ไม่มีทางคืน) และ log `access.unlock.client_ip_missing` นอกนั้น `action = "unlock"`, `subject = ctx.clientIp`
+1. `checkRateLimit(action, subject, now)` ถ้าครบ `RATE_LIMIT_UNLOCK` (หรือ `RATE_LIMIT_UNLOCK_NO_IP`) แล้ว log `access.unlock.rate_limited` คืน `access.rate_limited` พร้อม `retryAfterSeconds` (รหัสถูกก็ถูกปฏิเสธจนจบหน้าต่าง)
+2. `signer.checkCode(code)` เป็น false: `hitRateLimit(action, subject, now)` (นับเฉพาะรหัสผิด ตาม [access-gate](../specs/access-gate.md)), log `access.unlock.failed` คืน `access.code_invalid`
 3. `signer.issue(now)`, log `access.unlock.succeeded`, คืน token รหัสถูกไม่ถูกนับ
 
 ไม่มีการเขียนอื่น route เป็นผู้ตั้ง cookie
@@ -144,7 +145,7 @@ Test:
 - ลองผิดครบ แล้วเลื่อนเวลาปลอมข้ามหน้าต่าง → ครั้งถัดไปผ่านการจำกัด
 - `RATE_LIMIT_SCALE` เป็น 10 → ค่าจำกัดของ unlock ไม่เปลี่ยน
 - IP ต่างกันสองค่า → นับแยกกัน
-- IP เป็น null → นับรวมใน subject `unknown`
+- IP เป็น null → นับรวมในถัง `unlock_no_ip` ตาม `RATE_LIMIT_UNLOCK_NO_IP` และ log `access.unlock.client_ip_missing` ผู้เรียกที่มี IP ไม่ได้รับผลเมื่อถังนี้เต็ม และ IP ที่ข้อความตรงกับ `no-client-ip` ไม่เข้าถังนี้
 - key ที่ส่งให้ repository ไม่มี IP ดิบ
 
 ## CheckHealth
@@ -158,7 +159,7 @@ Test:
 | Port | `SettingsRepository` |
 | Error | `db.unavailable` |
 
-1. `settings.ping()` ถ้า throw คืน `db.unavailable` (use case เดียวที่ดัก exception ของ repository)
+1. `settings.ping()` ถ้า throw คืน `db.unavailable` (use case นี้และขั้นสุดท้ายของ `ReceiveLineEvents` เท่านั้นที่ดัก exception ของ repository)
 
 Test: ping สำเร็จ → ok, ping throw → `db.unavailable`
 
@@ -171,7 +172,7 @@ Test: ping สำเร็จ → ok, ping throw → `db.unavailable`
 | Input | `{ rawBody: string; signature: string \| null }` |
 | Output | `{ followUps: FollowUpJob[] }` |
 | Port | `SettingsRepository`, `SecretCipher`, `MessagingGateway`, `WebhookEventRepository`, `ContactRepository`, `MessageRepository`, `IdGenerator`, `Clock`, `Logger` |
-| Error | `line.not_configured`, `line.credentials_unreadable`, `webhook.signature_invalid` |
+| Error | `line.not_configured`, `line.credentials_unreadable`, `webhook.signature_invalid`, `db.unavailable` |
 
 ```ts
 export type FollowUpJob =
@@ -187,7 +188,8 @@ export type FollowUpJob =
 4. `gateway.parseEvents(rawBody)` ล้มเหลว: log `line.webhook.payload_invalid` คืน `ok({ followUps: [] })`
 5. log `line.webhook.received` พร้อม eventCount
 6. ประมวลผลทีละ event ตามลำดับใน payload แต่ละ event อยู่ใน `try/catch` ของตัวเอง ถ้า throw ให้ log `line.webhook.event_failed` แล้วไป event ถัดไป
-7. คืน `ok({ followUps })`
+7. ถ้ามีอย่างน้อยหนึ่ง event, ไม่มี event ใดจบ (ซ้ำและ `unsupported` นับว่าจบ), ไม่มีข้อความหรือสถานะการติดตามถูกบันทึก, ไม่มีงานหลังตอบ และ `settings.ping()` throw (ฐานข้อมูลล่ม ไม่ใช่ปัญหาของ event): log `line.webhook.batch_unstored` (error, `eventCount`, `errorCode`) แล้วคืน `db.unavailable` route จึงตอบ 503 และ LINE ส่งทั้งก้อนซ้ำเมื่อเปิด "Webhook redelivery" ไว้ ([line-messaging](../specs/line-messaging.md#รับ-event-webhook) ข้อ 6) การกันซ้ำของข้อ 1 ในการประมวลผลหนึ่ง event และ `insertInboundIfAbsent` ทำให้ก้อนที่ส่งซ้ำถูกบันทึกครั้งเดียว
+8. นอกนั้นคืน `ok({ followUps })` แม้บาง event ล้มเหลว
 
 การประมวลผลหนึ่ง event:
 
@@ -244,6 +246,11 @@ Test:
 - event ชนิดที่ไม่รู้จัก → log แล้วข้าม และ event อื่นในก้อนเดียวกันยังถูกประมวลผล
 - event แรก throw → event ที่สองยังถูกบันทึก และผลรวมเป็น ok
 - สอง event ของลูกค้าคนเดียวกันในก้อนเดียว → Message สองแถวตามลำดับ seq เดียวกับใน payload
+- ฐานข้อมูลล่มทั้งก้อน (ทุก event throw และ ping throw) → `db.unavailable` และ log `line.webhook.batch_unstored`
+- ก้อนเดิมถูกส่งซ้ำหลัง 5xx (`isRedelivery`) สองครั้ง → Message แถวเดียว unreadCount เป็น 1 และไม่เก็บ reply token
+- event หนึ่งถูกบันทึก อีก event ล้มเพราะฐานข้อมูล → ok
+- ทุก event ล้มด้วยเหตุของตัวเองขณะฐานข้อมูลตอบ ping → ok (การส่งซ้ำไม่ช่วย)
+- ก้อนที่มีแต่ event ซ้ำและ `unsupported` ขณะ ping ล้ม → ok
 
 ## StoreInboundMedia
 
@@ -261,7 +268,8 @@ Test:
 `setMediaStatus` และ `setMediaReady` ทุกจุดของ use case นี้เป็น compare-and-set บน `pending` ([MessageRepository](domain-and-ports.md#messagerepository)) งานสองงานของข้อความเดียวกัน (เช่น งานที่ได้ซ้ำจากการส่งซ้ำของ LINE) อาจดาวน์โหลดพร้อมกันได้ แต่ผลแรกที่บันทึกเป็นผลสุดท้าย งานที่แพ้ไม่ทับผลนั้น (ไม่เปลี่ยน ready เป็น failed) ไม่ log `media.store.failed` คืนสถานะที่อ่านได้จากแถว และถ้างานที่แพ้เก็บไฟล์ไว้แล้ว (`setMediaReady` ได้ false) จะลบไฟล์ original และ preview ของตัวเองแบบ best effort
 2. `loadLineAccess()` ล้มเหลว: `setMediaStatus(failed)` log `media.store.failed` คืน
 3. `max = inboundMediaMaxBytes(type)`, `keys = inboundStorageKeys(ids.randomToken(), type === "image" ? "jpg" : "mp4")` นามสกุลเดาจากชนิดของข้อความ ถ้าเนื้อจริงเป็น PNG ในชื่อ `.jpg` ยอมรับได้ เพราะ browser อ่านชนิดจากเนื้อและ header
-4. `gateway.downloadContent(access, lineMessageId, "original", max)`
+4. `gateway.downloadContent(access, lineMessageId, "original", max)` (จดเวลาเริ่มของงานไว้ก่อนเรียก)
+   - `line.content_not_ready` (LINE ตอบ 202 หรือ 2xx อื่นที่ไม่ใช่ 200 ขณะยังเตรียมไฟล์ เช่นวิดีโอที่กำลัง transcode): ไป "รอไฟล์" ด้านล่าง แล้วใช้ผลของการดาวน์โหลดครั้งใหม่แทนในข้อนี้
    - `media.too_large`: `setMediaStatus(too_large)` คืน
    - error อื่น: `setMediaStatus(failed)` log `media.store.failed` คืน
 5. `storage.put(keys.original, stream, { contentType: contentType ?? "application/octet-stream", maxSizeBytes: max })` โดย `contentType` มาจากคำตอบของ LINE
@@ -274,6 +282,14 @@ Test:
    - รูป: `previewUrl = mediaUrl`
    - วิดีโอ: `downloadContent(..., "preview", PREVIEW_MAX_BYTES)` แล้ว `put(keys.preview, ...)` ถ้าไม่สำเร็จ ใช้ `previewUrl = mediaUrl` และหน้าเว็บแสดงไอคอนวิดีโอแทนภาพ
 9. `messages.setMediaReady(id, mediaUrl, previewUrl)` log `media.store.succeeded` คืน `ready`
+
+รอไฟล์: `rest = MEDIA_CONTENT_CALL_WORST_MS × (วิดีโอ 2 รูป 1)` คือเวลาแย่ที่สุดของการดาวน์โหลด original อีกครั้งกับภาพตัวอย่างของวิดีโอ วนตามลำดับนี้
+
+1. ถ้าเวลาที่ใช้ไปแล้ว + `MEDIA_NOT_READY_POLL_MS` + `MEDIA_STATUS_CALL_WORST_MS` + `rest` เกิน `MEDIA_JOB_BUDGET_MS` ออกจากวง
+2. log `media.store.not_ready` (`messageId`, `attempt`) แล้ว `clock.sleep(MEDIA_NOT_READY_POLL_MS)` ระหว่างรอข้อความยัง `pending` เพราะมีการลองใหม่ที่กำลังจะเกิดจริง
+3. `gateway.getContentStatus(access, lineMessageId)`: `failed` คืน `line.content_unavailable` (ข้อ 4 ตั้ง failed), `succeeded` ออกจากวง, `processing` หรือเรียกไม่สำเร็จ วนต่อ
+
+หลังออกจากวง ถ้าเวลาที่ใช้ไปแล้ว + `rest` เกิน `MEDIA_JOB_BUDGET_MS` คืน `line.content_not_ready` (ข้อ 4 ตั้ง failed ทันที ไม่ปล่อยค้าง pending โดยไม่มีการลองใหม่) นอกนั้นดาวน์โหลด original อีกหนึ่งครั้ง ถ้ายังไม่พร้อมก็เป็น failed ด้วย `line.content_not_ready` เวลาทั้งงานจึงไม่เกิน `MEDIA_JOB_BUDGET_MS` ซึ่ง [`timing-budget.spec.ts`](../../src/composition/timing-budget.spec.ts) ตรึงไว้ใต้งบของ webhook และต่ำกว่า `MEDIA_STUCK_AFTER_MS` การคืนสภาพสื่อที่ค้างยังเป็นทางสุดท้ายเมื่อ function ถูกตัด
 
 ทั้ง use case อยู่ใน `try/catch` ถ้า throw ให้พยายาม `setMediaStatus(failed)` แล้ว throw ต่อให้ `runJob` log
 
@@ -294,6 +310,11 @@ Test:
 - ที่เก็บไฟล์ล่ม → failed
 - ข้อความ ready อยู่แล้ว เรียกซ้ำ → ไม่ดาวน์โหลดอีก
 - credential หาย → failed
+- วิดีโอที่ LINE ตอบไม่พร้อมสามครั้งแล้วพร้อม → ระหว่างรอยัง pending แล้วเป็น ready และ log `media.store.not_ready` สามครั้ง
+- ไม่พร้อมตลอดงบ → failed ด้วย `line.content_not_ready` และเวลาที่ใช้ไม่เกินงบ
+- การดาวน์โหลดแรกใช้เวลาแย่ที่สุดแล้วได้ไม่พร้อม → ไม่รอ failed ทันที
+- LINE บอกว่าการเตรียมไฟล์ล้มเหลว → failed ด้วย `line.content_unavailable`
+- การถามสถานะล้มเหลวหนึ่งครั้ง → ถามต่อ แล้ว ready
 
 ## GenerateAiReply
 
@@ -352,7 +373,7 @@ export type AiReplyRunOutcome =
    - คำตอบของรอบก่อนที่ส่งไม่สำเร็จถูกตัดโดย `toHistoryTurns` ข้อความของลูกค้าก่อนและหลังจึงรวมเป็นตาเดียวและถูกตอบทั้งหมด ข้อความแจ้งส่งต่อแอดมินและข้อความปฏิเสธที่ส่งแล้วอยู่ในตำแหน่งที่รอบนั้นตอบ ข้อความหลายข้อความที่มาระหว่างนั้นอยู่หลังคำตอบตามลำดับ seq และรวมเป็นตาเดียว
 4. ขอบเขตหัวข้อ ทำเฉพาะเมื่อ `s.guardEnabled` เป็น true ก่อนโหลดคลังความรู้และก่อนเรียกโมเดลตอบแชท ([topic-guard](../specs/topic-guard.md)):
    1. `{ message, context } = guardContextTurns(history)` แล้ว `g = topicGuard.classify({ topics: s.guardTopics, message, context, model: GUARD_MODEL, maxTokens: GUARD_MAX_TOKENS, timeoutMs: GUARD_TIMEOUT_MS })`
-   2. `g` เป็น error (ไม่มีคำตอบจาก API จึงไม่มีต้นทุน): `settings.recordAiError({ code, at: now })`, log `guard.failed`, `raiseHandoff(c, "ai_failed")` คืน `handoff` ไม่ส่งอะไรให้ลูกค้า
+   2. `g` เป็น error: ถ้ารหัสเป็น `ai.no_response` (ส่งแล้วไม่ได้คำตอบ อาจถูกคิดเงิน) `usage.insert(noResponseUsage({ kind: "guard", contactId, model: GUARD_MODEL, ... }))` รหัสอื่นไม่มีคำตอบจาก API จึงไม่มีต้นทุนและไม่มีแถว แล้ว `settings.recordAiError({ code, at: now })`, log `guard.failed`, `raiseHandoff(c, "ai_failed")` คืน `handoff` ไม่ส่งอะไรให้ลูกค้า
    3. `gr = g.value`, `{ cost, priceKnown } = computeCost(gr.usage, gr.servedModel, config.priceTable)` (`priceKnown` false log `ai.price_unknown_model`) และ `gd` คือแถว AiUsage ฉบับร่าง `{ id: ids.usageId(), kind: "guard", contactId, provider: "claude", model: gr.servedModel, usage: gr.usage, cost, createdAt: now }` แล้ว `v = guardVerdictOf(gr, s.guardTopics)`
    4. `v.verdict = failed` (ปฏิเสธ ถูกตัด ไม่ตรง schema): `usage.insert({ ...gd, messageId: null, outcome: "failed", error: v.error })`, `settings.recordAiError({ code: v.error, at: now })`, log `guard.failed`, `raiseHandoff(c, "ai_failed")` คืน `handoff` (ปิดแบบปลอดภัย ไม่ส่งอะไรให้ลูกค้า)
    5. `v.verdict = blocked`: log `guard.checked` (outcome blocked) แล้วคืนผลของ `sendGuardRefusal(c, access, gd, "classifier")` ไม่โหลดคลังความรู้และไม่เรียกโมเดลตอบแชท
@@ -360,9 +381,9 @@ export type AiReplyRunOutcome =
 5. `knowledge = knowledgeSource.getKnowledge()`
 6. `systemInstructions = buildSystemInstructions(s)` และถ้า `s.guardEnabled` ต่อท้ายด้วย `"\n\n" + buildGuardRulesBlock(s.guardTopics)` ([ai-prompt ข้อ 9.5](../specs/ai-prompt.md#95-บล็อกที่ต่อท้ายคำสั่งระบบของการตอบแชท))
 7. `res = chatModel.generateReply({ model: s.aiModel, systemInstructions, knowledgeText: knowledge.text, history, now: clock.now(), maxTokens: AI_MAX_TOKENS })`
-8. `res` เป็น error (ไม่มีคำตอบจาก API จึงไม่มีต้นทุน): `settings.recordAiError({ code, at: now })`, log `ai.reply.failed`, `raiseHandoff(c, "ai_failed")` คืน `handoff`
+8. `res` เป็น error: ถ้ารหัสเป็น `ai.no_response` `usage.insert(noResponseUsage({ kind: "reply", contactId, model: s.aiModel, ... }))` ([usage-cost](../specs/usage-cost.md#การเรียกที่ไม่ได้คำตอบ)) รหัสอื่นไม่มีแถว แล้ว `settings.recordAiError({ code, at: now })`, log `ai.reply.failed`, `raiseHandoff(c, "ai_failed")` คืน `handoff`
 9. `r = res.value`, `{ cost, priceKnown } = computeCost(r.usage, r.servedModel, config.priceTable)` ทุกแถว AiUsage ที่บันทึกในขั้นถัดไปใช้ `id: ids.usageId()`, `kind: "reply"`, `provider: "claude"`, `model: r.servedModel`, `usage: r.usage`, `cost`, `createdAt: now` ถ้า `priceKnown` เป็น false log `ai.price_unknown_model` ตาม [usage-cost](../specs/usage-cost.md#การคำนวณราคา), log `ai.model.called`
-10. `o = usageOutcomeOf(r)` ถ้า `o.outcome = ok`: `text = sanitizeAiReply(r.output.reply)` ถ้าได้ null ให้ `o = { outcome: "failed", error: "ai.invalid_output", handoff: "ai_failed" }`
+10. `o = usageOutcomeOf(r)` ถ้า `o.outcome = ok`: `text = sanitizeAiReply(r.output.reply)` ถ้าได้ null ให้ `o = { outcome: "failed", error: "ai.invalid_output", handoff: "ai_failed" }` ถ้าไม่ null แต่ `disallowedLinks(text, [knowledge.text, s.aiInstructions])` ไม่ว่าง ให้ `text = null` และ `o = { outcome: "failed", error: "ai.link_not_allowed", handoff: "ai_failed" }` ([ai-prompt ข้อ 6.1](../specs/ai-prompt.md#61-ลิงก์ในคำตอบ)) จากนั้นเป็นทางเดียวกับคำตอบที่ไม่ผ่าน schema
 11. ชั้นที่สองของขอบเขตหัวข้อ: ถ้า `s.guardEnabled` และ `o.handoff = ai_unsafe_or_offtopic` คืนผลของ `sendGuardRefusal(c, access, <แถว reply ฉบับร่างจากข้อ 9>, "chat_model")` ทำเหมือนการกันของข้อ 4.5 ทุกอย่าง ไม่ขึ้นรอแอดมิน
 12. ตรวจซ้ำก่อนส่ง: `s2 = settings.get()`, `c2 = contacts.findById(contactId)` ถ้า `s2.aiEnabled` เป็น false หรือ `c2.aiEnabled` เป็น false หรือ `c2.followStatus = unfollowed`:
     - `usage.insert({ kind: "reply", contactId, messageId: null, outcome: "cancelled", error: null, ... })`
@@ -547,16 +568,17 @@ Test:
 | Input | `{ contactId: ContactId; messageId: MessageId }` |
 | Output | `Message` |
 | Port | `MessageRepository`, `ContactRepository`, `SettingsRepository`, `SecretCipher`, `MessagingGateway`, `RateLimitRepository`, `ContentHasher`, `Clock`, `Logger` |
-| Error | `message.rate_limited`, `message.not_found`, `message.not_retryable`, `contact.unfollowed`, `line.not_configured`, `line.credentials_unreadable` |
+| Error | `message.rate_limited`, `message.not_found`, `message.not_retryable`, `message.retry_expired`, `contact.unfollowed`, `line.not_configured`, `line.credentials_unreadable` |
 
 1. `hitRateLimit("send_message", ctx.clientIp ?? "unknown", now)` เกินคืน `message.rate_limited`
 2. `m = messages.findById(messageId)` null หรือ `m.contactId !== contactId` คืน `message.not_found`
 3. `m.direction !== "outbound"` หรือ `m.deliveryStatus !== "failed"` คืน `message.not_retryable`
-4. `c = contacts.findById` null คืน `message.not_found` (ข้อความอ้าง Contact ด้วย foreign key ลูกค้าที่หายไปจึงหมายถึงข้อความหายด้วย) เลิกติดตามคืน `contact.unfollowed` (ข้อความยังเป็น failed)
-5. `access = loadLineAccess()` ล้มเหลวคืน error นั้น
-6. `messages.markPendingIfFailed(messageId)` เป็น false คืน `message.not_retryable` (มีอีกคำขอ retry อยู่แล้ว)
-7. `final = deliverOutbound(m, c, access, "push_only")` ใช้ push เสมอ เพราะ reply ไม่มี retry key และครั้งก่อนอาจไปถึงแล้ว
-8. คืน `ok(final)`
+4. `isRetryKeyExpired(m, now)` (ผ่าน `LINE_RETRY_KEY_WINDOW_MS` นับจาก `m.firstPushAt` แล้ว ปลายหน้าต่างนับว่าผ่าน) log `line.send.retry_expired` (warn, `messageId`, `contactId`) คืน `message.retry_expired` ไม่เรียก LINE และข้อความยังเป็น failed เหตุผล: หลังหน้าต่างนี้ LINE ถือ key เดิมเป็นคำขอใหม่ ถ้าครั้งก่อนถึงลูกค้าแล้ว ลูกค้าจะได้ซ้ำ แอดมินจึงต้องพิมพ์ส่งใหม่ `firstPushAt` ไม่ใช่ `deliveryAttemptAt` ซึ่งเลื่อนทุกครั้งที่กดส่งอีกครั้ง ข้อความที่ยังไม่เคย push (reply ล้มเหลว) ไม่มีหน้าต่าง
+5. `c = contacts.findById` null คืน `message.not_found` (ข้อความอ้าง Contact ด้วย foreign key ลูกค้าที่หายไปจึงหมายถึงข้อความหายด้วย) เลิกติดตามคืน `contact.unfollowed` (ข้อความยังเป็น failed)
+6. `access = loadLineAccess()` ล้มเหลวคืน error นั้น
+7. `messages.markPendingIfFailed(messageId, now)` เป็น false คืน `message.not_retryable` (มีอีกคำขอ retry อยู่แล้ว) `now` เป็นเวลาเริ่มของการส่งรอบนี้ที่การคืนสภาพการส่งที่ค้างใช้วัด
+8. `final = deliverOutbound(m, c, access, "push_only")` ใช้ push เสมอ เพราะ reply ไม่มี retry key และครั้งก่อนอาจไปถึงแล้ว
+9. คืน `ok(final)`
 
 ไฟล์สื่อยังอยู่ที่เดิม จึงส่งอีกครั้งได้โดยไม่อัปโหลดใหม่
 
@@ -572,6 +594,9 @@ Test:
 - push ล้มเหลวอีก → ok สถานะ failed พร้อมรหัสใหม่
 - ข้อความของ AI ที่ failed → retry ได้เหมือนกัน
 - มี reply token ที่ยังใช้ได้ → ยังใช้ push
+- ก่อนปลายหน้าต่างของ retry key 1 ms → ส่งได้, ที่ปลายหน้าต่างพอดี → `message.retry_expired` ไม่เรียก LINE และแถวยัง failed
+- หน้าต่างนับจาก push ครั้งแรก ไม่ใช่จากการกดส่งอีกครั้ง
+- ไม่เคย push → ส่งอีกครั้งได้เสมอ และ `firstPushAt` ถูกบันทึก
 
 ## IssueUpload
 
@@ -759,15 +784,16 @@ Test: มีลูกค้า → stats ไม่นับบรรทัดเ
 | --- | --- |
 | Input | `{ contactId: ContactId; mode: { kind: "latest" } \| { kind: "before"; beforeSeq: Seq } \| { kind: "changes"; afterUpdatedSeq: Seq } }` |
 | Output | `{ messages: Message[]; hasOlder: boolean \| null; hasMore: boolean; highWater: Seq }` |
-| Port | `ContactRepository`, `MessageRepository` |
+| Port | `ContactRepository`, `MessageRepository`, `Clock`, `Logger` |
 | Error | `contact.not_found` |
 
 1. ไม่พบลูกค้าคืน `contact.not_found`
+1.1 คืนสภาพก่อนอ่าน (การเขียนเดียวของ use case นี้ หน้าแชท poll อยู่จึงเกิดเองภายในหนึ่งรอบ): `media = messages.failStuckMedia(contactId, now - MEDIA_STUCK_AFTER_MS)` ถ้าไม่ว่าง log `media.store.stuck_recovered` พร้อม `contactId` และ `count` แล้ว `sends = messages.failStuckDeliveries(contactId, now - SEND_STUCK_AFTER_MS)` ถ้าไม่ว่าง log `line.send.stuck_recovered` พร้อม `contactId` และ `count` แถวที่แก้ได้ `updatedSeq` ใหม่ จึงอยู่ในผลของรอบนี้
 2. `latest`: อ่าน `highWater = messages.maxUpdatedSeq(contactId)` ก่อน แล้ว `listLatest(contactId, MESSAGE_PAGE_LIMIT)` `hasMore` เป็น false
 3. `before`: `listBefore(contactId, beforeSeq, MESSAGE_PAGE_LIMIT)` และ `highWater` เป็น `0n` (หน้าเว็บไม่ใช้ค่านี้เลื่อน cursor)
 4. `changes`: `listChangedAfter(contactId, afterUpdatedSeq, POLL_PAGE_LIMIT)` `hasOlder` เป็น null และ `highWater` เหมือน `ListContacts`
 
-Test: latest คืน 50 แถวล่าสุดเรียงเก่าไปใหม่และ hasOlder ถูก, before ไม่รวม beforeSeq, changes คืนข้อความที่สถานะเปลี่ยนแม้ seq ต่ำกว่า cursor, ลูกค้าคนอื่นไม่ปน
+Test: latest คืน 50 แถวล่าสุดเรียงเก่าไปใหม่และ hasOlder ถูก, before ไม่รวม beforeSeq, changes คืนข้อความที่สถานะเปลี่ยนแม้ seq ต่ำกว่า cursor, ลูกค้าคนอื่นไม่ปน, สื่อที่ค้างนานกว่า `MEDIA_STUCK_AFTER_MS` เป็น failed และอยู่ในรอบ changes, การส่งที่ค้างนานกว่า `SEND_STUCK_AFTER_MS` เป็น failed ด้วย `line.send_interrupted`, แถวที่ยังไม่ถึงเวลาและของลูกค้าคนอื่นไม่ถูกแก้
 
 ## GetSettings
 
@@ -818,7 +844,7 @@ Test: แก้ field เดียวไม่กระทบ field อื่น
 2. `s = settings.get()` ถ้า `s.aiEnabled` เป็น false คืน `ai.disabled_globally`
 3. `s.guardTopics` ว่าง คืน `settings.guard_topics_required` (ใช้หัวข้อที่บันทึกไว้ ไม่ใช่ค่าที่ยังไม่บันทึกในหน้าจอ ทดลองได้แม้ `guardEnabled` เป็น false)
 4. `usage.sumCost(bangkokDayRange(now)) >= s.aiDailyBudget` คืน `ai.budget_exhausted`
-5. `g = topicGuard.classify({ topics: s.guardTopics, message: text, context: [], model: GUARD_MODEL, maxTokens: GUARD_MAX_TOKENS, timeoutMs: GUARD_TIMEOUT_MS })` error: `settings.recordAiError`, log `guard.failed` คืน error นั้น
+5. `g = topicGuard.classify({ topics: s.guardTopics, message: text, context: [], model: GUARD_MODEL, maxTokens: GUARD_MAX_TOKENS, timeoutMs: GUARD_TIMEOUT_MS })` error: ถ้าเป็น `ai.no_response` `usage.insert(noResponseUsage({ kind: "guard", contactId: null, model: GUARD_MODEL, ... }))` แล้ว `settings.recordAiError`, log `guard.failed` คืน error นั้น
 6. `cost = computeCost(...)`, `v = guardVerdictOf(g.value, s.guardTopics)` แล้ว `usage.insert({ id: ids.usageId(), kind: "guard", contactId: null, messageId: null, documentId: null, ..., outcome: v.verdict === "failed" ? "failed" : v.verdict === "blocked" ? "blocked" : "ok", error: v.error })` เสมอ เพื่อให้ต้นทุนของการทดลองเห็นในค่าใช้จ่าย AI
 7. `v.verdict = failed`: `settings.recordAiError({ code: v.error, at: now })` เหมือน error ของ port ในข้อ 5 เพื่อให้หน้าสถานะระบบแสดง แล้ว log `guard.failed` คืน `v.error` (`ai.refused`, `ai.truncated` หรือ `ai.invalid_output`)
 8. log `guard.checked` คืน `{ allowed: v.verdict === "allowed", matchedTopic: v.matchedTopic, cost }`
@@ -861,38 +887,41 @@ Test: ไม่มีข้อมูล → ทุกตัวเลขเป็
 
 ## SetLineCredentials
 
-**หน้าที่:** ตรวจ token กับ LINE แล้วบันทึก credential แบบเข้ารหัส ตาม [admin-backoffice](../specs/admin-backoffice.md#ส่วน-line-official-account)
+**หน้าที่:** ตรวจ access token และคู่ Channel ID กับ Channel secret กับ LINE แล้วบันทึก credential (สองค่าลับแบบเข้ารหัส) ตาม [admin-backoffice](../specs/admin-backoffice.md#ส่วน-line-official-account)
 
 | | |
 | --- | --- |
-| Input | `{ channelSecret: string; channelAccessToken: LineAccessToken }` |
-| Output | `{ botName: string; basicId: string }` |
+| Input | `{ channelId: string; channelSecret: string; channelAccessToken: LineAccessToken }` (`channelId` ผ่าน `LINE_CHANNEL_ID_PATTERN` ของ contract แล้ว) |
+| Output | `{ botName: string; basicId: string; secretStatus: "verified" \| "unchecked" }` |
 | Port | `MessagingGateway`, `SecretCipher`, `SettingsRepository`, `Clock`, `Logger` |
-| Error | `line.credentials_invalid`, `line.unavailable` |
+| Error | `line.credentials_invalid`, `line.channel_secret_invalid`, `line.unavailable` |
 
 1. `bot = gateway.getBotInfo(channelAccessToken)` ล้มเหลว: log `line.credentials.rejected` คืน error นั้น ไม่บันทึก
-2. `settings.saveLineCredentials({ channelSecretEnc: cipher.encrypt(secret), channelAccessTokenEnc: cipher.encrypt(token) }, bot)`
-3. `settings.recordLineError(null)`, log `line.credentials.saved`
-4. คืน `bot`
+2. `secret = gateway.verifyChannelSecret(channelId, channelSecret)` ได้ `line.channel_secret_invalid`: log `line.credentials.rejected` คืน error นั้น ไม่บันทึก ได้ `line.unavailable` (429, 5xx, timeout, เครือข่าย): ไม่ขวางการบันทึก `secretStatus = unchecked` สำเร็จ: `secretStatus = verified`
+3. `settings.saveLineCredentials({ channelSecretEnc: cipher.encrypt(secret), channelAccessTokenEnc: cipher.encrypt(token) }, bot, { channelId, secretVerifiedAt: verified ? now : null })`
+4. `settings.recordLineError(null)`, log `line.credentials.saved` (`outcome` = `secretStatus` และ `errorCode` เมื่อตรวจไม่ได้)
+5. คืน `{ ...bot, secretStatus }`
 
-ตรวจ Channel secret กับ LINE ไม่ได้ ระบบจึงรู้ว่าผิดเมื่อ webhook แรกไม่ผ่าน signature ซึ่งแสดงในสถานะระบบผ่าน `lastWebhookAt` (ต้องยืนยันว่า LINE ไม่มี API ตรวจ secret)
+Token ที่ LINE ออกให้ตอนตรวจถูกเพิกถอนทันทีภายใน adapter ไม่ถูกคืน เก็บ หรือ log ([MessagingGateway](domain-and-ports.md#messaginggateway))
 
-Test: token ถูก → บันทึกแบบเข้ารหัส ค่าที่เก็บไม่เท่ากับค่าจริง, token ผิด → `line.credentials_invalid` ไม่มีการเขียน, LINE ล่ม → `line.unavailable`, บันทึกแล้ว lastLineError ถูกล้าง, log ไม่มีค่า token
+Test: ทุกค่าถูก → บันทึกแบบเข้ารหัส ค่าที่เก็บไม่เท่ากับค่าจริง Channel ID ถูกเก็บ และ `lineSecretVerifiedAt` เป็นเวลาตอนบันทึก, secret ไม่ใช่ของ Channel ID → `line.channel_secret_invalid` ไม่มีการเขียน, LINE ตรวจ secret ไม่ได้ → บันทึกด้วย `unchecked` และ `lineSecretVerifiedAt` เป็น null, token ผิด → `line.credentials_invalid` ไม่มีการเขียนและไม่ตรวจ secret, LINE ล่มตอนตรวจ token → `line.unavailable`, บันทึกแล้ว lastLineError ถูกล้าง, log ไม่มีค่า token และ secret
 
 ## TestLineConnection
 
 | | |
 | --- | --- |
 | Input | `{}` |
-| Output | `{ botName: string; basicId: string }` |
+| Output | `{ botName: string; basicId: string; secretStatus: LineSecretStatus }` |
 | Port | `SettingsRepository`, `SecretCipher`, `MessagingGateway`, `Clock`, `Logger` |
-| Error | `line.not_configured`, `line.credentials_unreadable`, `line.credentials_invalid`, `line.unavailable` |
+| Error | `line.not_configured`, `line.credentials_unreadable`, `line.credentials_invalid`, `line.channel_secret_invalid`, `line.unavailable` |
 
 1. `access = loadLineAccess()` ล้มเหลวคืน error นั้น
 2. `bot = gateway.getBotInfo(access.channelAccessToken)` ล้มเหลว: `settings.recordLineError({ code, at: now })`, log `line.connection.tested` (outcome failed) คืน error
-3. `settings.updateLineBotInfo(bot)`, `settings.recordLineError(null)`, log (outcome ok) คืน `bot`
+3. `settings.updateLineBotInfo(bot)`
+4. ไม่มี `lineChannelId` (credential ที่บันทึกก่อนมีช่อง Channel ID): `secretStatus = no_channel_id` ไม่เรียก LINE นอกนั้น `gateway.verifyChannelSecret(lineChannelId, access.channelSecret)`: สำเร็จ `settings.recordLineSecretCheck(now)` และ `verified`, `line.channel_secret_invalid` `settings.recordLineSecretCheck(null)` แล้วทำแบบข้อ 2 ด้วยรหัสนี้, `line.unavailable` เป็น `unchecked` และคงผลที่เก็บไว้เดิม
+5. `settings.recordLineError(null)`, log (`outcome` = `secretStatus`) คืน `{ ...bot, secretStatus }`
 
-Test: ผ่าน → ชื่อบอทถูกอัปเดต lastLineError ถูกล้าง, token ถูกเพิกถอน → `line.credentials_invalid` และ lastLineError ถูกบันทึก, ยังไม่ตั้งค่า → `line.not_configured`
+Test: ผ่าน → ชื่อบอทถูกอัปเดต lastLineError ถูกล้าง และ `verified`, token ถูกเพิกถอน → `line.credentials_invalid` และ lastLineError ถูกบันทึก, secret ไม่ใช่ของ Channel ID → `line.channel_secret_invalid` และล้างเวลาที่ยืนยัน, LINE ตรวจ secret ไม่ได้ → `unchecked` และเวลาที่ยืนยันเดิมยังอยู่, ไม่มี Channel ID → `no_channel_id` ใช้งานได้ตามเดิม, ยังไม่ตั้งค่า → `line.not_configured`
 
 ## IngestDocument
 
@@ -926,7 +955,7 @@ Route ตอบ 202 แล้วส่ง `followUp` เข้า `runJob` → �
 ทั้งช่วงอยู่ใน `try/catch` ถ้า throw: `knowledge.markFailed(id, { code: "internal.unexpected", ... })` แล้ว throw ต่อ
 
 1. `res = extractor.extract({ model, pdf: bytes, maxTokens: AI_EXTRACT_MAX_TOKENS })`
-2. error: `knowledge.markFailed(id, { code: "knowledge.extract_failed" })`, `settings.recordAiError({ code, at: now })`, log `knowledge.ingest.failed` จบ
+2. error: ถ้าเป็น `ai.no_response` `usage.insert(noResponseUsage({ kind: "ingest", documentId: id, model, ... }))` แล้ว `knowledge.markFailed(id, { code: "knowledge.extract_failed" })`, `settings.recordAiError({ code, at: now })`, log `knowledge.ingest.failed` จบ
 3. `r = res.value` บันทึก `usage.insert({ id: ids.usageId(), kind: "ingest", documentId: id, model: r.servedModel, cost: computeCost(...), outcome, error })` เสมอ (รวมกรณีที่ไฟล์ถูกปฏิเสธในข้อถัดไป) โดย refused → (`refused`, `ai.refused`), truncated → (`failed`, `ai.truncated`), นอกนั้น (`ok`, null) ถ้า `priceKnown` เป็น false log `ai.price_unknown_model`
 4. refused: `markFailed(knowledge.extract_refused)` จบ
 5. truncated: `markFailed(knowledge.extract_failed)` จบ
@@ -983,10 +1012,10 @@ Test: ลบแถว ready → หายจากรายการและย
 
 | Use case | Input | Output | Error |
 | --- | --- | --- | --- |
-| `ListDocuments` | `{}` | `{ documents: KbDocument[]; usedTokens: number; capacityTokens: number }` (`usedTokens = sumReadyTokens()`) | ไม่มี |
+| `ListDocuments` | `{}` | `{ documents: KbDocument[]; usedTokens: number; capacityTokens: number }` (`usedTokens = sumReadyTokens()`) ก่อนอ่าน `knowledge.failStuckProcessing(now - KNOWLEDGE_STUCK_AFTER_MS, now)` ถ้าไม่ว่าง log `knowledge.ingest.stuck_recovered` พร้อม `count` หน้าตั้งค่า poll รายการนี้อยู่ขณะมีไฟล์ processing | ไม่มี |
 | `GetDocument` | `{ documentId }` | `KbDocumentWithText` จาก `knowledge.getWithText(id)` | `knowledge.not_found` เมื่อได้ null |
 
-Port: `KnowledgeRepository` Test: usedTokens นับเฉพาะ ready, GetDocument ของแถวที่ไม่มี → `knowledge.not_found`
+Port: `KnowledgeRepository` (และ `Clock`, `Logger` สำหรับ `ListDocuments`) Test: usedTokens นับเฉพาะ ready, GetDocument ของแถวที่ไม่มี → `knowledge.not_found`, ไฟล์ที่ processing นานกว่า `KNOWLEDGE_STUCK_AFTER_MS` เป็น failed ด้วย `knowledge.extract_interrupted` และสองคำขอพร้อมกัน log ครั้งเดียว
 
 ## SaveCannedReply, DeleteCannedReply และ ListCannedReplies
 
@@ -1022,9 +1051,9 @@ Port: `UsageRepository` และ `config.priceTable`
 `GetUsageReport`:
 
 1. `range = bangkokMonthRange(month)`
-2. `rows = usage.reportByContact(range)`, `ingest = usage.ingestSummary(range)`, `guard = usage.guardSummary(range)`
+2. `rows = usage.reportByContact(range)`, `ingest = usage.ingestSummary(range)`, `guard = usage.guardSummary(range)`, `noResponseCount = usage.countNoResponse(range)`
 3. `replyCost = Σ rows.cost`, `okCount = Σ rows.okCount`
-4. คืน `{ month, priceTableDate: priceTable.asOf, contacts: rows, ingest, guard, totalCost: replyCost + ingest.cost + guard.cost, replyCount: Σ rows.replyCount, averageCostPerReply: okCount > 0 ? replyCost / okCount : null }`
+4. คืน `{ month, priceTableDate: priceTable.asOf, contacts: rows, ingest, guard, totalCost: replyCost + ingest.cost + guard.cost, replyCount: Σ rows.replyCount, averageCostPerReply: okCount > 0 ? replyCost / okCount : null, noResponseCount }`
 
 "จำนวนครั้งที่ AI ตอบ" ในตารางคือจำนวนครั้งที่เรียกโมเดลเพื่อตอบ (แถว kind reply ทุก outcome) และ "ราคาเฉลี่ยต่อข้อความที่ AI ตอบ" หารต้นทุนการตอบทั้งหมดด้วยจำนวนครั้งที่ outcome เป็น ok ข้อความที่ถูกกันด้วยขอบเขตหัวข้อไม่นับเป็น "AI ตอบ" การคัดกรองอยู่ในแถว `guard` แยก
 

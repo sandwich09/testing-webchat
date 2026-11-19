@@ -9,7 +9,8 @@ import type {
 } from '@/core/domain';
 import type { DateRange } from './usage.repository.port';
 
-export type NewMessage = Omit<Message, 'seq' | 'updatedSeq'>;
+/** `firstPushAt` starts null and is set only by `recordFirstPush`. */
+export type NewMessage = Omit<Message, 'seq' | 'updatedSeq' | 'firstPushAt'>;
 
 export interface MessageRepository {
   findById(id: MessageId): Promise<Message | null>;
@@ -21,8 +22,16 @@ export interface MessageRepository {
 
   markSent(id: MessageId, at: Date): Promise<Message>;
   markFailed(id: MessageId, code: ErrorCode): Promise<Message>;
-  /** Compare-and-set: failed to pending, clears deliveryError. false if the status is not failed. */
-  markPendingIfFailed(id: MessageId): Promise<boolean>;
+  /**
+   * Compare-and-set: failed to pending, clears deliveryError and sets the start of the delivery
+   * attempt to `at`. false if the status is not failed.
+   */
+  markPendingIfFailed(id: MessageId, at: Date): Promise<boolean>;
+  /**
+   * Compare-and-set on `firstPushAt IS NULL`: dates the first push of the message. Later calls
+   * change nothing, so the retry key window always counts from the first push.
+   */
+  recordFirstPush(id: MessageId, at: Date): Promise<void>;
   /**
    * Compare-and-set on `mediaStatus = pending`: sets ready with both URLs. false (nothing changed)
    * if the message is missing or its media is no longer pending, so one StoreInboundMedia run wins.
@@ -33,6 +42,18 @@ export interface MessageRepository {
     id: MessageId,
     status: Exclude<MediaStatus, 'ready' | 'pending'>,
   ): Promise<boolean>;
+
+  /**
+   * One compare-and-set statement: media of that customer still `pending` with createdAt before
+   * `staleBefore` becomes `failed`. Returns the ids changed, so each row goes to one caller only.
+   */
+  failStuckMedia(contactId: ContactId, staleBefore: Date): Promise<MessageId[]>;
+  /**
+   * One compare-and-set statement: outbound messages of that customer still `pending` whose
+   * delivery attempt started before `staleBefore` (the insert, or the last markPendingIfFailed)
+   * become `failed` with `line.send_interrupted`, so "ส่งอีกครั้ง" works. Returns the ids changed.
+   */
+  failStuckDeliveries(contactId: ContactId, staleBefore: Date): Promise<MessageId[]>;
 
   /** The latest inbound message of that customer by seq. */
   latestInbound(contactId: ContactId): Promise<Message | null>;

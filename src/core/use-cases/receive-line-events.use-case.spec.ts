@@ -102,6 +102,7 @@ describe('ReceiveLineEvents', () => {
         channelAccessTokenEnc: cipher.encrypt(FAKE_LINE_ACCESS_TOKEN),
       },
       { botName: 'Shop', basicId: '@shop' },
+      { channelId: '1000000001', secretVerifiedAt: null },
     );
   };
 
@@ -174,6 +175,7 @@ describe('ReceiveLineEvents', () => {
       await settings.saveLineCredentials(
         { channelSecretEnc: 'garbage', channelAccessTokenEnc: 'garbage' },
         { botName: 'Shop', basicId: '@shop' },
+        { channelId: '1000000001', secretVerifiedAt: null },
       );
 
       const result = await deliver(bodyOf(textEvent('hi')));
@@ -709,6 +711,95 @@ describe('ReceiveLineEvents', () => {
       expect(logger.entries).toContainEqual(
         expect.objectContaining({ event: 'line.webhook.event_failed', errorName: 'UnknownError' }),
       );
+    });
+  });
+
+  describe('webhook redelivery', () => {
+    /** The database is down: every repository call and the ping throw. */
+    const databaseDown = () => {
+      const down = () => Promise.reject(new Error('connect ECONNREFUSED'));
+      const spies = [
+        vi.spyOn(webhookEvents, 'has').mockImplementation(down),
+        vi.spyOn(contacts, 'ensure').mockImplementation(down),
+        vi.spyOn(messages, 'insertInboundIfAbsent').mockImplementation(down),
+      ];
+      settings.pingError = new Error('connect ECONNREFUSED');
+      return () => {
+        for (const spy of spies) spy.mockRestore();
+        settings.pingError = null;
+      };
+    };
+
+    it('answers db.unavailable when nothing of the batch could be stored, so LINE redelivers', async () => {
+      const restore = databaseDown();
+
+      const result = await deliver(bodyOf(textEvent('one'), followEvent({ userId: OTHER_USER })));
+
+      expect(result).toMatchObject({ ok: false, error: { code: 'db.unavailable' } });
+      expect(logger.entries).toContainEqual(
+        expect.objectContaining({
+          level: 'error',
+          event: 'line.webhook.batch_unstored',
+          eventCount: 2,
+          errorCode: 'db.unavailable',
+        }),
+      );
+      restore();
+    });
+
+    it('stores a batch redelivered after the 5xx exactly once, however often it comes', async () => {
+      const event = textEvent('สั่งกาแฟ', { lineMessageId: 'lm-redelivered' });
+      const restore = databaseDown();
+      expect((await deliver(bodyOf(event))).ok).toBe(false);
+      restore();
+
+      // LINE redelivers the same webhookEventId, marked as a redelivery.
+      const again = { ...event, deliveryContext: { isRedelivery: true } };
+      const first = await deliver(bodyOf(again));
+      const second = await deliver(bodyOf(again));
+
+      expect(first.ok && second.ok).toBe(true);
+      const stored = await messagesOf();
+      expect(stored.map((m) => m.text)).toEqual(['สั่งกาแฟ']);
+      expect((await contactOf()).unreadCount).toBe(1);
+      // A redelivered event keeps no reply token (it cannot be used).
+      expect((await contactOf()).replyToken).toBeNull();
+      expect(logger.eventsOf()).toContain('line.webhook.event_duplicate');
+    });
+
+    it('answers ok when at least one event was stored and another failed', async () => {
+      const ensure = contacts.ensure.bind(contacts);
+      vi.spyOn(contacts, 'ensure')
+        .mockImplementationOnce(ensure)
+        .mockRejectedValueOnce(new Error('connect ECONNREFUSED'));
+      settings.pingError = new Error('connect ECONNREFUSED');
+
+      const result = await deliver(
+        bodyOf(textEvent('kept'), textEvent('lost', { userId: OTHER_USER })),
+      );
+
+      expect(result.ok).toBe(true);
+      expect((await messagesOf()).map((m) => m.text)).toEqual(['kept']);
+      expect(logger.eventsOf()).not.toContain('line.webhook.batch_unstored');
+    });
+
+    it('answers ok when every event failed for its own reason while the database answers', async () => {
+      vi.spyOn(contacts, 'ensure').mockRejectedValue(new TypeError('bad row'));
+
+      const result = await deliver(bodyOf(textEvent('a'), textEvent('b', { userId: OTHER_USER })));
+
+      expect(result.ok).toBe(true);
+      expect(logger.eventsOf()).not.toContain('line.webhook.batch_unstored');
+    });
+
+    it('answers ok for a batch of duplicates and unsupported events only', async () => {
+      const event = textEvent('once');
+      await followUpsOf(bodyOf(event));
+      settings.pingError = new Error('down');
+
+      const result = await deliver(bodyOf(event, { ...base({}), type: 'beacon' }));
+
+      expect(result.ok).toBe(true);
     });
   });
 

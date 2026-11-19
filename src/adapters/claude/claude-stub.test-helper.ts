@@ -1,5 +1,6 @@
 // Test-only harness for the Claude adapter specs: calls to the control routes of the stub
 // (docs/qa/stubs-and-fixtures.md section 6). Not imported by application code.
+import { type AddressInfo, createServer } from 'node:net';
 import {
   CLAUDE_EXTRACT_MAX_RETRIES,
   CLAUDE_GUARD_MAX_RETRIES,
@@ -7,6 +8,23 @@ import {
 } from './claude.constants';
 
 export const STUB_ANTHROPIC_KEY = 'stub-anthropic-key';
+
+/**
+ * A base URL on a local port nothing listens on, so the connection is refused before anything is
+ * sent. A port of the fetch "bad port" list (such as 9) fails differently, without a code.
+ */
+export const refusedBaseUrl = async (): Promise<string> => {
+  const server = createServer();
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as AddressInfo; // listen() on a TCP port gives an AddressInfo
+  await new Promise<void>((resolve, reject) => {
+    server.close((e) => {
+      if (e) reject(e);
+      else resolve();
+    });
+  });
+  return `http://127.0.0.1:${String(port)}/anthropic`;
+};
 
 export type StubPurpose = 'guard' | 'reply' | 'extract' | 'count_tokens';
 

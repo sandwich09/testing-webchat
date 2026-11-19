@@ -189,6 +189,11 @@ function Report({
       <p data-testid={testIds.usageAvg} className="pt-3 text-sub text-muted">
         {copy.usage.avgPerReply.replace('{usd}', average)}
       </p>
+      {report.noResponseCount > 0 ? (
+        <p data-testid={testIds.usageNoResponse} className="pt-1 text-sub text-muted">
+          {copy.usage.noResponse.replace('{n}', formatInt(report.noResponseCount))}
+        </p>
+      ) : null}
       {disclaimer}
     </>
   );

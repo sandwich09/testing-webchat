@@ -7,7 +7,10 @@ export type CheckHealthOutput = { database: 'ok' };
 
 export type CheckHealthDeps = Pick<AllPorts, 'settings'>;
 
-/** The one use case that catches a repository exception: it exists to report a down database. */
+/**
+ * Catches a repository exception because it exists to report a down database (ReceiveLineEvents
+ * asks the same `ping` to tell an outage from failed events).
+ */
 export const makeCheckHealth: (
   deps: CheckHealthDeps,
   config: UseCaseConfig,

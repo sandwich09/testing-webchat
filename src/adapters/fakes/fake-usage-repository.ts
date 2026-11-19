@@ -118,6 +118,12 @@ export class FakeUsageRepository implements UsageRepository {
     return Promise.resolve({ guardBlocked, outputRejected });
   };
 
+  readonly countNoResponse: UsageRepository['countNoResponse'] = (range) =>
+    Promise.resolve(
+      [...this.rows.values()].filter((r) => inRange(r, range) && r.error === 'ai.no_response')
+        .length,
+    );
+
   readonly listForContact: UsageRepository['listForContact'] = (contactId, range) =>
     Promise.resolve(
       [...this.rows.values()]

@@ -7,11 +7,13 @@ import {
   GUARD_TOPIC_MAX_CHARS,
 } from './limits.contract';
 import {
+  lineBotInfoResponseSchema,
   setLineCredentialsBodySchema,
   testTopicGuardBodySchema,
   testTopicGuardResponseSchema,
   updateSettingsBodySchema,
 } from './settings.contract';
+import { LINE_CHANNEL_ID_MAX_CHARS } from './limits.contract';
 
 describe('updateSettingsBodySchema', () => {
   it('accepts each field alone', () => {
@@ -137,36 +139,88 @@ describe('POST /api/settings/guard/test', () => {
 describe('setLineCredentialsBodySchema', () => {
   it('accepts values without whitespace and rejects the rest', () => {
     expect(
-      setLineCredentialsBodySchema.safeParse({ channelSecret: 's', channelAccessToken: 't' })
-        .success,
+      setLineCredentialsBodySchema.safeParse({
+        channelId: '1234567890',
+        channelSecret: 's',
+        channelAccessToken: 't',
+      }).success,
     ).toBe(true);
     expect(
-      setLineCredentialsBodySchema.safeParse({ channelSecret: 's s', channelAccessToken: 't' })
-        .success,
-    ).toBe(false);
-    expect(
-      setLineCredentialsBodySchema.safeParse({ channelSecret: 's', channelAccessToken: 't\n' })
-        .success,
-    ).toBe(false);
-    expect(
-      setLineCredentialsBodySchema.safeParse({ channelSecret: '', channelAccessToken: 't' })
-        .success,
+      setLineCredentialsBodySchema.safeParse({
+        channelId: '1234567890',
+        channelSecret: 's s',
+        channelAccessToken: 't',
+      }).success,
     ).toBe(false);
     expect(
       setLineCredentialsBodySchema.safeParse({
+        channelId: '1234567890',
+        channelSecret: 's',
+        channelAccessToken: 't\n',
+      }).success,
+    ).toBe(false);
+    expect(
+      setLineCredentialsBodySchema.safeParse({
+        channelId: '1234567890',
+        channelSecret: '',
+        channelAccessToken: 't',
+      }).success,
+    ).toBe(false);
+    expect(
+      setLineCredentialsBodySchema.safeParse({
+        channelId: '1234567890',
         channelSecret: 'x'.repeat(201),
         channelAccessToken: 't',
       }).success,
     ).toBe(false);
     expect(
       setLineCredentialsBodySchema.safeParse({
+        channelId: '1234567890',
         channelSecret: 's',
         channelAccessToken: 'x'.repeat(1001),
       }).success,
     ).toBe(false);
     expect(
-      setLineCredentialsBodySchema.safeParse({ channelSecret: 's', channelAccessToken: 't', x: 1 })
-        .success,
+      setLineCredentialsBodySchema.safeParse({
+        channelId: '1234567890',
+        channelSecret: 's',
+        channelAccessToken: 't',
+        x: 1,
+      }).success,
     ).toBe(false);
+  });
+
+  it('takes a Channel ID of 1 to LINE_CHANNEL_ID_MAX_CHARS digits and nothing else', () => {
+    const parse = (channelId: unknown) =>
+      setLineCredentialsBodySchema.safeParse({
+        channelId,
+        channelSecret: 's',
+        channelAccessToken: 't',
+      }).success;
+    expect(parse('1')).toBe(true);
+    expect(parse('9'.repeat(LINE_CHANNEL_ID_MAX_CHARS))).toBe(true);
+    for (const bad of [
+      '',
+      ' 1',
+      '12a',
+      '1.0',
+      '-1',
+      '9'.repeat(LINE_CHANNEL_ID_MAX_CHARS + 1),
+      12,
+      undefined,
+    ]) {
+      expect(parse(bad), String(bad)).toBe(false);
+    }
+  });
+
+  it('answers the secret check with the bot info', () => {
+    for (const secretStatus of ['verified', 'unchecked', 'no_channel_id']) {
+      expect(
+        lineBotInfoResponseSchema.safeParse({ botName: 'b', basicId: '@b', secretStatus }).success,
+      ).toBe(true);
+    }
+    expect(lineBotInfoResponseSchema.safeParse({ botName: 'b', basicId: '@b' }).success).toBe(
+      false,
+    );
   });
 });

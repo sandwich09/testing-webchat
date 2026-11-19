@@ -1,6 +1,6 @@
 # Infrastructure
 
-> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-18
+> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-19
 
 ## รุ่นของเครื่องมือ
 
@@ -39,17 +39,31 @@
 | --- | --- |
 | `DATABASE_URL`, `DIRECT_URL` | ฐานข้อมูลแบบ pooled และแบบตรง |
 | `ACCESS_CODE` | รหัสเข้าใช้ |
-| `SESSION_SECRET` | เซ็น cookie |
+| `SESSION_SECRET` | เซ็น cookie ร่วมกับ `ACCESS_CODE` (เปลี่ยนตัวใดตัวหนึ่ง cookie เดิมใช้ไม่ได้) |
 | `CREDENTIALS_ENCRYPTION_KEY` | เข้ารหัส credential ของ LINE |
 | `ANTHROPIC_API_KEY` | เรียก Claude |
 | `FILE_STORAGE` | `blob` หรือ `local` |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob (Vercel ใส่ให้เมื่อสร้าง store) |
 | `APP_BASE_URL` | ใช้แสดง Webhook URL และตรวจต้นทางของคำขอ |
-| `LINE_API_BASE_URL`, `LINE_DATA_API_BASE_URL`, `ANTHROPIC_BASE_URL` | ชี้ไป stub ในการทดสอบ ไม่ตั้งใน production |
+| `LINE_API_BASE_URL`, `LINE_DATA_API_BASE_URL`, `ANTHROPIC_BASE_URL` | ชี้ไป stub ในการทดสอบ ไม่ตั้งใน production (ระบบไม่เริ่มถ้าตั้งเมื่อ `VERCEL_ENV=production`) |
 | `POLL_INTERVAL_MS`, `AI_DEBOUNCE_MS` | ตั้งให้สั้นในการทดสอบ |
-| `RATE_LIMIT_SCALE` | ตัวเลข ≥ 1 ค่าเริ่มต้น 1 คูณทุกค่าจำกัดความถี่ยกเว้นการลองรหัสเข้าใช้ compose ตั้ง 10 เพื่อให้ E2E ที่รันขนานไม่ถูกจำกัด ห้ามตั้งใน production |
+| `RATE_LIMIT_SCALE` | ตัวเลข ≥ 1 ค่าเริ่มต้น 1 คูณทุกค่าจำกัดความถี่ยกเว้นการลองรหัสเข้าใช้ compose ตั้ง 10 เพื่อให้ E2E ที่รันขนานไม่ถูกจำกัด ห้ามตั้งใน production (ระบบไม่เริ่มถ้าไม่ใช่ 1 เมื่อ `VERCEL_ENV=production`) |
+| `VERCEL_ENV` | Vercel ตั้งให้เอง (`production`, `preview`, `development`) ไม่ต้องตั้งเองและไม่มีใน Docker, CI หรือเครื่อง dev เมื่อเป็น `production` ระบบปฏิเสธค่าที่ใช้เฉพาะการทดสอบตาม [project-setup ข้อ 6.10](project-setup.md#610-envexample) |
 
 ตรวจด้วย schema ตอนเริ่มระบบ ขาดตัวไหนระบบล้มทันทีพร้อมบอกชื่อ ส่วน credential ของ LINE กรอกในหน้าตั้งค่าและเก็บในฐานข้อมูล `.env.example` ใน repo มีแต่ค่าตัวอย่างปลอม
+
+## IP ของผู้เรียก
+
+ใช้เป็น key ของการจำกัดความถี่เท่านั้น (เก็บเป็น keyed hash ไม่มี IP ดิบในฐานข้อมูล) `clientIpOf` ใน [`http-request.ts`](../../src/composition/http-request.ts) อ่านเฉพาะ **ค่าสุดท้าย** ของ `x-forwarded-for` และไม่อ่าน `x-real-ip` เหตุผลอยู่ใน [ADR 0022](../adr/0022-client-ip-from-last-forwarded-hop.md)
+
+| ที่รัน | ใครเขียน `x-forwarded-for` | ค่าสุดท้ายคือ |
+| --- | --- | --- |
+| Vercel | edge ของ Vercel เขียนเป็น IP ที่มันเห็น ถ้าแทนที่ค่าที่ผู้เรียกส่งมา ค่าเดียวคือ IP จริง ถ้าต่อท้าย ค่าสุดท้ายยังเป็นของ Vercel (พฤติกรรมจริงต้องยืนยัน ตาม [implementation-plan](../plans/implementation-plan.md#สิ่งที่ต้องยืนยันก่อนหรือระหว่างสร้าง)) | IP ของผู้เรียกที่ปลอมไม่ได้ |
+| Docker, `pnpm dev`, CI (ไม่มี proxy ข้างหน้า) | Next.js เติมจาก address ของ socket เฉพาะเมื่อคำขอไม่มี header นี้ | address ของ socket หรือค่าที่ผู้เรียกส่งมาเอง ซึ่งยอมรับได้เพราะไม่เปิดสู่สาธารณะ |
+
+- ค่าที่ไม่ใช่ IP หรือยาวเกิน 45 ตัวอักษรถือว่าไม่มี IP
+- IPv4 ใช้ตามเดิม (รวมรูป `::ffff:a.b.c.d`) IPv6 ใช้ network /64 เพราะผู้ใช้หนึ่งรายมักได้ทั้ง /64 และเปลี่ยน address ได้ทุกครั้ง
+- คำขอที่ไม่มี IP: การลองรหัสเข้าใช้นับรวมในถังเดียว `RATE_LIMIT_UNLOCK_NO_IP` ที่เข้มกว่า และ log `access.unlock.client_ip_missing` ทุกครั้ง ผู้เรียกที่มี IP ไม่ถูกจำกัดตามถังนี้ action อื่นซึ่งต้องมี cookie อยู่แล้วใช้ subject `"unknown"` ร่วมกันตามเดิม
 
 ## CI และ deploy
 
@@ -66,7 +80,7 @@
 | ข้อจำกัด | วิธีรองรับ |
 | --- | --- |
 | ไม่มีหน่วยความจำร่วมระหว่าง function | ตัวนับความถี่และการรวมข้อความรัวใช้ฐานข้อมูล |
-| Function มีเพดานเวลา | `maxDuration` ของ webhook และ route PDF ตาม [project-setup](project-setup.md#104-adapter-และ-route), PDF จำกัดขนาดและจำนวนหน้า และแชทมีสถานะ `aiState` ไว้ตรวจงานที่ค้าง |
+| Function มีเพดานเวลา | `maxDuration` ของ webhook และ route PDF ตาม [project-setup](project-setup.md#104-adapter-และ-route) ซึ่งมากกว่าเวลาแย่ที่สุดของงานหลังตอบที่ test ตรึงไว้, PDF จำกัดขนาดและจำนวนหน้า และสถานะกลางทางทุกตัว (`aiState`, ไฟล์ที่กำลังอ่าน, สื่อขาเข้า, ข้อความที่กำลังส่ง) มีการคืนสภาพเมื่อค้าง ([data-model กฎของ repository ข้อ 13](data-model.md#กฎของ-repository)) |
 | ขนาด request มีเพดาน | PDF ไม่เกิน `PDF_MAX_BYTES` ส่วนรูปและวิดีโออัปโหลดจาก browser ตรงเข้าที่เก็บไฟล์ |
 | Cold start และ Neon หลับเมื่อไม่มีการใช้ | Webhook ทำงานน้อยที่สุดก่อนตอบ 200 และกัน event ซ้ำเมื่อ LINE ส่งซ้ำ |
 | Log เก็บไว้ไม่นาน | ความล้มเหลวสำคัญบันทึกลงฐานข้อมูลและแสดงในสถานะระบบ |

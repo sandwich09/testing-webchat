@@ -1,6 +1,6 @@
 # ถ้อยคำบนหน้าจอ
 
-> สถานะ: สร้างแล้ว · อัปเดตล่าสุด: 2026-11-18
+> สถานะ: สร้างแล้ว · อัปเดตล่าสุด: 2026-11-19
 
 รายการข้อความไทยทุกคำที่แอดมินเห็น จัดตามไฟล์ constant ของแต่ละ feature ชื่อ constant เป็น key คงที่ที่โค้ดและ [ui-screens](ui-screens.md) ใช้อ้าง
 
@@ -381,19 +381,25 @@
 | `settings.line.copy` | คัดลอก | ปุ่ม |
 | `settings.line.copiedToast` | คัดลอก Webhook URL แล้ว | toast |
 | `settings.line.copyFailed` | คัดลอกไม่ได้ เลือกข้อความแล้วคัดลอกเอง | เมื่อ clipboard ใช้ไม่ได้ |
+| `settings.line.channelId` | Channel ID | ป้ายแถว |
+| `settings.line.channelIdDesc` | ตัวเลขในแท็บ Basic settings ของ channel ระบบใช้ตรวจ Channel secret กับ LINE | คำอธิบายของแถว Channel ID |
+| `settings.line.channelIdPlaceholder` | ตัวเลขจาก LINE Developers Console | placeholder ของ Channel ID |
+| `settings.line.secretVerified` | LINE ยืนยันแล้วว่า Channel secret ตรงกับ Channel ID | บรรทัดของ Channel secret ในแถวสถานะ และต่อท้ายผลทดสอบ |
+| `settings.line.secretUnchecked` | ยังตรวจ Channel secret กับ LINE ไม่ได้ กด "ทดสอบการเชื่อมต่อ" อีกครั้งภายหลัง | สถานะเตือนเมื่อ LINE ตรวจ secret ไม่ได้ตอนบันทึกหรือทดสอบ |
+| `settings.line.secretNoChannelId` | ยังไม่ได้ตรวจ Channel secret ใส่ Channel ID พร้อม Channel secret และ Channel access token แล้วบันทึกอีกครั้ง | สถานะเตือนของ credential ที่บันทึกไว้ก่อนมีช่อง Channel ID |
 | `settings.line.channelSecret` | Channel secret | ป้ายแถว |
 | `settings.line.accessToken` | Channel access token | ป้ายแถว |
-| `settings.line.credentialsDesc` | ระบบไม่แสดงค่าที่บันทึกไว้ | คำอธิบายของทั้งสองแถว |
+| `settings.line.credentialsDesc` | ระบบไม่แสดงค่าที่บันทึกไว้ | คำอธิบายของแถว Channel secret และ Channel access token |
 | `settings.line.secretPlaceholderSet` | ใส่ค่าใหม่เพื่อแทนค่าเดิม | placeholder เมื่อเคยบันทึกแล้ว |
 | `settings.line.secretPlaceholderEmpty` | วางค่าจาก LINE Developers Console | placeholder เมื่อยังไม่เคยบันทึก |
 | `settings.line.save` | บันทึก | ปุ่ม |
 | `settings.line.test` | ทดสอบการเชื่อมต่อ | ปุ่ม |
-| `settings.line.testNeedsCredentials` | บันทึก Channel secret และ Channel access token ก่อนจึงจะทดสอบได้ | เหตุผลข้างปุ่มที่กดไม่ได้ |
+| `settings.line.testNeedsCredentials` | บันทึก Channel ID, Channel secret และ Channel access token ก่อนจึงจะทดสอบได้ | เหตุผลข้างปุ่มที่กดไม่ได้ |
 | `settings.line.testOk` | เชื่อมต่อได้ OA ชื่อ {name} | ผลทดสอบสำเร็จ |
-| `settings.line.savedToast` | บันทึกและตรวจกับ LINE แล้ว | toast หลังบันทึกสำเร็จ |
+| `settings.line.savedToast` | บันทึกและตรวจกับ LINE แล้ว | toast หลังบันทึกสำเร็จที่ LINE ยืนยัน Channel secret ได้ ถ้าตรวจไม่ได้ใช้ `common.toast.saved` |
 | `settings.line.setupTitle` | ยังไม่ได้เชื่อม LINE Official Account | หัวของขั้นตอนเริ่มต้น |
 | `settings.line.setupStep1` | สร้าง Messaging API channel ใน LINE Developers Console | ขั้นที่ 1 |
-| `settings.line.setupStep2` | คัดลอก Channel secret และ Channel access token มาใส่ด้านล่างแล้วบันทึก | ขั้นที่ 2 |
+| `settings.line.setupStep2` | คัดลอก Channel ID, Channel secret และ Channel access token มาใส่ด้านล่างแล้วบันทึก | ขั้นที่ 2 |
 | `settings.line.setupStep3` | นำ Webhook URL ไปใส่ใน channel แล้วเปิดใช้ webhook | ขั้นที่ 3 |
 | `settings.line.setupGuide` | อ่านขั้นตอนแบบละเอียด | ลิงก์ไป runbook |
 
@@ -401,10 +407,12 @@
 
 | Key | ข้อความ |
 | --- | --- |
+| `settings.line.error.channelIdRequired` | ใส่ Channel ID |
+| `settings.line.error.channelIdInvalid` | Channel ID เป็นตัวเลขเท่านั้น ไม่เกิน {max} หลัก |
 | `settings.line.error.channelSecretRequired` | ใส่ Channel secret |
 | `settings.line.error.accessTokenRequired` | ใส่ Channel access token |
 
-Token ไม่ถูกต้องและบันทึกไม่สำเร็จเพราะระบบ ใช้ข้อความจาก [error-catalog](../architecture/error-catalog.md) ซึ่งต้องตรงกับถ้อยคำใน [admin-backoffice](admin-backoffice.md)
+`{max}` คือ `LINE_CHANNEL_ID_MAX_CHARS` Token ไม่ถูกต้อง Channel ID กับ Channel secret ไม่ตรงกัน และบันทึกไม่สำเร็จเพราะระบบ ใช้ข้อความจาก [error-catalog](../architecture/error-catalog.md) ซึ่งต้องตรงกับถ้อยคำใน [admin-backoffice](admin-backoffice.md)
 
 ### คลังความรู้
 
@@ -492,6 +500,7 @@ Token ไม่ถูกต้องและบันทึกไม่สำ�
 | `settings.usage.guardCount` | {n} ครั้ง | ป้ายรองของแถวคัดกรอง |
 | `settings.usage.total` | รวมทั้งเดือน | แถวรวม |
 | `settings.usage.avgPerReply` | เฉลี่ยต่อข้อความที่ AI ตอบ {usd} | ใต้ตาราง |
+| `settings.usage.noResponse` | ส่งคำขอถึง AI แล้วไม่ได้คำตอบ {n} ครั้ง ผู้ให้บริการอาจคิดเงินครั้งเหล่านี้ ยอดรวมจึงอาจต่ำกว่าบิลจริง | ใต้ค่าเฉลี่ย เฉพาะเมื่อมีอย่างน้อยหนึ่งครั้ง |
 | `settings.usage.disclaimer` | ราคาโดยประมาณเป็นดอลลาร์สหรัฐ จากตารางราคา ณ {date} | ใต้ตาราง |
 | `settings.usage.empty` | เดือนนี้ AI ยังไม่ได้ตอบลูกค้า | สถานะว่าง |
 | `settings.usage.error` | โหลดค่าใช้จ่าย AI ไม่สำเร็จ | ตามด้วยปุ่ม `common.action.retry` |

@@ -3,7 +3,28 @@
  * The stub lives at `E2E_STUB_URL` (default `http://localhost:4010`).
  */
 
-export type LineMatch = { to?: string; userId?: string; messageId?: string; replyToken?: string };
+import { createHash } from 'node:crypto';
+
+export type LineMatch = {
+  to?: string;
+  userId?: string;
+  messageId?: string;
+  replyToken?: string;
+  channelId?: string;
+};
+
+/**
+ * The `X-Line-Retry-Key` the app must send for a message id: SHA-256 of the id, first 16 bytes,
+ * with version-5 and RFC 4122 variant bits (line-messaging, "ส่งข้อความ" rule 4). Written out here
+ * so the journeys check the adapter against an independent copy.
+ */
+export function lineRetryKeyOf(messageId: string): string {
+  const h = createHash('sha256').update(messageId, 'utf8').digest().subarray(0, 16);
+  h[6] = ((h[6] ?? 0) & 0x0f) | 0x50;
+  h[8] = ((h[8] ?? 0) & 0x3f) | 0x80;
+  const x = h.toString('hex');
+  return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20)}`;
+}
 
 export type StubClaudePurpose = 'guard' | 'reply' | 'extract' | 'count_tokens';
 
@@ -39,7 +60,9 @@ export type StubLineProfile = { userId: string; displayName: string; pictureUrl?
 export type StubLineFailNext = {
   endpoint: string;
   match?: LineMatch;
-  status: number;
+  /** A ready answer of the stub instead of `status` and `body` (stubs-and-fixtures 6). */
+  preset?: 'invalid_reply_token' | 'validation';
+  status?: number;
   body?: unknown;
   headers?: Record<string, string>;
   times?: number;

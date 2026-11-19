@@ -75,7 +75,24 @@ describe('GetUsageReport', () => {
       totalCost: 0n,
       replyCount: 0,
       averageCostPerReply: null,
+      noResponseCount: 0,
     });
+  });
+
+  it('counts calls sent without an answer (ai.no_response) of the month in noResponseCount', async () => {
+    await add({ cost: cost(0n), outcome: 'failed', error: 'ai.no_response' });
+    await add({ cost: cost(0n), outcome: 'failed', error: 'ai.no_response' });
+    await add({ cost: cost(100n), outcome: 'failed', error: 'ai.unavailable' });
+    await add({
+      cost: cost(0n),
+      outcome: 'failed',
+      error: 'ai.no_response',
+      createdAt: new Date('2026-11-30T17:30:00.000Z'),
+    });
+
+    const result = await run({ month: '2026-11' }, ctx);
+
+    expect(result.ok ? result.value.noResponseCount : null).toBe(2);
   });
 
   it('counts a row made at 2026-11-30T17:30Z in the month 2026-12 (Bangkok time)', async () => {

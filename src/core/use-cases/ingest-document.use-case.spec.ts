@@ -692,6 +692,28 @@ describe('IngestDocument', () => {
       );
     });
 
+    it('no answer from the API → failed knowledge.extract_failed and a zero-cost ingest row', async () => {
+      const followUp = await start();
+      extractor.enqueueError('ai.no_response');
+      await extract(followUp);
+      expect(await knowledge.findById(followUp.documentId)).toMatchObject({
+        status: 'failed',
+        error: 'knowledge.extract_failed',
+      });
+      expect(usage.records).toEqual([
+        expect.objectContaining({
+          kind: 'ingest',
+          documentId: followUp.documentId,
+          contactId: null,
+          model: followUp.model,
+          outcome: 'failed',
+          error: 'ai.no_response',
+          cost: 0n,
+        }),
+      ]);
+      expect((await settings.get()).lastAiError?.code).toBe('ai.no_response');
+    });
+
     it('countTokens fails → failed knowledge.extract_failed, the extraction cost still recorded', async () => {
       const followUp = await start();
       extractor.enqueueText(pagesText(2));

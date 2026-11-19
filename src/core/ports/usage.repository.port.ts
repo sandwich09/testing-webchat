@@ -32,5 +32,7 @@ export interface UsageRepository {
    * ai.invalid_output or ai.refused.
    */
   countSafetyOutcomes(range: DateRange): Promise<{ guardBlocked: number; outputRejected: number }>;
+  /** Rows of every kind in the range whose error is ai.no_response: sent, no answer, cost unknown. */
+  countNoResponse(range: DateRange): Promise<number>;
   listForContact(contactId: ContactId, range: DateRange): Promise<AiUsageRecord[]>;
 }

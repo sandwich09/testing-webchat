@@ -39,6 +39,12 @@ type MessageEvent = Extract<LineEvent, { kind: 'message' }>;
 
 const errorNameOf = (e: unknown): string => (e instanceof Error ? e.name : 'UnknownError');
 
+/** What one webhook request kept: the jobs to run, and whether any event changed stored data. */
+interface Batch {
+  followUps: FollowUpJob[];
+  stored: boolean;
+}
+
 /** Fields of a new inbound message that depend on the LINE message type. */
 const typedFields = (
   m: InboundLineMessage,
@@ -78,10 +84,26 @@ export const makeReceiveLineEvents: (
 ) => UseCase<
   ReceiveLineEventsInput,
   ReceiveLineEventsOutput,
-  'line.not_configured' | 'line.credentials_unreadable' | 'webhook.signature_invalid'
+  | 'line.not_configured'
+  | 'line.credentials_unreadable'
+  | 'webhook.signature_invalid'
+  | 'db.unavailable'
 > = (deps) => {
   const { settings, gateway, webhookEvents, contacts, messages, ids, clock, logger } = deps;
   const loadLineAccess = makeLoadLineAccess(deps);
+
+  /**
+   * Tells an outage from per-event failures once every event of a batch has failed. A repository
+   * exception says nothing about its cause, so the database is asked directly.
+   */
+  const databaseAnswers = async (): Promise<boolean> => {
+    try {
+      await settings.ping();
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
   const newMessageOf = (event: MessageEvent, contactId: ContactId): NewMessage => ({
     id: ids.messageId(),
@@ -179,12 +201,14 @@ export const makeReceiveLineEvents: (
     event: MessageEvent,
     token: LineAccessToken,
     ctx: RequestContext,
-    followUps: FollowUpJob[],
+    batch: Batch,
   ): Promise<void> => {
+    const { followUps } = batch;
     const { contact } = await ensureContact(event, token, ctx, true);
     const { inserted, message } = await messages.insertInboundIfAbsent(
       newMessageOf(event, contact.id),
     );
+    batch.stored = true;
     // Media still pending gets its job on every delivery that finds the row, even a redelivery:
     // the first delivery may have failed before returning the job. StoreInboundMedia finishes a
     // message once, so a second job is harmless.
@@ -215,7 +239,7 @@ export const makeReceiveLineEvents: (
     event: LineEvent,
     token: LineAccessToken,
     ctx: RequestContext,
-    followUps: FollowUpJob[],
+    batch: Batch,
   ): Promise<void> => {
     switch (event.kind) {
       case 'unsupported':
@@ -228,6 +252,7 @@ export const makeReceiveLineEvents: (
         const { contact, created } = await ensureContact(event, token, ctx, true);
         if (created || contact.followStatus === 'unfollowed') {
           await contacts.setFollowStatus(contact.id, 'following', event.timestamp);
+          batch.stored = true;
           await insertContactEvent(contact.id, 'contact.followed', event.timestamp);
         }
         return;
@@ -237,12 +262,13 @@ export const makeReceiveLineEvents: (
         const { contact } = await ensureContact(event, token, ctx, false);
         if (contact.followStatus === 'following') {
           await contacts.setFollowStatus(contact.id, 'unfollowed', event.timestamp);
+          batch.stored = true;
           await insertContactEvent(contact.id, 'contact.unfollowed', event.timestamp);
         }
         return;
       }
       case 'message':
-        await handleMessage(event, token, ctx, followUps);
+        await handleMessage(event, token, ctx, batch);
         return;
     }
   };
@@ -252,7 +278,7 @@ export const makeReceiveLineEvents: (
     event: LineEvent,
     token: LineAccessToken,
     ctx: RequestContext,
-    followUps: FollowUpJob[],
+    batch: Batch,
   ): Promise<void> => {
     if (await webhookEvents.has(event.webhookEventId)) {
       logger.log('info', 'line.webhook.event_duplicate', {
@@ -263,7 +289,7 @@ export const makeReceiveLineEvents: (
     }
     // Jobs go straight into followUps: once a message is stored its jobs must run even if a later
     // step of this event throws, because a redelivery finds the message and adds no job.
-    await handleEvent(event, token, ctx, followUps);
+    await handleEvent(event, token, ctx, batch);
     await webhookEvents.insertIfAbsent({
       webhookEventId: event.webhookEventId,
       type: event.kind,
@@ -308,11 +334,13 @@ export const makeReceiveLineEvents: (
       eventCount: parsed.value.length,
     });
 
-    const followUps: FollowUpJob[] = [];
+    const batch: Batch = { followUps: [], stored: false };
     const token = access.value.channelAccessToken;
+    let completed = 0;
     for (const event of parsed.value) {
       try {
-        await processEvent(event, token, ctx, followUps);
+        await processEvent(event, token, ctx, batch);
+        completed += 1;
       } catch (e) {
         logger.log('error', 'line.webhook.event_failed', {
           requestId: ctx.requestId,
@@ -321,6 +349,22 @@ export const makeReceiveLineEvents: (
         });
       }
     }
-    return ok({ followUps });
+    if (
+      completed === 0 &&
+      parsed.value.length > 0 &&
+      !batch.stored &&
+      batch.followUps.length === 0 &&
+      !(await databaseAnswers())
+    ) {
+      // Nothing of the batch was kept because the database is down: a 5xx makes LINE redeliver
+      // it (with "Webhook redelivery" on), and deduplication stores each event once then.
+      logger.log('error', 'line.webhook.batch_unstored', {
+        requestId: ctx.requestId,
+        eventCount: parsed.value.length,
+        errorCode: 'db.unavailable',
+      });
+      return err('db.unavailable');
+    }
+    return ok({ followUps: batch.followUps });
   };
 };

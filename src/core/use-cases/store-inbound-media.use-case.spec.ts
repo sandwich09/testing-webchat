@@ -7,7 +7,15 @@ import type {
   MessageId,
   PriceTable,
 } from '@/core/domain';
-import { IMAGE_MAX_BYTES, PREVIEW_MAX_BYTES, err, ok } from '@/core/domain';
+import {
+  IMAGE_MAX_BYTES,
+  MEDIA_CONTENT_CALL_WORST_MS,
+  MEDIA_JOB_BUDGET_MS,
+  MEDIA_NOT_READY_POLL_MS,
+  PREVIEW_MAX_BYTES,
+  err,
+  ok,
+} from '@/core/domain';
 import {
   FAKE_LINE_ACCESS_TOKEN,
   FAKE_LINE_CHANNEL_SECRET,
@@ -131,6 +139,7 @@ describe('StoreInboundMedia', () => {
         channelAccessTokenEnc: cipher.encrypt(FAKE_LINE_ACCESS_TOKEN),
       },
       { botName: 'Shop', basicId: '@shop' },
+      { channelId: '1000000001', secretVerifiedAt: null },
     );
     ({
       contact: { id: contactId },
@@ -168,6 +177,106 @@ describe('StoreInboundMedia', () => {
         sizeBytes: JPEG.length,
       }),
     );
+  });
+
+  describe('content LINE has not finished preparing (202)', () => {
+    const video = { original: MP4, preview: PREVIEW_JPEG, contentType: 'video/mp4' };
+
+    it('stays pending while it waits, then stores the video once LINE says it is ready', async () => {
+      const m = await insertMedia('video');
+      gateway.setContent(lineIdOf(m), { ...video, notReadyTimes: 3 });
+      const seen: (string | null)[] = [];
+      const sleep = clock.sleep.bind(clock);
+      vi.spyOn(clock, 'sleep').mockImplementation(async (ms) => {
+        seen.push((await reload(m.id)).mediaStatus);
+        await sleep(ms);
+      });
+
+      expect(await run({ messageId: m.id }, ctx)).toEqual(ok({ status: 'ready' }));
+
+      expect(seen).toEqual(['pending', 'pending', 'pending']);
+      expect(clock.sleeps).toEqual([
+        MEDIA_NOT_READY_POLL_MS,
+        MEDIA_NOT_READY_POLL_MS,
+        MEDIA_NOT_READY_POLL_MS,
+      ]);
+      expect((await reload(m.id)).mediaStatus).toBe('ready');
+      expect(logger.entries.filter((e) => e.event === 'media.store.not_ready')).toEqual([
+        expect.objectContaining({ messageId: m.id, attempt: 1 }),
+        expect.objectContaining({ messageId: m.id, attempt: 2 }),
+        expect.objectContaining({ messageId: m.id, attempt: 3 }),
+      ]);
+    });
+
+    it('fails with line.content_not_ready when it is still not ready within MEDIA_JOB_BUDGET_MS', async () => {
+      const m = await insertMedia('video');
+      gateway.setContent(lineIdOf(m), { ...video, notReadyTimes: 1000 });
+      const started = clock.now().getTime();
+
+      expect(await run({ messageId: m.id }, ctx)).toEqual(ok({ status: 'failed' }));
+
+      // Every wait left room for the worst case of what came after it.
+      expect(clock.now().getTime() - started + 2 * MEDIA_CONTENT_CALL_WORST_MS).toBeLessThanOrEqual(
+        MEDIA_JOB_BUDGET_MS,
+      );
+      expect(clock.sleeps.length).toBeGreaterThan(0);
+      expect((await reload(m.id)).mediaStatus).toBe('failed');
+      expect(logger.entries).toContainEqual(
+        expect.objectContaining({
+          event: 'media.store.failed',
+          errorCode: 'line.content_not_ready',
+        }),
+      );
+      expect(storedKeys()).toEqual([]);
+    });
+
+    it('does not wait when the first download already used the budget, and fails at once', async () => {
+      const m = await insertMedia('video');
+      gateway.setContent(lineIdOf(m), { ...video, notReadyTimes: 1 });
+      const download = gateway.downloadContent.bind(gateway);
+      vi.spyOn(gateway, 'downloadContent').mockImplementationOnce(async (...args) => {
+        clock.advance(MEDIA_CONTENT_CALL_WORST_MS); // a download that took its worst case
+        return download(...args);
+      });
+
+      expect(await run({ messageId: m.id }, ctx)).toEqual(ok({ status: 'failed' }));
+
+      expect(clock.sleeps).toEqual([]);
+      expect(logger.entries).toContainEqual(
+        expect.objectContaining({
+          event: 'media.store.failed',
+          errorCode: 'line.content_not_ready',
+        }),
+      );
+    });
+
+    it('fails with line.content_unavailable when LINE says the preparation failed', async () => {
+      const m = await insertMedia('video');
+      gateway.setContent(lineIdOf(m), { ...video, transcodingFailed: true });
+
+      expect(await run({ messageId: m.id }, ctx)).toEqual(ok({ status: 'failed' }));
+
+      expect(clock.sleeps).toEqual([MEDIA_NOT_READY_POLL_MS]);
+      expect(logger.entries).toContainEqual(
+        expect.objectContaining({
+          event: 'media.store.failed',
+          errorCode: 'line.content_unavailable',
+        }),
+      );
+    });
+
+    it('keeps asking while the status call fails, and stores the image when it is ready', async () => {
+      const m = await insertMedia('image');
+      gateway.setContent(lineIdOf(m), {
+        original: JPEG,
+        contentType: 'image/jpeg',
+        notReadyTimes: 1,
+      });
+      gateway.failNext('getContentStatus', 'line.unavailable');
+
+      expect(await run({ messageId: m.id }, ctx)).toEqual(ok({ status: 'ready' }));
+      expect(clock.sleeps).toEqual([MEDIA_NOT_READY_POLL_MS, MEDIA_NOT_READY_POLL_MS]);
+    });
   });
 
   it('uses a different random key for every message', async () => {

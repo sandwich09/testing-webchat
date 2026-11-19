@@ -1,6 +1,6 @@
 # Stub server และ fixture
 
-> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-18
+> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-19
 
 Stub server ที่ใช้แทน LINE และ Claude ใน Docker, adapter test และ E2E, ไฟล์ fixture และขั้นตอนของ E2E ทั้ง 9 เส้น เหตุผลของการใช้ stub อยู่ใน [ADR 0012](../adr/0012-testing-with-fakes-and-stubs.md) และชั้นของการทดสอบอยู่ใน [test-strategy](test-strategy.md)
 
@@ -32,7 +32,7 @@ Stub server ที่ใช้แทน LINE และ Claude ใน Docker, ada
 | `STUB_PORT` | `4010` | |
 | `STUB_PUBLIC_URL` | `http://localhost:4010` | URL ที่ browser เปิดได้ ใช้สร้าง `pictureUrl` ของ `info` (รูปของ OA) โปรไฟล์ลูกค้าไม่ใช้ค่านี้ ข้อ 4.4 |
 
-Seed ของ Docker ใส่ credential ของ LINE ปลอมไว้ใน Settings: Channel secret `stub-channel-secret` และ access token `stub-access-token` (เข้ารหัสด้วย key ของ dev ใน compose) ค่าทั้งสองประกาศใน `e2e/fixtures/line/credentials.ts` เป็น `STUB_CHANNEL_SECRET` และ `STUB_CHANNEL_ACCESS_TOKEN` ซึ่ง seed และ E2E ใช้ร่วมกัน Seed ตั้ง kill switch เปิด และชื่อ OA จากการทดสอบการเชื่อมต่อเป็นค่าที่ stub คืน
+Seed ของ Docker ใส่ credential ของ LINE ปลอมไว้ใน Settings: Channel ID `1000000000`, Channel secret `stub-channel-secret` และ access token `stub-access-token` (สองค่าหลังเข้ารหัสด้วย key ของ dev ใน compose) ค่าทั้งสามประกาศใน `e2e/fixtures/line/credentials.ts` เป็น `STUB_CHANNEL_ID`, `STUB_CHANNEL_SECRET` และ `STUB_CHANNEL_ACCESS_TOKEN` ซึ่ง seed และ E2E ใช้ร่วมกัน stub เขียน Channel ID กับ secret ซ้ำไว้ในตัว (import ไฟล์นี้ไม่ได้ ข้อ 1) เป็นคู่เดียวที่ route `oauth-token` ยอมรับ Seed ตั้ง kill switch เปิด และชื่อ OA จากการทดสอบการเชื่อมต่อเป็นค่าที่ stub คืน
 
 | ตัวแปรของ Playwright | ค่าเริ่มต้น | ใช้ทำอะไร |
 | --- | --- | --- |
@@ -42,7 +42,7 @@ Seed ของ Docker ใส่ credential ของ LINE ปลอมไว้�
 
 ## 3. สิ่งที่ stub ทำกับทุกคำขอ
 
-- บันทึกทุกคำขอที่เข้า route ของ LINE และ Claude ลงรายการในหน่วยความจำ (เก็บล่าสุด 2,000 รายการ) ในรูป:
+- บันทึกทุกคำขอที่เข้า route ของ LINE และ Claude ลงรายการในหน่วยความจำ (เก็บล่าสุด 2,000 รายการ) ในรูปด้านล่าง body ที่ไม่ใช่ JSON (form ของ `oauth-token` และ `oauth-revoke`) ถูกเก็บเป็น null รายการจึงไม่มี Channel secret หรือ token ที่ออก
 
 ```ts
 type RecordedRequest = {
@@ -80,20 +80,24 @@ type RecordedRequest = {
 | token เท่ากับ `stub-invalid-token` | 401 แบบเดียวกัน (ใช้ทดสอบ token ผิด) |
 | คำขอแบบ POST มี `Content-Type: application/json` และ body เป็น JSON | 400 `{ "message": "The request body has 1 error(s)" }` |
 
-ข้อความ error ของ LINE ในตารางนี้เป็นรูปแบบที่สมมติ ต้องยืนยันกับเอกสาร LINE แอปต้องไม่พึ่งข้อความ ใช้แค่ status
+Route `oauth-token` และ `oauth-revoke` ไม่ใช้สามข้อนี้: ไม่ต้องมี Authorization และ body เป็น form (`Content-Type: application/x-www-form-urlencoded` ไม่ใช่ตอบ 400 `{ "error": "invalid_request" }`)
+
+ข้อความ error ของ LINE ในตารางนี้เป็นรูปแบบที่สมมติ ต้องยืนยันกับเอกสาร LINE แอปใช้แค่ status ยกเว้น 400 ของ `reply` ซึ่งแอปแยกด้วย `message` ที่ตรงกับ `Invalid reply token` (ข้อ 4.4) และ 429 ของโควตา (`monthly limit`)
 
 ### 4.2 ตาราง route
 
 | endpoint | Method และ path | ตรวจ body | คำตอบปกติ |
 | --- | --- | --- | --- |
 | `reply` | `POST /line/v2/bot/message/reply` | `replyToken` เป็น string ไม่ว่าง, `messages` 1 ถึง 5 รายการ แต่ละรายการตรง schema ข้อ 4.3 | 200 `{ "sentMessages": [{ "id": "<เลข>", "quoteToken": "stub-qt-<เลข>" }] }` |
-| `push` | `POST /line/v2/bot/message/push` | `to` ขึ้นต้นด้วย `U`, `messages` 1 ถึง 5 รายการ, header `X-Line-Retry-Key` เป็น UUID | 200 รูปแบบเดียวกับ reply |
+| `push` | `POST /line/v2/bot/message/push` | `to` ขึ้นต้นด้วย `U`, `messages` 1 ถึง 5 รายการ, header `X-Line-Retry-Key` เป็น UUID version 4 หรือ 5 ที่มี variant ของ RFC 4122 (แบบที่ LINE รับแน่นอน version อื่นได้ 400 แอปจึงส่ง version 7 ไม่ได้โดยไม่มี test แดง) | 200 รูปแบบเดียวกับ reply |
 | `profile` | `GET /line/v2/bot/profile/:userId` | | 200 `{ "userId", "displayName", "language": "th" }` และ `pictureUrl` เฉพาะเมื่อ test ลงทะเบียนไว้ (ข้อ 4.4) |
 | `loading` | `POST /line/v2/bot/chat/loading/start` | `chatId` ขึ้นต้นด้วย `U`, `loadingSeconds` เป็นพหุคูณของ 5 ระหว่าง 5 ถึง 60 | 202 `{}` |
 | `info` | `GET /line/v2/bot/info` | | 200 `{ "userId": "Ustub00000000000000000000000000000", "basicId": "@000stub", "displayName": "ต้นหอม คาเฟ่ (ทดสอบ)", "pictureUrl": "<STUB_PUBLIC_URL>/assets/oa.png", "chatMode": "bot", "markAsReadMode": "auto" }` |
 | `content` | `GET /line-data/v2/bot/message/:messageId/content` | | ไฟล์ตาม prefix ของ `messageId` (ข้อ 4.4) |
 | `content-preview` | `GET /line-data/v2/bot/message/:messageId/content/preview` | | JPEG `tiny.jpg` ยกเว้น `messageId` ที่ใส่ไว้ด้วย `POST /__control/line/content` (ข้อ 4.4) |
-| `content-transcoding` | `GET /line-data/v2/bot/message/:messageId/content/transcoding` | | 200 `{ "status": "succeeded" }` |
+| `content-transcoding` | `GET /line-data/v2/bot/message/:messageId/content/transcoding` | | 200 `{ "status": "succeeded" }` ยกเว้น `messageId` ที่ใส่ไว้ด้วย `POST /__control/line/transcoding`: `processing` ระหว่างที่ยังเหลือคำตอบ "ยังไม่พร้อม" และ `failed` เมื่อใส่ `failed: true` |
+| `oauth-token` | `POST /line/v2/oauth/accessToken` | form: `grant_type=client_credentials`, `client_id`, `client_secret` | 200 `{ "access_token": "stub-issued-<เลข>", "expires_in": 2592000, "token_type": "Bearer" }` เฉพาะ `client_id` = `STUB_CHANNEL_ID` กับ `client_secret` = `STUB_CHANNEL_SECRET` นอกนั้น 400 `{ "error": "invalid_client" }` (`grant_type` อื่น 400 `unsupported_grant_type`) |
+| `oauth-revoke` | `POST /line/v2/oauth/revoke` | form: `access_token` | 200 `{}` เฉพาะ token ที่ `oauth-token` ออกและยังไม่ถูกเพิกถอน นอกนั้น 400 test จึงเห็นการเพิกถอนที่ผิด |
 | `asset` | `GET /assets/:name` | | ไฟล์รูปปลอมของโปรไฟล์และ OA (ไม่ต้องมี Authorization) |
 
 รายการที่ต้องยืนยันกับเอกสาร LINE: รูปแบบคำตอบของ `reply`, `push` และ `info`, status 202 และเงื่อนไขของ `loadingSeconds`, การมีอยู่และรูปแบบของ `content/preview` และ `content/transcoding`, ขีดจำกัด 5 ข้อความต่อคำขอ
@@ -115,7 +119,9 @@ type RecordedRequest = {
 | `replyToken` ขึ้นต้นด้วย `expired-` | 400 `{ "message": "Invalid reply token" }` | reply token หมดอายุแล้วแอปต้องไป push |
 | `replyToken` ที่ถูกใช้สำเร็จไปแล้วครั้งหนึ่ง | 400 `{ "message": "Invalid reply token" }` | token ใช้ได้ครั้งเดียว |
 | `X-Line-Retry-Key` ซ้ำกับคำขอ push ที่สำเร็จแล้ว | 409 `{ "message": "The retry key is already accepted" }` header `x-line-accepted-request-id: stub-req-<เลข>` และไม่นับเป็นข้อความใหม่ | แอปต้องถือว่าสำเร็จ (รูปแบบนี้ต้องยืนยันกับเอกสาร LINE) |
-| `X-Line-Retry-Key` ขาด | 400 | กฎของแอปที่ส่ง retry key ทุกครั้ง ([line-messaging](../specs/line-messaging.md)) LINE จริงไม่บังคับ |
+| `X-Line-Retry-Key` ขาด หรือไม่ใช่ UUID version 4 หรือ 5 | 400 พร้อม `details` | กฎของแอปที่ส่ง retry key แบบ version 5 ทุกครั้ง ([line-messaging](../specs/line-messaging.md#ส่งข้อความ) ข้อ 4) LINE จริงไม่บังคับให้มี key |
+| body ผิด schema ข้อ 4.3 (reply และ push) | 400 `{ "message": "The request body has 1 error(s)", "details": [{ "message": "...", "property": "/messages/<ลำดับ>" }] }` | แอปแยก 400 นี้ออกจาก token ที่ใช้ไม่ได้ และไม่ push ต่อ |
+| content ของ `messageId` ที่ใส่ไว้ด้วย `POST /__control/line/transcoding` (ใช้ก่อนกฎอื่นทุกข้อ) | 202 `{}` ไม่มีไฟล์ จนคำตอบ "ยังไม่พร้อม" หมด แล้วตามกฎข้อต่อไป | ไฟล์ที่ LINE ยังเตรียมไม่เสร็จ |
 | profile ของ `userId` ที่ขึ้นต้นด้วย `noprofile-` หรือไม่ได้ลงทะเบียนและขึ้นต้นด้วย `Unoprofile` | 404 `{ "message": "Not found" }` | ชื่อว่าง แสดงตัวอักษรแทนรูป |
 | profile ของ `userId` อื่นที่ไม่ได้ลงทะเบียน | `displayName` = `ลูกค้าทดสอบ ` + 4 ตัวท้ายของ userId ไม่มี `pictureUrl` | ค่าเริ่มต้นไม่มีรูป เพราะรูปบน origin ของ stub ถูก CSP ของแอป (`img-src`) กันและทำให้ browser ขึ้น console error |
 | content ของ `messageId` ขึ้นต้นด้วย `img` | `tiny.jpg` `Content-Type: image/jpeg` | |
@@ -194,9 +200,10 @@ Stub แยกชนิดคำขอตามลำดับนี้ แล�
 | Method และ path | Body | ผล |
 | --- | --- | --- |
 | `GET /__control/health` | | `{ "ok": true }` ใช้รอ stub พร้อมใน compose |
-| `POST /__control/reset` | | ล้างคิวทั้งหมด รายการคำขอ reply token ที่ใช้แล้ว retry key ที่รับแล้ว โปรไฟล์ที่ลงทะเบียน และไฟล์ที่ใส่ไว้ด้วย `line/content` (เลข `seq` ของรายการคำขอและเลข id ไม่เริ่มใหม่) |
+| `POST /__control/reset` | | ล้างคิวทั้งหมด รายการคำขอ reply token ที่ใช้แล้ว retry key ที่รับแล้ว โปรไฟล์ที่ลงทะเบียน ไฟล์ที่ใส่ไว้ด้วย `line/content` สถานะของ `line/transcoding` และ token ที่ `oauth-token` ออก (เลข `seq` ของรายการคำขอและเลข id ไม่เริ่มใหม่) |
 | `POST /__control/line/profiles` | `{ userId, displayName, pictureUrl?: string \| null }` | ลงทะเบียนโปรไฟล์ ไม่ใส่ `pictureUrl` หรือใส่ `null` ตอบโดยไม่มี field นี้ ใส่ URL เมื่อ test ต้องการรูป ซึ่งต้องอยู่บน origin ที่ CSP ของแอปอนุญาต เช่น `https://profile.line-scdn.net/...` แล้วให้ test ตอบ URL นั้นด้วยไฟล์ใน `e2e/fixtures/media/` ผ่าน `page.route` |
-| `POST /__control/line/fail-next` | `{ endpoint, match?, status, body?, headers?, times?: 1 }` | คำขอถัดไปที่ตรงเงื่อนไขได้คำตอบนี้แทน |
+| `POST /__control/line/fail-next` | `{ endpoint, match?, status, body?, headers?, times?: 1 }` หรือ `{ endpoint, match?, preset, headers?, times?: 1 }` | คำขอถัดไปที่ตรงเงื่อนไขได้คำตอบนี้แทน `preset` เติม status และ body ให้: `invalid_reply_token` คือ 400 `{ "message": "Invalid reply token" }` และ `validation` คือ 400 `{ "message": "The request body has 1 error(s)", "details": [{ "message": "Length must be between 1 and 5000", "property": "/messages/0/text" }] }` (400 ของ body ผิดรูปที่ไม่ใช่เรื่อง token) |
+| `POST /__control/line/transcoding` | `{ messageId, notReadyTimes?: 1, failed?: false }` | LINE ยังเตรียมไฟล์ของ `messageId` นั้นอยู่: แต่ละคำขอ `content` ที่ตอบ 202 และแต่ละคำขอ `content-transcoding` ที่ตอบ `processing` ใช้คำตอบ "ยังไม่พร้อม" หนึ่งครั้ง เมื่อหมด `content` ตอบไฟล์ตามปกติและสถานะเป็น `succeeded` `failed: true` ให้ `content` ตอบ 202 ตลอดและสถานะเป็น `failed` ใส่ซ้ำแทนค่าเดิม |
 | `POST /__control/line/delay-next` | `{ endpoint, match?, ms, times?: 1 }` | หน่วงคำตอบ ใช้ทำให้เห็นสถานะ "กำลังส่ง" ได้แน่นอน |
 | `POST /__control/line/content` | `{ messageId, data, contentType, preview?, previewContentType?: "image/jpeg", sendContentLength?: true }` (`data` และ `preview` เป็น base64) | ใส่ byte ที่ `content` และ `content/preview` ของ `messageId` นั้นตอบแทนกฎ prefix ในข้อ 4.4 ใส่ซ้ำแทนค่าเดิม |
 | `GET /__control/line/requests` | query `endpoint?`, `to?`, `since?` | `{ "items": RecordedRequest[] }` ของ `line` และ `line-data` |
@@ -212,7 +219,7 @@ Stub แยกชนิดคำขอตามลำดับนี้ แล�
 
 | บริการ | รูปแบบ | ตรงเมื่อ |
 | --- | --- | --- |
-| LINE | `{ to?: string; userId?: string; messageId?: string; replyToken?: string }` | ทุก field ที่ให้มาตรงกับค่าในคำขอ (`to` ของ push, `chatId` ของ loading, `userId` ใน path ของ profile) |
+| LINE | `{ to?: string; userId?: string; messageId?: string; replyToken?: string; channelId?: string }` | ทุก field ที่ให้มาตรงกับค่าในคำขอ (`to` ของ push, `chatId` ของ loading, `userId` ใน path ของ profile, `client_id` ของ `oauth-token`) |
 | Claude | string | ข้อความนั้นอยู่ใน text ของ `user` turn สุดท้าย หรือในชื่อไฟล์หรือข้อความของ document (คำขอของการคัดกรองมีข้อความของลูกค้าใน `<message>` ของ user turn จึงตรงด้วยข้อความเดียวกัน) |
 
 ลำดับการเลือก: รายการที่มี `match` และตรง ใช้ก่อนตามลำดับที่ใส่ (FIFO) รายการที่ไม่มี `match` ใช้เมื่อไม่มีรายการที่ตรง แต่ละรายการลด `times` ทีละหนึ่งและหายเมื่อเป็นศูนย์
@@ -445,7 +452,7 @@ Helper อื่นใน `e2e/helpers/`:
 | 2.4 | กด Enter | `message-bubble[data-author="admin"]` ปรากฏทันทีด้วย `data-status="pending"` และ `composer-input` ว่าง |
 | 2.5 | | `data-status="sent"`, `message-sender` เป็น `inbox.message.senderYou` |
 | 2.6 | `stubLineRequests({ endpoint: "reply" })` | มีหนึ่งคำขอที่ `replyToken` เท่ากับ `v.replyToken` และ `messages[0]` เป็น `{ type: "text", text: <ข้อความ> }` |
-| 2.7 | ส่งข้อความที่สอง | `stubLineRequests({ endpoint: "push", to: v.userId })` มีหนึ่งคำขอ, `xLineRetryKey` เป็น UUID |
+| 2.7 | ส่งข้อความที่สอง | `stubLineRequests({ endpoint: "push", to: v.userId })` มีหนึ่งคำขอ, `xLineRetryKey` เป็น UUID version 5 |
 | 2.8 | กลับไปรายชื่อ | `contact-row-preview` ขึ้นต้นด้วย `inbox.preview.you` |
 | 2.9 | พิมพ์ข้อความแล้วกด Shift+Enter | ช่องพิมพ์มีสองบรรทัด ยังไม่ส่ง |
 | 2.10 | `postLineWebhook("unfollow.json", v)` | `composer-disabled-reason` มองเห็น, `composer-input` disabled, `row(name)` มี `data-follow="unfollowed"` |
@@ -469,7 +476,7 @@ Helper อื่นใน `e2e/helpers/`:
 | 3.11 | ส่ง `message-image.json` หลังเปิดสวิตช์อีกครั้ง | `system-line[data-event-code="handoff.customer_sent_image"]` มองเห็น |
 | 3.12 | หน้าตั้งค่า ส่วนค่าใช้จ่าย AI | `usage-row` ของลูกค้ามีราคาเท่ากับผลรวมของคำตอบที่ stub ตอบ ($0.0064 ต่อครั้งของ Opus 5.5) |
 
-### เส้นที่ 4: Kill switch
+### เส้นที่ 4: Kill switch และ Channel ID
 
 `test.describe("เส้นที่ 4")` ในไฟล์ `e2e/global-state.serial.spec.ts` project `serial-desktop` และ `serial-mobile`
 
@@ -481,7 +488,8 @@ Helper อื่นใน `e2e/helpers/`:
 | 4.4 | ลูกค้าส่ง `q` แล้ว `waitAiIdle` | `stubClaudeRequests({ match: q })` ว่าง |
 | 4.5 | กลับหน้าตั้งค่า เปิด `settings-kill-switch` | |
 | 4.6 | เปิดแชทเดิม | `thread-ai-switch` enabled และ `aria-checked="true"` (ค่าเดิมกลับมา) |
-| 4.7 | finally | kill switch เปิดอยู่ |
+| 4.7 | เปิด `/settings` ส่วน LINE ใส่ `12ab` ใน `line-channel-id` แล้วกด `line-save` จากนั้นใส่ `STUB_CHANNEL_ID`, `STUB_CHANNEL_SECRET` และ `STUB_CHANNEL_ACCESS_TOKEN` แล้วกด `line-save` และโหลดหน้าใหม่ | ก่อนแก้ `line-channel-id` เป็น `STUB_CHANNEL_ID` ของ seed และ `line-secret-status` `data-status="verified"`, ค่าผิดได้ `settings.line.error.channelIdInvalid` (`{max}` = `LINE_CHANNEL_ID_MAX_CHARS`) โดยไม่มีคำขอ, บันทึกได้ toast `settings.line.savedToast` และ stub มีคำขอ `oauth-token` หนึ่งครั้งที่ตอบ 200, หลังโหลดใหม่ `line-channel-id` ยังเป็นค่าเดิม ช่อง secret และ token ว่าง และ `line-secret-status` เป็น `verified` |
+| 4.8 | finally | kill switch เปิดอยู่ |
 
 ### เส้นที่ 5: ส่งรูป
 
@@ -528,7 +536,7 @@ Helper อื่นใน `e2e/helpers/`:
 | 7.1 | สร้างลูกค้าด้วย `replyToken = "expired-" + hex` | |
 | 7.2 | `stubLineFailNext({ endpoint: "push", match: { to: v.userId }, status: 400, body: { message: "stub failure" } })` | |
 | 7.3 | ส่งข้อความ `m` | `message-bubble` ของ `m` ได้ `data-status="failed"`, `message-error` มองเห็นและมี `data-code`, `message-retry` มองเห็น |
-| 7.4 | `stubLineRequests({ endpoint: "push", to: v.userId })` | หนึ่งคำขอ เก็บ `xLineRetryKey` เป็น `k` |
+| 7.4 | `stubLineRequests({ endpoint: "push", to: v.userId })` | หนึ่งคำขอ เก็บ `xLineRetryKey` เป็น `k` ซึ่งเท่ากับ `lineRetryKeyOf(data-message-id)` (UUID version 5 จาก SHA-256 ของ id ใน `e2e/helpers/stub.ts` เขียนแยกจาก adapter) และไม่เท่ากับ id |
 | 7.5 | กด `message-retry` | `data-status` เป็น `pending` แล้ว `sent` |
 | 7.6 | `stubLineRequests({ endpoint: "push", to: v.userId })` | สองคำขอ และทั้งคู่มี `xLineRetryKey` เท่ากับ `k` |
 | 7.7 | `stubLineFailNext({ endpoint: "push", match: { to: v.userId }, status: 409, headers: { "x-line-accepted-request-id": "stub-req-1" } })` แล้วส่งข้อความ | `data-status="sent"` (409 จาก retry key ซ้ำถือว่าสำเร็จ) |

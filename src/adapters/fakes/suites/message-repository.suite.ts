@@ -206,25 +206,128 @@ export const describeMessageRepositorySuite = (
 
       it('markPendingIfFailed moves failed to pending once and clears the error', async () => {
         const m = (await repo.insertOutboundIfAbsent(outbound(A, 1))).message;
-        expect(await repo.markPendingIfFailed(m.id)).toBe(false);
+        expect(await repo.markPendingIfFailed(m.id, at(9))).toBe(false);
         const failed = await repo.markFailed(m.id, 'line.push_failed');
-        expect(await repo.markPendingIfFailed(m.id)).toBe(true);
+        expect(await repo.markPendingIfFailed(m.id, at(9))).toBe(true);
         const pending = await get(m.id);
         expect(pending).toMatchObject({ deliveryStatus: 'pending', deliveryError: null });
         expect(pending.updatedSeq).toBeGreaterThan(failed.updatedSeq);
-        expect(await repo.markPendingIfFailed(m.id)).toBe(false);
+        expect(await repo.markPendingIfFailed(m.id, at(9))).toBe(false);
         await repo.markSent(m.id, at(5));
-        expect(await repo.markPendingIfFailed(m.id)).toBe(false);
-        expect(await repo.markPendingIfFailed(messageId(404))).toBe(false);
+        expect(await repo.markPendingIfFailed(m.id, at(9))).toBe(false);
+        expect(await repo.markPendingIfFailed(messageId(404), at(9))).toBe(false);
+      });
+
+      it('recordFirstPush dates the first push once; retries and later calls keep it', async () => {
+        const m = (await repo.insertOutboundIfAbsent(outbound(A, 1))).message;
+        expect(m.firstPushAt).toBeNull();
+        await repo.recordFirstPush(m.id, at(5));
+        expect((await get(m.id)).firstPushAt).toEqual(at(5));
+        await repo.markFailed(m.id, 'line.push_failed');
+        expect(await repo.markPendingIfFailed(m.id, at(9))).toBe(true);
+        await repo.recordFirstPush(m.id, at(9));
+        const after = await repo.markSent(m.id, at(10));
+        expect(after.firstPushAt).toEqual(at(5));
+        // A missing row is not an error: there is nothing to date.
+        await repo.recordFirstPush(messageId(404), at(9));
+      });
+
+      it('recordFirstPush keeps the value of one concurrent caller and never moves it', async () => {
+        const m = (await repo.insertOutboundIfAbsent(outbound(A, 1))).message;
+        await Promise.all([1, 2, 3, 4].map((n) => repo.recordFirstPush(m.id, at(n))));
+        const stored = (await get(m.id)).firstPushAt;
+        expect(stored).not.toBeNull();
+        await repo.recordFirstPush(m.id, at(0));
+        expect((await get(m.id)).firstPushAt).toEqual(stored);
       });
 
       it('markPendingIfFailed gives true to one of several concurrent callers', async () => {
         const m = (await repo.insertOutboundIfAbsent(outbound(A, 1))).message;
         await repo.markFailed(m.id, 'line.push_failed');
         const results = await Promise.all(
-          Array.from({ length: 5 }, () => repo.markPendingIfFailed(m.id)),
+          Array.from({ length: 5 }, () => repo.markPendingIfFailed(m.id, at(9))),
         );
         expect(results.filter(Boolean)).toHaveLength(1);
+      });
+    });
+
+    describe('failStuckMedia', () => {
+      const media = (contact: ContactId, n: number, over: Partial<NewMessage> = {}) =>
+        inbound(contact, n, { type: 'image', text: null, mediaStatus: 'pending', ...over });
+
+      it('fails pending media of that contact created before staleBefore, once, with a new updatedSeq', async () => {
+        const old = (await repo.insertInboundIfAbsent(media(A, 1))).message;
+        const edge = (await repo.insertInboundIfAbsent(media(A, 10))).message;
+        const ready = (await repo.insertInboundIfAbsent(media(A, 2, { mediaStatus: 'ready' })))
+          .message;
+        const otherContact = (await repo.insertInboundIfAbsent(media(B, 3))).message;
+
+        expect(await repo.failStuckMedia(A, at(10))).toEqual([old.id]);
+        const failed = await get(old.id);
+        expect(failed.mediaStatus).toBe('failed');
+        expect(failed.updatedSeq).toBeGreaterThan(old.updatedSeq);
+        // createdAt equal to staleBefore is not older; other statuses and contacts are untouched.
+        expect((await get(edge.id)).mediaStatus).toBe('pending');
+        expect(await get(ready.id)).toEqual(ready);
+        expect(await get(otherContact.id)).toEqual(otherContact);
+        expect(await repo.failStuckMedia(A, at(10))).toEqual([]);
+        // A late StoreInboundMedia run loses its compare-and-set on pending.
+        expect(
+          await repo.setMediaReady(old.id, 'https://files.test/o.jpg', 'https://files.test/p.jpg'),
+        ).toBe(false);
+      });
+
+      it('gives each stuck row to one of several concurrent callers', async () => {
+        await repo.insertInboundIfAbsent(media(A, 1));
+        await repo.insertInboundIfAbsent(media(A, 2));
+        const results = await Promise.all(
+          Array.from({ length: 5 }, () => repo.failStuckMedia(A, at(30))),
+        );
+        expect(results.flat().sort()).toEqual([messageId(1), messageId(2)]);
+      });
+    });
+
+    describe('failStuckDeliveries', () => {
+      it('fails pending outbound rows of that contact whose attempt started before staleBefore', async () => {
+        const old = (await repo.insertOutboundIfAbsent(outbound(A, 1))).message;
+        const fresh = (await repo.insertOutboundIfAbsent(outbound(A, 20))).message;
+        const sent = (await repo.insertOutboundIfAbsent(outbound(A, 2))).message;
+        await repo.markSent(sent.id, at(3));
+        const otherContact = (await repo.insertOutboundIfAbsent(outbound(B, 4))).message;
+
+        expect(await repo.failStuckDeliveries(A, at(20))).toEqual([old.id]);
+        const failed = await get(old.id);
+        expect(failed).toMatchObject({
+          deliveryStatus: 'failed',
+          deliveryError: 'line.send_interrupted',
+          retryKey: old.retryKey,
+        });
+        expect(failed.updatedSeq).toBeGreaterThan(old.updatedSeq);
+        expect((await get(fresh.id)).deliveryStatus).toBe('pending');
+        expect((await get(sent.id)).deliveryStatus).toBe('sent');
+        expect((await get(otherContact.id)).deliveryStatus).toBe('pending');
+        expect(await repo.failStuckDeliveries(A, at(20))).toEqual([]);
+        // The existing retry works on the recovered row.
+        expect(await repo.markPendingIfFailed(old.id, at(40))).toBe(true);
+      });
+
+      it('measures a retried row from its last markPendingIfFailed, not from createdAt', async () => {
+        const m = (await repo.insertOutboundIfAbsent(outbound(A, 1))).message;
+        await repo.markFailed(m.id, 'line.push_failed');
+        expect(await repo.markPendingIfFailed(m.id, at(50))).toBe(true);
+
+        expect(await repo.failStuckDeliveries(A, at(50))).toEqual([]);
+        expect((await get(m.id)).deliveryStatus).toBe('pending');
+        expect(await repo.failStuckDeliveries(A, at(51))).toEqual([m.id]);
+      });
+
+      it('gives each stuck row to one of several concurrent callers', async () => {
+        await repo.insertOutboundIfAbsent(outbound(A, 1));
+        await repo.insertOutboundIfAbsent(outbound(A, 2));
+        const results = await Promise.all(
+          Array.from({ length: 5 }, () => repo.failStuckDeliveries(A, at(30))),
+        );
+        expect(results.flat().sort()).toEqual([messageId(1), messageId(2)]);
       });
     });
 

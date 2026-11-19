@@ -55,13 +55,19 @@ export function createSettingsRepository(
       return toEncryptedCredentials(await client.settings.findUniqueOrThrow({ where }));
     },
 
-    async saveLineCredentials(c, bot) {
+    async saveLineCredentials(c, bot, channel) {
       await change({
         lineChannelSecretEnc: c.channelSecretEnc,
         lineAccessTokenEnc: c.channelAccessTokenEnc,
         lineBotName: bot.botName,
         lineBasicId: bot.basicId,
+        lineChannelId: channel.channelId,
+        lineSecretVerifiedAt: channel.secretVerifiedAt,
       });
+    },
+
+    async recordLineSecretCheck(verifiedAt) {
+      await change({ lineSecretVerifiedAt: verifiedAt });
     },
 
     async updateLineBotInfo(bot) {

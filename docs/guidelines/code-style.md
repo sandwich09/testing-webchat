@@ -101,13 +101,15 @@ composition/          →  ทุกชั้น
 
 - Branch ทำงานอายุสั้น เข้า `main` ผ่าน PR แบบ squash เท่านั้น
 - Commit เป็น Conventional Commits ภาษาอังกฤษ เล็กและทำเรื่องเดียว เช่น `feat(inbox): send admin reply with retry key`
-- แม่แบบ PR: เปลี่ยนอะไรและทำไม, ทดสอบอย่างไรพร้อมผล, ภาพหน้าจอเมื่อแตะ UI, เอกสารที่แก้, ความเสี่ยงและวิธีย้อนกลับ
+- Stage ไฟล์ด้วย path (`git add <path>`) ไม่ใช้ `git add -A` หรือ `git add .` เมื่อมีมากกว่าหนึ่งคนหรือหนึ่ง agent ทำงานใน checkout เดียวกัน ก่อน commit ดู `git diff --cached --name-only` ว่ามีเฉพาะไฟล์ของงานนี้ และหลัง rebase ให้อ่านไฟล์ที่คนอื่นแก้ก่อน ไม่ commit ทับสภาพเก่า
+- แม่แบบ PR อยู่ที่ [`.github/pull_request_template.md`](../../.github/pull_request_template.md): เปลี่ยนอะไรและทำไม, ทดสอบอย่างไรพร้อมผลของคำสั่งที่รันจริง, สิ่งที่ไม่ได้ตรวจ, ความเสี่ยงและวิธีย้อนกลับ และรายการติ๊ก (test ใหม่หรือที่แก้เคยแดงก่อนแก้, แก้เอกสารใน commit เดียวกัน, ผ่าน [pitfalls-and-prevention](pitfalls-and-prevention.md#รายการตรวจก่อนเปิด-pr-และก่อน-deploy)) ภาพหน้าจอแนบเมื่อแตะ UI
 
 ## รายการตรวจก่อนเปิด PR
 
 - [ ] lint, typecheck, unit test ผ่าน และ E2E ผ่านเมื่อแตะเส้นทางของผู้ใช้
 - [ ] กฎใหม่มี unit test และ adapter ใหม่ผ่านชุดทดสอบของ port
 - [ ] งานหน้าจอถูกเปิดดูจริงที่ 390 และ 1280
+- [ ] test ใหม่หรือที่แก้เคยแดงก่อนแก้
 - [ ] เอกสารที่เกี่ยวข้องถูกแก้ใน commit เดียวกัน
 - [ ] ไม่มี credential หรือข้อมูลลูกค้าจริงในโค้ด, test และ log
 - [ ] ผ่านรายการตรวจใน [pitfalls-and-prevention](pitfalls-and-prevention.md#รายการตรวจก่อนเปิด-pr-และก่อน-deploy)

@@ -4,3 +4,5 @@
  */
 export const STUB_CHANNEL_SECRET = 'stub-channel-secret';
 export const STUB_CHANNEL_ACCESS_TOKEN = 'stub-access-token';
+/** Channel ID whose channel secret is STUB_CHANNEL_SECRET (the stub's client-credentials route). */
+export const STUB_CHANNEL_ID = '1000000000';

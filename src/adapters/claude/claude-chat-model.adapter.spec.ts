@@ -6,7 +6,12 @@ import { describeChatModelSuite } from '@/adapters/fakes';
 import { ADAPTER_TEST_STUB_URL } from '../../../test-support/adapters.constants';
 import { createClaudeChatModel } from './claude-chat-model.adapter';
 import { CLAUDE_FALLBACK_BETA } from './claude.constants';
-import { createStubControl, STUB_ANTHROPIC_KEY, STUB_ERRORS } from './claude-stub.test-helper';
+import {
+  createStubControl,
+  refusedBaseUrl,
+  STUB_ANTHROPIC_KEY,
+  STUB_ERRORS,
+} from './claude-stub.test-helper';
 
 const stubControl = createStubControl(ADAPTER_TEST_STUB_URL);
 const STUB_ANTHROPIC_BASE_URL = stubControl.baseURL;
@@ -214,11 +219,10 @@ describe('createClaudeChatModel response', () => {
     expect(result.ok && result.value.output?.handoffReason).toBeNull();
   });
 
-  it('returns ai.unavailable when the API cannot be reached', async () => {
+  it('returns ai.unavailable when the connection is refused, since nothing was sent', async () => {
     const chatModel = createClaudeChatModel({
       apiKey: STUB_ANTHROPIC_KEY,
-      // Port 9 (discard) is closed on the test machine: the connection is refused.
-      baseURL: 'http://127.0.0.1:9/anthropic',
+      baseURL: await refusedBaseUrl(),
     });
     const result = await chatModel.generateReply(request());
     expect(result.ok).toBe(false);

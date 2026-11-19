@@ -10,6 +10,7 @@ import { describeTopicGuardSuite } from '@/adapters/fakes';
 import { ADAPTER_TEST_STUB_URL } from '../../../test-support/adapters.constants';
 import { CLAUDE_GUARD_MAX_RETRIES } from './claude.constants';
 import { createClaudeTopicGuard } from './claude-topic-guard.adapter';
+import { callDeadlineMs } from './claude.mapper';
 import { createStubControl, STUB_ANTHROPIC_KEY, STUB_ERRORS } from './claude-stub.test-helper';
 
 const stubControl = createStubControl(ADAPTER_TEST_STUB_URL);
@@ -172,7 +173,7 @@ describe('createClaudeTopicGuard timeout and retries', () => {
   });
 
   it(
-    'returns ai.unavailable when no attempt answers within GUARD_TIMEOUT_MS',
+    'returns ai.no_response when no attempt answers within GUARD_TIMEOUT_MS',
     { timeout: (GUARD_TIMEOUT_MS + 2_000) * (CLAUDE_GUARD_MAX_RETRIES + 1) + 5_000 },
     async () => {
       await stubControl.delayNext({
@@ -180,11 +181,22 @@ describe('createClaudeTopicGuard timeout and retries', () => {
         times: CLAUDE_GUARD_MAX_RETRIES + 1,
       });
       const result = await makeTopicGuard().classify(request());
-      expect(!result.ok && result.error.code).toBe('ai.unavailable');
+      expect(!result.ok && result.error.code).toBe('ai.no_response');
       // One first attempt plus CLAUDE_GUARD_MAX_RETRIES retries, no more.
       expect(await stubControl.requests('guard')).toHaveLength(CLAUDE_GUARD_MAX_RETRIES + 1);
     },
   );
+
+  it('ends the whole call at its deadline, even if the stub would answer later', async () => {
+    await stubControl.delayNext({ ms: 3_000, times: CLAUDE_GUARD_MAX_RETRIES + 1 });
+    const started = Date.now();
+    const result = await makeTopicGuard().classify(request({ timeoutMs: 300 }));
+    expect(!result.ok && result.error.code).toBe('ai.no_response');
+    // callDeadlineMs: 300 ms per attempt plus CLAUDE_RETRY_WAIT_MAX_MS before the retry.
+    expect(Date.now() - started).toBeLessThan(
+      callDeadlineMs({ timeoutMs: 300, maxRetries: CLAUDE_GUARD_MAX_RETRIES }) + 1_000,
+    );
+  });
 
   it('uses the timeout of the request and retries a timed-out attempt', async () => {
     await stubControl.delayNext({ ms: 2_000, times: 1 });

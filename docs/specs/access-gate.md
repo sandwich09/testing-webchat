@@ -1,6 +1,6 @@
 # รหัสเข้าใช้
 
-> สถานะ: สร้างแล้ว · อัปเดตล่าสุด: 2026-11-18
+> สถานะ: สร้างแล้ว · อัปเดตล่าสุด: 2026-11-19
 
 ## เป้าหมาย
 
@@ -13,9 +13,11 @@
 3. ช่องรหัสเป็นช่องรหัสผ่านมาตรฐานของ browser (แสดงเป็นจุด) กด Enter เพื่อส่งได้
 4. Server เทียบรหัสกับ `ACCESS_CODE` แบบ timing-safe
 5. รหัสถูก: ออก cookie ที่เซ็นกำกับ อ่านจาก JavaScript ไม่ได้ ใช้ได้เฉพาะ HTTPS และหมดอายุตาม `ACCESS_COOKIE_TTL_MS` ([project-setup](../architecture/project-setup.md#101-แกนกลาง))
-6. ทุกหน้าและทุก API ตรวจ cookie ยกเว้น `POST /api/line/webhook`, `GET /api/health`, `POST /api/access/unlock` และ `GET`/`HEAD /api/local-storage/*key` (URL สาธารณะของสื่อเมื่อ `FILE_STORAGE=local` ซึ่ง LINE ต้องดึงรูปและวิดีโอที่แอดมินส่งได้โดยไม่มี cookie ส่วน `PUT` ของ path เดียวกันยังต้องมี cookie)
-7. เมนูซ้ายมี "ออกจากระบบ" ซึ่งลบ cookie แล้วกลับหน้ายินดีต้อนรับ
-8. Endpoint ที่แก้ข้อมูลรับเฉพาะคำขอที่ต้นทางตรงกับ `APP_BASE_URL`
+6. Key ที่เซ็น cookie สร้างจากทั้ง `SESSION_SECRET` และ `ACCESS_CODE` ด้วย HKDF-SHA256 (salt `twa.access-token`, info `hmac-sha256.v1.access-code:` ต่อด้วย SHA-256 ของรหัสแบบ hex) การเปลี่ยน `ACCESS_CODE` หรือ `SESSION_SECRET` อย่างใดอย่างหนึ่งจึงทำให้ cookie ทุกใบที่ออกก่อนหน้าใช้ไม่ได้ ทุกคนต้องเข้าระบบใหม่ด้วยรหัสใหม่ ระบบไม่เก็บรหัสและไม่ใส่รหัสใน cookie หรือ log มีเพียง digest ของรหัสที่เข้าไปในการสร้าง key ([`hmac-access-token-signer.adapter.ts`](../../src/adapters/system/hmac-access-token-signer.adapter.ts))
+7. ทุกหน้าและทุก API ตรวจ cookie ยกเว้น `POST /api/line/webhook`, `GET /api/health`, `POST /api/access/unlock` และ `GET`/`HEAD /api/local-storage/*key` (URL สาธารณะของสื่อเมื่อ `FILE_STORAGE=local` ซึ่ง LINE ต้องดึงรูปและวิดีโอที่แอดมินส่งได้โดยไม่มี cookie ส่วน `PUT` ของ path เดียวกันยังต้องมี cookie)
+8. เมนูซ้ายมี "ออกจากระบบ" ซึ่งลบ cookie แล้วกลับหน้ายินดีต้อนรับ
+9. Endpoint ที่แก้ข้อมูลรับเฉพาะคำขอที่ต้นทางตรงกับ `APP_BASE_URL`
+10. IP ของผู้เรียกที่ใช้นับการลองรหัสมาจากค่าสุดท้ายของ `x-forwarded-for` ตาม [infrastructure](../architecture/infrastructure.md#ip-ของผู้เรียก) และ [ADR 0022](../adr/0022-client-ip-from-last-forwarded-hop.md)
 
 ## กรณีผิดพลาดและกรณีขอบ
 
@@ -24,6 +26,8 @@
 | ช่องว่าง | ไม่เรียก server | "กรุณาใส่รหัสเข้าใช้" |
 | รหัสผิด | นับจำนวนครั้ง | "รหัสไม่ถูกต้อง ลองอีกครั้ง" และสิ่งที่พิมพ์ยังอยู่ |
 | ลองรหัสผิดครบ `RATE_LIMIT_UNLOCK` จาก IP เดียว ([project-setup](../architecture/project-setup.md#102-การจำกัดความถี่)) | ปฏิเสธจนจบหน้าต่าง แม้รหัสถูก | "ลองหลายครั้งเกินไป รอสักครู่แล้วลองใหม่" |
+| คำขอที่ไม่มี IP ที่ใช้ได้ (proxy ไม่ส่ง header หรือค่าไม่ใช่ IP) | นับรวมกันทุกคำขอในถังเดียว `RATE_LIMIT_UNLOCK_NO_IP` ซึ่งเข้มกว่า และ log `access.unlock.client_ip_missing` ทุกครั้ง ผู้ที่มี IP ไม่ได้รับผลเมื่อถังนี้เต็ม | เหมือนแถวบน เมื่อถังเต็ม |
+| แก้ `ACCESS_CODE` แล้ว deploy ใหม่ | Cookie ที่ออกด้วยรหัสเดิมตรวจไม่ผ่าน | หน้ายินดีต้อนรับ ต้องใส่รหัสใหม่ |
 | Cookie หมดอายุหรือถูกแก้ | ถือว่าไม่มี cookie | หน้ายินดีต้อนรับ |
 | API ถูกเรียกโดยไม่มี cookie | ตอบ 401 | หน้าเว็บพากลับหน้ายินดีต้อนรับ |
 
@@ -36,5 +40,5 @@
 
 ## วิธีทดสอบ
 
-- Unit: การตรวจรหัส, การหมดอายุของ cookie, การนับจำนวนครั้งด้วยเวลาปลอม
+- Unit: การตรวจรหัส, การหมดอายุของ cookie, cookie ที่ออกด้วยรหัสเดิมใช้ไม่ได้หลังเปลี่ยนรหัส (`hmac-access-token-signer.adapter.spec.ts` และชุดทดสอบของ port), การนับจำนวนครั้งด้วยเวลาปลอมทั้งแบบมี IP และไม่มี IP, การอ่าน IP จาก header (`http-request.spec.ts`)
 - E2E: รหัสผิดเข้าไม่ได้, รหัสถูกเข้าได้, API ตอบ 401 เมื่อไม่มี cookie, ออกจากระบบแล้วกลับหน้ายินดีต้อนรับ

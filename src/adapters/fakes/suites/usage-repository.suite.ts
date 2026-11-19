@@ -290,6 +290,32 @@ export const describeUsageRepositorySuite = (
       });
     });
 
+    describe('countNoResponse', () => {
+      it('counts rows of every kind with error ai.no_response inside [from, to) only', async () => {
+        const t = at('2026-11-18T05:00:00.000Z');
+        const failed = {
+          outcome: 'failed' as const,
+          cost: usd(0n),
+          error: 'ai.no_response' as const,
+        };
+        expect(await repo.countNoResponse(DAY)).toBe(0);
+        await repo.insert(
+          record({ kind: 'reply', contactId: contactId(1), ...failed, createdAt: t }),
+        );
+        await repo.insert(record({ kind: 'guard', ...failed, createdAt: DAY.from }));
+        await repo.insert(record({ kind: 'ingest', ...failed, createdAt: t }));
+        // Not counted: another error, and the edges outside the range.
+        await repo.insert(
+          record({ kind: 'reply', ...failed, error: 'ai.unavailable', createdAt: t }),
+        );
+        await repo.insert(record({ kind: 'guard', ...failed, createdAt: DAY.to }));
+        await repo.insert(
+          record({ kind: 'guard', ...failed, createdAt: at('2026-11-17T16:59:59.999Z') }),
+        );
+        expect(await repo.countNoResponse(DAY)).toBe(3);
+      });
+    });
+
     it('listForContact returns that contact rows in the range, newest first, with every field', async () => {
       const c1 = contactId(1);
       const older = record({

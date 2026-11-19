@@ -171,17 +171,55 @@ export const readPdfUpload = async (
 // Client IP and the contact list cursor
 // ---------------------------------------------------------------------------
 
+/** The eight hextets of an IPv6 address (already checked by isIP), embedded IPv4 included. */
+const ipv6Hextets = (ip: string): number[] => {
+  let text = ip.toLowerCase();
+  const v4 = /(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(text);
+  if (v4 !== null) {
+    const [a, b, c, d] = v4.slice(1).map(Number) as [number, number, number, number];
+    text = `${text.slice(0, v4.index)}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
+  }
+  const [head = '', tail] = text.split('::');
+  const left = head === '' ? [] : head.split(':');
+  const right = tail === undefined || tail === '' ? [] : tail.split(':');
+  const zeros =
+    tail === undefined ? [] : new Array<string>(8 - left.length - right.length).fill('0');
+  return [...left, ...zeros, ...right].map((h) => parseInt(h, 16));
+};
+
 /**
- * Caller IP for rate limits: the first `x-forwarded-for` entry, else `x-real-ip`, else null
- * (use-cases RequestContext; which header Vercel sets is still to be confirmed). Anything that
- * is not an IP address counts as unknown, so a forged header cannot become an arbitrary key.
+ * The rate-limit subject of an address: an IPv4 address as it is (also when written as
+ * `::ffff:a.b.c.d`), and an IPv6 address as its /64 network, since one subscriber usually gets a
+ * whole /64 and could otherwise take a fresh address for every attempt.
+ */
+export const clientSubjectOf = (ip: string): string => {
+  if (isIP(ip) === 4) return ip;
+  const h = ipv6Hextets(ip);
+  if (h.slice(0, 5).every((x) => x === 0) && h[5] === 0xffff) {
+    const [hi = 0, lo = 0] = h.slice(6);
+    return [hi >> 8, hi & 0xff, lo >> 8, lo & 0xff].join('.');
+  }
+  return `${h
+    .slice(0, 4)
+    .map((x) => x.toString(16))
+    .join(':')}::/64`;
+};
+
+/**
+ * Caller key for rate limits (docs/architecture/infrastructure.md "IP ของผู้เรียก"): the LAST
+ * entry of `x-forwarded-for`, passed through clientSubjectOf, else null.
+ *
+ * The last entry is the one written by the nearest proxy, which the caller cannot choose: on
+ * Vercel the edge sets the header to the address it saw (if it appended to a value the caller
+ * sent instead, its own entry would still be last), and `next start` without a proxy fills the
+ * header from the socket only when the request has none. Earlier entries, and `x-real-ip`, can be
+ * sent by anyone, so they are never read. Anything that is not an IP address gives null, so a
+ * forged header cannot become an arbitrary key.
  */
 export const clientIpOf = (headers: Headers): string | null => {
-  const forwarded = headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-  const candidate =
-    forwarded !== undefined && forwarded !== '' ? forwarded : headers.get('x-real-ip')?.trim();
+  const candidate = headers.get('x-forwarded-for')?.split(',').at(-1)?.trim();
   if (candidate === undefined || candidate === '' || candidate.length > 45) return null;
-  return isIP(candidate) === 0 ? null : candidate;
+  return isIP(candidate) === 0 ? null : clientSubjectOf(candidate);
 };
 
 const CURSOR_ID = /^[A-Za-z0-9-]{1,100}$/;

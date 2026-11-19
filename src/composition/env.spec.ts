@@ -137,6 +137,83 @@ describe('parseEnv', () => {
   });
 });
 
+describe('parseEnv with VERCEL_ENV=production', () => {
+  const production = (over: Record<string, string | undefined> = {}) => ({
+    ...valid(),
+    FILE_STORAGE: 'blob',
+    BLOB_READ_WRITE_TOKEN: 'vercel_blob_rw_fake',
+    VERCEL_ENV: 'production',
+    ...over,
+  });
+
+  it('accepts production settings with the official hosts by default', () => {
+    const r = parseEnv(production());
+    expect(r.ok && r.env).toMatchObject({
+      lineApiBaseUrl: 'https://api.line.me',
+      lineDataApiBaseUrl: 'https://api-data.line.me',
+      anthropicBaseUrl: undefined,
+      rateLimitScale: 1,
+      fileStorage: { kind: 'blob' },
+    });
+    expect(parseEnv(production({ RATE_LIMIT_SCALE: '1' })).ok).toBe(true);
+  });
+
+  it.each([
+    ['LINE_API_BASE_URL', 'http://localhost:4010/line'],
+    ['LINE_DATA_API_BASE_URL', 'http://stub:4010/line-data'],
+    ['ANTHROPIC_BASE_URL', 'http://stub:4010/anthropic'],
+    // Even the official host: the documented design is "unset in production".
+    ['LINE_API_BASE_URL', 'https://api.line.me'],
+    ['ANTHROPIC_BASE_URL', 'https://api.anthropic.com'],
+  ])('refuses %s=%s, naming the variable only', (name, value) => {
+    expect(invalidNames(production({ [name]: value }))).toEqual([name]);
+  });
+
+  it('refuses FILE_STORAGE=local and RATE_LIMIT_SCALE other than 1', () => {
+    expect(invalidNames(production({ FILE_STORAGE: 'local' }))).toEqual(['FILE_STORAGE']);
+    expect(invalidNames(production({ RATE_LIMIT_SCALE: '10' }))).toEqual(['RATE_LIMIT_SCALE']);
+  });
+
+  it('lists every test-only setting at once', () => {
+    expect(
+      invalidNames(
+        production({
+          FILE_STORAGE: 'local',
+          LINE_API_BASE_URL: 'http://stub:4010/line',
+          LINE_DATA_API_BASE_URL: 'http://stub:4010/line-data',
+          ANTHROPIC_BASE_URL: 'http://stub:4010/anthropic',
+          RATE_LIMIT_SCALE: '10',
+        }),
+      ),
+    ).toEqual([
+      'ANTHROPIC_BASE_URL',
+      'FILE_STORAGE',
+      'LINE_API_BASE_URL',
+      'LINE_DATA_API_BASE_URL',
+      'RATE_LIMIT_SCALE',
+    ]);
+  });
+
+  it.each([undefined, '', 'preview', 'development'])(
+    'keeps the stub settings of Docker, CI and previews when VERCEL_ENV is %j',
+    (vercelEnv) => {
+      const r = parseEnv({
+        ...valid(),
+        VERCEL_ENV: vercelEnv,
+        LINE_API_BASE_URL: 'http://stub:4010/line',
+        LINE_DATA_API_BASE_URL: 'http://stub:4010/line-data',
+        ANTHROPIC_BASE_URL: 'http://stub:4010/anthropic',
+        RATE_LIMIT_SCALE: '10',
+      });
+      expect(r.ok && r.env).toMatchObject({
+        fileStorage: { kind: 'local' },
+        lineApiBaseUrl: 'http://stub:4010/line',
+        rateLimitScale: 10,
+      });
+    },
+  );
+});
+
 describe('assertEnv', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -159,6 +236,25 @@ describe('assertEnv', () => {
     expect(message).toContain('SESSION_SECRET');
     expect(message).not.toContain('short-secret-value');
     expect(message).not.toContain('0.5');
+  });
+
+  it('fails on Vercel production with a stub base URL, naming it without its value', () => {
+    for (const [k, v] of Object.entries(valid())) vi.stubEnv(k, v);
+    vi.stubEnv('FILE_STORAGE', 'blob');
+    vi.stubEnv('BLOB_READ_WRITE_TOKEN', 'vercel_blob_rw_fake');
+    vi.stubEnv('LINE_API_BASE_URL', undefined);
+    vi.stubEnv('LINE_DATA_API_BASE_URL', undefined);
+    vi.stubEnv('RATE_LIMIT_SCALE', undefined);
+    vi.stubEnv('VERCEL_ENV', 'production');
+    vi.stubEnv('ANTHROPIC_BASE_URL', 'http://stub-host-value:4010/anthropic');
+    expect(() => {
+      assertEnv();
+    }).toThrow(new InvalidEnvError(['ANTHROPIC_BASE_URL']));
+    try {
+      assertEnv();
+    } catch (e) {
+      expect((e as Error).message).not.toContain('stub-host-value');
+    }
   });
 });
 

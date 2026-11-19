@@ -8,6 +8,7 @@ import {
   EVENT_CODES,
   FOLLOW_STATUSES,
   HANDOFF_REASONS,
+  LINE_SECRET_STATUSES,
   MEDIA_STATUSES,
   MESSAGE_AUTHORS,
   MESSAGE_DIRECTIONS,
@@ -30,6 +31,7 @@ export {
   EVENT_CODES,
   FOLLOW_STATUSES,
   HANDOFF_REASONS,
+  LINE_SECRET_STATUSES,
   MEDIA_STATUSES,
   MESSAGE_AUTHORS,
   MESSAGE_DIRECTIONS,
@@ -154,6 +156,11 @@ export const messageDtoSchema = z.strictObject({
     .strictObject({
       status: z.enum(DELIVERY_STATUSES),
       errorCode: errorCodeSchema.nullable(),
+      /**
+       * End of LINE's retry key window (LINE_RETRY_KEY_WINDOW_MS after the first push); from then
+       * "send again" is refused with message.retry_expired. null while no push was attempted.
+       */
+      retryExpiresAt: isoDateSchema.nullable(),
     })
     .nullable(),
   createdAt: isoDateSchema,
@@ -188,6 +195,10 @@ export const settingsDtoSchema = z.strictObject({
     status: z.enum(['connected', 'error', 'not_configured']),
     botName: z.string().nullable(),
     basicId: z.string().nullable(),
+    /** Not secret, so it is returned and shown. null when none was saved. */
+    channelId: z.string().nullable(),
+    /** Whether LINE confirmed the stored channel secret for the Channel ID. */
+    secretStatus: z.enum(LINE_SECRET_STATUSES),
     webhookUrl: z.string(),
     lastWebhookAt: isoDateSchema.nullable(),
   }),

@@ -13,8 +13,8 @@
 ### L1. Event เดิมถูกประมวลผลซ้ำ
 
 - **อาการ:** ข้อความเดียวขึ้นสองครั้งในแชท, `unreadCount` เพิ่มเกินจริง หรือ AI ตอบข้อความเดียวสองรอบ
-- **สาเหตุ:** LINE ส่ง event ซ้ำเมื่อไม่ได้ 200 ทันเวลา หรือเมื่อเปิดการส่งซ้ำ ระบบที่กันซ้ำแบบอ่านก่อนแล้วจึงเขียนจะหลุดเมื่อสองคำขอมาพร้อมกัน
-- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว ตรวจ `webhookEventId` ใน `WebhookEvent` ก่อนทำงาน, บันทึก Message ขาเข้าด้วย `insertInboundIfAbsent` บน `lineMessageId` แบบ `ON CONFLICT DO NOTHING` ([data-model กฎของ repository ข้อ 1](../architecture/data-model.md#กฎของ-repository)), event ที่ส่งซ้ำไม่เก็บ reply token (`replyTokenExpiry` ใน [`line-send.logic.ts`](../../src/core/domain/line-send.logic.ts)) และข้อความเดิมไม่สร้างงาน `ai_reply` ใหม่ ([`receive-line-events.use-case.ts`](../../src/core/use-cases/receive-line-events.use-case.ts), fixture `e2e/fixtures/line/redelivery-duplicate.json`)
+- **สาเหตุ:** LINE ส่ง event ซ้ำ (เมื่อเปิด "Webhook redelivery") เมื่อ webhook ไม่ได้ตอบ 2xx รวม 503 ที่ระบบตอบเองเมื่อบันทึกทั้งก้อนไม่ได้ ([L6](#l6-webhook-ตอบช้าหรือตอบไม่สำเร็จจนถูกส่งซ้ำ)) ระบบที่กันซ้ำแบบอ่านก่อนแล้วจึงเขียนจะหลุดเมื่อสองคำขอมาพร้อมกัน
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว ตรวจ `webhookEventId` ใน `WebhookEvent` ก่อนทำงาน, บันทึก Message ขาเข้าด้วย `insertInboundIfAbsent` บน `lineMessageId` แบบ `ON CONFLICT DO NOTHING` ([data-model กฎของ repository ข้อ 1](../architecture/data-model.md#กฎของ-repository)), event ที่ส่งซ้ำไม่เก็บ reply token (`replyTokenExpiry` ใน [`line-send.logic.ts`](../../src/core/domain/line-send.logic.ts)) และข้อความเดิมไม่สร้างงาน `ai_reply` ใหม่ ([`receive-line-events.use-case.ts`](../../src/core/use-cases/receive-line-events.use-case.ts), fixture `e2e/fixtures/line/redelivery-duplicate.json`) test "stores a batch redelivered after the 5xx exactly once" ส่งก้อนเดิมซ้ำหลัง 503 สองครั้งแล้วได้ข้อความแถวเดียว
 - **วิธีแก้เมื่อเกิด:** หา `line.webhook.event_duplicate` ใน log ถ้าไม่มีแต่ข้อความซ้ำ ให้ดูว่า `lineMessageId` ของสองแถวต่างกันหรือไม่ ถ้าต่างแปลว่าลูกค้าส่งสองครั้งจริง ถ้าเหมือนกันแปลว่า unique constraint หายจาก migration ให้ตรวจ schema ของฐานข้อมูล production
 
 ### L2. ตรวจ signature ไม่ผ่านทั้งที่ secret ถูก
@@ -28,15 +28,15 @@
 
 - **อาการ:** ส่งด้วย reply แล้ว LINE ปฏิเสธ หรือแอดมินกับ AI ส่งพร้อมกันแล้วรายหนึ่งล้ม
 - **สาเหตุ:** Reply token ใช้ได้ครั้งเดียวและมีอายุสั้น ถ้าเก็บไว้ใช้ภายหลังหรือให้สองผู้ส่งอ่าน token เดียวกันจะชนกัน
-- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว token ใช้ได้ภายใน `REPLY_TOKEN_USABLE_MS`, ถูกใช้ด้วย compare-and-clear `consumeReplyToken` ([data-model กฎของ repository ข้อ 9](../architecture/data-model.md#กฎของ-repository)) และเมื่อ LINE ปฏิเสธ token ระบบ push ต่อ ([`deliver-outbound.ts`](../../src/core/use-cases/shared/deliver-outbound.ts)) อายุจริงของ token ยังต้องยืนยันกับ LINE
-- **วิธีแก้เมื่อเกิด:** `line.send.reply_token_rejected` บ่อยแปลว่า `REPLY_TOKEN_USABLE_MS` ยาวเกินอายุจริง ให้ลดค่าใน [project-setup](../architecture/project-setup.md#101-แกนกลาง) พร้อมแก้ test
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว token ใช้ได้ภายใน `REPLY_TOKEN_USABLE_MS`, ถูกใช้ด้วย compare-and-clear `consumeReplyToken` ([data-model กฎของ repository ข้อ 9](../architecture/data-model.md#กฎของ-repository)) และเมื่อ LINE ปฏิเสธ token ระบบ push ต่อ ([`deliver-outbound.ts`](../../src/core/use-cases/shared/deliver-outbound.ts)) "ปฏิเสธ token" คือ 400 ที่ข้อความตรง `Invalid reply token` เท่านั้น (`isReplyTokenRejection` ใน [`line-messaging-gateway.adapter.ts`](../../src/adapters/line/line-messaging-gateway.adapter.ts)) 400 อื่นเป็น `line.reply_failed` และไม่ push payload เดิมซ้ำซึ่งจะถูกปฏิเสธอีกและกินโควตา ([ADR 0023](../adr/0023-retry-key-v5-window-and-reply-400.md)) อายุจริงของ token ยังต้องยืนยันกับ LINE
+- **วิธีแก้เมื่อเกิด:** `line.send.reply_token_rejected` บ่อยแปลว่า `REPLY_TOKEN_USABLE_MS` ยาวเกินอายุจริง ให้ลดค่าใน [project-setup](../architecture/project-setup.md#101-แกนกลาง) พร้อมแก้ test ถ้า `line.send.failed` มี `errorCode` เป็น `line.reply_failed` ให้ดูว่าข้อความผิดรูปแบบใน [L5](#l5-line-ปฏิเสธทั้งคำขอเพราะรูปแบบข้อความ) หรือ LINE เปลี่ยนข้อความของ token ที่ใช้ไม่ได้
 
 ### L4. ลูกค้าได้ข้อความซ้ำเมื่อระบบลองส่งใหม่
 
 - **อาการ:** ลูกค้าเห็นข้อความเดียวกันสองครั้ง หลัง timeout หรือหลังแอดมินกด "ส่งอีกครั้ง"
-- **สาเหตุ:** คำขอที่ timeout หรือได้ 5xx อาจถึงปลายทางแล้ว การส่งใหม่โดยไม่มี idempotency key หรือการ push ต่อหลัง reply ที่ไม่รู้ผล จึงเป็นข้อความที่สอง
-- **การป้องกันในโปรเจกต์นี้:** บางส่วน push ทุกครั้งแนบ `X-Line-Retry-Key` จาก id ของข้อความ ซึ่งเป็นค่าเดิมทุกครั้งที่ลองใหม่, reply ที่ล้มด้วยเหตุอื่นที่ไม่ใช่ token ถูกปฏิเสธจะไม่ push ต่อ และ "ส่งอีกครั้ง" ใช้ push ด้วย key เดิมเสมอ ([line-messaging ส่งข้อความ](../specs/line-messaging.md#ส่งข้อความ), [ADR 0010](../adr/0010-reply-token-first-and-idempotency.md)) แต่การตีความคำตอบ 409 และรูปแบบของ key ใน [`line-messaging-gateway.adapter.ts`](../../src/adapters/line/line-messaging-gateway.adapter.ts) ยังเป็นสมมติฐานที่ต้องยืนยันกับเอกสาร LINE
-- **วิธีแก้เมื่อเกิด:** ดู `line.send.failed` และ `line.send.succeeded` ของ `messageId` นั้นว่ามีกี่ครั้งและผ่าน `channel` ใด ถ้ามี push สองครั้งด้วย key เดียวกันแต่ลูกค้าได้สองข้อความ แปลว่าสมมติฐานเรื่อง retry key ผิด ให้หยุดปุ่มส่งอีกครั้งชั่วคราวและแก้ adapter
+- **สาเหตุ:** คำขอที่ timeout หรือได้ 5xx อาจถึงปลายทางแล้ว การส่งใหม่โดยไม่มี idempotency key, การ push ต่อหลัง reply ที่ไม่รู้ผล, key ในรูปแบบที่ LINE ไม่รับ หรือการส่งอีกครั้งหลังจาก LINE ลืม key แล้ว (24 ชั่วโมง) จึงเป็นข้อความที่สอง
+- **การป้องกันในโปรเจกต์นี้:** บางส่วน push ทุกครั้งแนบ `X-Line-Retry-Key` ที่เป็น UUID version 5 ซึ่งได้จาก SHA-256 ของ id ของข้อความ (`toLineRetryKey` ใน [`line-messaging-gateway.adapter.ts`](../../src/adapters/line/line-messaging-gateway.adapter.ts)) จึงเป็นค่าเดิมทุกครั้งที่ลองใหม่และเป็นรูปแบบที่ LINE รับแน่นอน stub ปฏิเสธ key ที่ไม่ใช่ version 4 หรือ 5, reply ที่ล้มด้วยเหตุอื่นที่ไม่ใช่ token ถูกปฏิเสธจะไม่ push ต่อ, "ส่งอีกครั้ง" ใช้ push ด้วย key เดิมเสมอ รวมข้อความที่ถูกคืนสภาพจากการส่งที่ค้าง (`line.send_interrupted` ใน [M3](#m3-สถานะกลางทางค้างเมื่อ-function-ถูกตัด)) และถูกปฏิเสธด้วย `message.retry_expired` เมื่อผ่าน `LINE_RETRY_KEY_WINDOW_MS` นับจาก push ครั้งแรก (`Message.firstPushAt`) ฟองซ่อนปุ่มเองจาก `delivery.retryExpiresAt` ([line-messaging ส่งข้อความ](../specs/line-messaging.md#ส่งข้อความ), [ADR 0010](../adr/0010-reply-token-first-and-idempotency.md), [ADR 0023](../adr/0023-retry-key-v5-window-and-reply-400.md)) สิ่งที่ stub ยืนยันแทนไม่ได้: คำตอบ 409 พร้อม `x-line-accepted-request-id` เมื่อ key ซ้ำ (`isRetryKeyAlreadyAccepted`), อายุของ reply token และขีดความยาวกับจำนวนข้อความ แต่ละข้อมีขั้นทดสอบด้วยมือพร้อมผลที่ต้องได้ใน [line-oa-setup ทดสอบด้วยมือ](../runbooks/line-oa-setup.md#ทดสอบด้วยมือเมื่อมี-line-oa-จริง) และติดตามใน [implementation-plan](../plans/implementation-plan.md#สิ่งที่ต้องยืนยันก่อนหรือระหว่างสร้าง) ข้อความที่ push ก่อน migration ที่เพิ่ม `firstPushAt` ไม่มีหน้าต่าง
+- **วิธีแก้เมื่อเกิด:** ดู `line.send.failed` และ `line.send.succeeded` ของ `messageId` นั้นว่ามีกี่ครั้งและผ่าน `channel` ใด ถ้ามี push สองครั้งด้วย key เดียวกันภายในหน้าต่างแต่ลูกค้าได้สองข้อความ แปลว่าสมมติฐานเรื่อง retry key ผิด ให้หยุดปุ่มส่งอีกครั้งชั่วคราวและแก้ adapter `line.send.retry_expired` คือแอดมินกดหลังหน้าต่างผ่านแล้ว ซึ่งเป็นพฤติกรรมที่ตั้งใจ
 
 ### L5. LINE ปฏิเสธทั้งคำขอเพราะรูปแบบข้อความ
 
@@ -45,12 +45,12 @@
 - **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว `splitLineText` แบ่งตาม `LINE_TEXT_MAX_CHARS` ที่ขอบ grapheme, `toOutboundParts` ไม่ส่งเกิน `LINE_MAX_PARTS_PER_REQUEST` ([`line-send.logic.ts`](../../src/core/domain/line-send.logic.ts)) และคำตอบของ AI ที่ว่างหลังทำความสะอาดถือว่าไม่ผ่าน schema ([ai-prompt ข้อ 6](../specs/ai-prompt.md#6-การทำความสะอาดคำตอบ)) ค่าขีดจำกัดยังต้องยืนยันกับ LINE
 - **วิธีแก้เมื่อเกิด:** ดู `errorCode` ของ `line.send.failed` และข้อความใน `lastLineError` ของส่วนสถานะระบบ แล้วเทียบกับขีดจำกัดใน [project-setup](../architecture/project-setup.md#101-แกนกลาง)
 
-### L6. Webhook ตอบช้าจนถูกส่งซ้ำ
+### L6. Webhook ตอบช้าหรือตอบไม่สำเร็จจนถูกส่งซ้ำ
 
-- **อาการ:** Event เดิมเข้ามาหลายรอบในช่วงที่ฐานข้อมูลหรือ LINE ช้า
-- **สาเหตุ:** งานหนักหรือการเรียกภายนอกที่ retry ได้ทำก่อนตอบ 200
-- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว ก่อนตอบทำแค่บันทึก และดึงโปรไฟล์ของลูกค้าใหม่ด้วย `LINE_PROFILE_TIMEOUT_MS` แบบไม่ retry งานอื่น (สื่อ, AI) อยู่ใน `after()` ([overview เส้นทางหลัก ข้อ 1](../architecture/overview.md#1-ลูกค้าส่งข้อความเข้ามา))
-- **วิธีแก้เมื่อเกิด:** ดู `durationMs` ของ `http.request.completed` ที่ `route` เป็น `/api/line/webhook` และ `line.profile.fetch_failed` ถ้า Neon เพิ่งตื่นจากการหลับ ครั้งแรกช้าเป็นปกติและ L1 กันผลซ้ำไว้แล้ว
+- **อาการ:** Event เดิมเข้ามาหลายรอบในช่วงที่ฐานข้อมูลหรือ LINE ช้า หรือข้อความของลูกค้าหายไปเงียบ ๆ ช่วงที่ฐานข้อมูลล่ม
+- **สาเหตุ:** งานหนักหรือการเรียกภายนอกที่ retry ได้ทำก่อนตอบ 200 หรือ webhook ตอบ 200 ทั้งที่ไม่ได้บันทึกอะไร LINE จึงไม่ส่งซ้ำ
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว ก่อนตอบทำแค่บันทึก และดึงโปรไฟล์ของลูกค้าใหม่ด้วย `LINE_PROFILE_TIMEOUT_MS` แบบไม่ retry งานอื่น (สื่อ, AI) อยู่ใน `after()` ([overview เส้นทางหลัก ข้อ 1](../architecture/overview.md#1-ลูกค้าส่งข้อความเข้ามา)) เมื่อทุก event ในก้อนล้มเหลว ไม่มีอะไรถูกบันทึก และ `settings.ping` ล้ม webhook ตอบ 503 `db.unavailable` และ log `line.webhook.batch_unstored` ให้ LINE ส่งซ้ำ ([line-messaging รับ event ข้อ 6](../specs/line-messaging.md#รับ-event-webhook)) ซึ่ง L1 กันผลซ้ำไว้แล้ว ก้อนที่บันทึกได้บางส่วน หรือ event ที่ล้มด้วยเหตุของตัวเอง ยังตอบ 200 การส่งซ้ำทำงานเมื่อเปิด "Webhook redelivery" ตาม [line-oa-setup ขั้นที่ 4](../runbooks/line-oa-setup.md#4-ตั้ง-webhook-ฝั่ง-line) เท่านั้น
+- **วิธีแก้เมื่อเกิด:** ดู `durationMs` ของ `http.request.completed` ที่ `route` เป็น `/api/line/webhook` และ `line.profile.fetch_failed` ถ้า Neon เพิ่งตื่นจากการหลับ ครั้งแรกช้าเป็นปกติและ L1 กันผลซ้ำไว้แล้ว ถ้ามี `line.webhook.batch_unstored` ให้ตรวจการต่อฐานข้อมูลตาม [D5](#d5-connection-เต็มบน-serverless) และดูว่า "Webhook redelivery" เปิดอยู่ ไม่เช่นนั้นข้อความช่วงนั้นหาย
 
 ## 2. ข้อความและงานที่ทำพร้อมกัน
 
@@ -72,8 +72,8 @@
 
 - **อาการ:** แชทแสดงว่า AI กำลังตอบไม่จบ, ไฟล์ในคลังความรู้ค้าง "กำลังอ่านไฟล์" โดยไม่มีปุ่ม, รูปขาเข้าเป็น skeleton ตลอด หรือข้อความของแอดมินค้าง "กำลังส่ง" และกดส่งอีกครั้งไม่ได้
 - **สาเหตุ:** Serverless function ถูกหยุดเมื่อถึง `maxDuration` หรือเมื่อ deploy ใหม่ บล็อก `finally` และงานใน `after()` ที่ยังไม่จบจึงไม่ได้รัน และ LINE ไม่ส่ง event ซ้ำเพราะ webhook ตอบ 200 ไปแล้ว
-- **การป้องกันในโปรเจกต์นี้:** บางส่วน งาน AI มีการคืนสภาพ: `aiState = replying` ที่เก่ากว่า `AI_STUCK_AFTER_MS` ถูกคืนเป็นรอแอดมินทุกครั้งที่โหลดรายชื่อ ([ai-reply งานที่ค้าง](../specs/ai-reply.md#งานที่ค้าง), `recoverStuckAiStates`) แต่ไม่พบกลไกเดียวกันสำหรับ `KbDocument` ที่ `processing`, สื่อขาเข้าที่ `pending` และข้อความขาออกที่ `deliveryStatus = pending`
-- **วิธีแก้เมื่อเกิด:** ดู `ai.reply.stuck_recovered` และ `job.run.failed` และดู log ของ Vercel ว่า function ถูกตัดเพราะเวลาหรือไม่ สำหรับสถานะที่ยังไม่มีการคืนสภาพ ให้เปลี่ยนแถวที่ค้างเป็น `failed` ในฐานข้อมูลด้วยมือ เพื่อให้แอดมินลองใหม่หรือลบได้ แล้วหาสาเหตุของเวลาที่เกิน (ดู [A2](#a2-timeout-ไม่สัมพันธ์กับงานและเพดานเวลาของ-function))
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว ทุกสถานะกลางทางมีการคืนสภาพด้วย compare-and-set คำสั่งเดียว (`UPDATE ... RETURNING`) ที่เรียกจากเส้นทางอ่านที่หน้าจอ poll อยู่แล้ว แต่ละแถวจึงกลับไปที่ผู้เรียกคนเดียวแม้หลายแท็บเรียกพร้อมกัน ([data-model กฎของ repository ข้อ 13](../architecture/data-model.md#กฎของ-repository)): `aiState = replying` เก่ากว่า `AI_STUCK_AFTER_MS` คืนเป็นรอแอดมินเมื่อโหลดรายชื่อ (`recoverStuckAiStates`, [ai-reply งานที่ค้าง](../specs/ai-reply.md#งานที่ค้าง)), `KbDocument` ที่ `processing` เก่ากว่า `KNOWLEDGE_STUCK_AFTER_MS` เป็น `failed` ด้วย `knowledge.extract_interrupted` เมื่อโหลดรายการไฟล์ (`failStuckProcessing` ใน [`list-documents.use-case.ts`](../../src/core/use-cases/list-documents.use-case.ts)), สื่อขาเข้าที่ `pending` เก่ากว่า `MEDIA_STUCK_AFTER_MS` (ระหว่างที่ LINE ยังเตรียมไฟล์ งานคง `pending` เฉพาะเมื่องบ `MEDIA_JOB_BUDGET_MS` ยังพอสำหรับการลองครั้งถัดไป ไม่เช่นนั้นเป็น `failed` ทันที) และข้อความขาออกที่ `pending` นานกว่า `SEND_STUCK_AFTER_MS` นับจากเวลาเริ่มส่งรอบนั้น (`Message.deliveryAttemptAt`) เป็น `failed` (ข้อความขาออกด้วย `line.send_interrupted`) เมื่อโหลดข้อความของแชท (`failStuckMedia` และ `failStuckDeliveries` ใน [`get-messages.use-case.ts`](../../src/core/use-cases/get-messages.use-case.ts)) ปุ่ม "ลองใหม่" และ "ส่งอีกครั้ง" ที่มีอยู่ใช้ได้ทันที ทุกเวลามากกว่าเวลาแย่ที่สุดของงานและ `maxDuration` ซึ่ง [`timing-budget.spec.ts`](../../src/composition/timing-budget.spec.ts) ตรึงไว้ จึงไม่ตัดงานที่ยังทำอยู่ ชุดทดสอบของ port ([`message-repository.suite.ts`](../../src/adapters/fakes/suites/message-repository.suite.ts), [`knowledge-repository.suite.ts`](../../src/adapters/fakes/suites/knowledge-repository.suite.ts)) รันกับตัวปลอมและ Postgres รวมผู้เรียกพร้อมกัน
+- **วิธีแก้เมื่อเกิด:** ดู `ai.reply.stuck_recovered`, `knowledge.ingest.stuck_recovered`, `media.store.stuck_recovered`, `line.send.stuck_recovered` และ `job.run.failed` และดู log ของ Vercel ว่า function ถูกตัดเพราะเวลาหรือไม่ การคืนสภาพเกิดเองเมื่อมีคนเปิดหน้าจอนั้น ถ้าเห็นบ่อย ให้หาสาเหตุของเวลาที่เกิน (ดู [A2](#a2-timeout-ไม่สัมพันธ์กับงานและเพดานเวลาของ-function)) ห้ามลดเวลาของการคืนสภาพให้ต่ำกว่าเวลาแย่ที่สุดของงาน
 
 ### M4. ความล้มเหลวที่ไม่มีใครเห็น
 
@@ -95,21 +95,21 @@
 
 - **อาการ:** งานอ่านเอกสารหรือคำถามแรกหลัง cache เย็นล้มด้วย timeout ทั้งที่โมเดลใกล้ตอบเสร็จ, ลูกค้าได้ "ระบบช้า" ทั้งที่ระบบไม่ได้ช้า หรือ function ถูกตัดกลางงาน
 - **สาเหตุ:** ใช้ timeout ของงานแชทกับงานเอกสาร, ผู้เรียกรอสั้นกว่าผลรวมของ timeout × จำนวนครั้งที่ลองของผู้ถูกเรียก หรือผลรวมนั้นยาวกว่า `maxDuration` ของ function
-- **การป้องกันในโปรเจกต์นี้:** บางส่วน timeout แยกตามงาน (`CLAUDE_REPLY_TIMEOUT_MS`, `CLAUDE_EXTRACT_TIMEOUT_MS`, `GUARD_TIMEOUT_MS`) และเลขคณิตของเวลาเขียนไว้ใน [project-setup ข้อ 10.4](../architecture/project-setup.md#104-adapter-และ-route) กับ `AI_STUCK_AFTER_MS` แต่ไม่มี test ที่ตรึงความสัมพันธ์เหล่านี้, หนึ่งรอบของ AI พอดี `WEBHOOK_MAX_DURATION_S` แต่ `AI_MAX_ROUNDS_PER_RUN` = 2 รอบไม่พอดี (พึ่งการคืนสภาพใน [M3](#m3-สถานะกลางทางค้างเมื่อ-function-ถูกตัด)) และการแปลง PDF ที่ลองใหม่หนึ่งครั้งอาจยาวกว่า `KNOWLEDGE_MAX_DURATION_S`
-- **วิธีแก้เมื่อเกิด:** ดู `durationMs` ของ `ai.model.called`, `guard.checked` และรหัส `ai.unavailable` หรือ `ai.rate_limited` ถ้างานยาวกว่าที่คาด ให้แก้ค่าที่ตารางใน project-setup แล้วคำนวณทั้งสายใหม่ (ผู้เรียกต้องรอนานกว่าผู้ถูกเรียกทุกครั้งที่ลอง และทั้งหมดต้องอยู่ใต้ `maxDuration`)
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว timeout แยกตามงาน และทุกการเรียกภายนอกมีเพดานรวมของตัวเอง: LINE ผ่าน `LINE_RETRY_AFTER_MAX_MS` และ Claude ผ่าน `callDeadlineMs` ซึ่งส่ง `signal` ที่ตัดทั้งการเรียก รวม stream ของการแปลง PDF ที่ timeout ของ SDK ไม่ครอบ และการรอ `Retry-After` ([domain-and-ports](../architecture/domain-and-ports.md#เวลาสูงสุดของการเรียกหนึ่งครั้ง)) งานที่รอผู้ให้บริการ (สื่อขาเข้าที่ LINE ยังเตรียมไม่เสร็จ) วัดเวลาที่ใช้ไปแล้วเทียบกับงบของงาน (`MEDIA_JOB_BUDGET_MS`) ก่อนเริ่มทุกขั้น และค่าสำรองของแกนกลาง (`MEDIA_CONTENT_CALL_WORST_MS`, `MEDIA_STATUS_CALL_WORST_MS`) ถูกตรึงว่าไม่ต่ำกว่าเวลาแย่ที่สุดของ adapter เวลาแย่ที่สุดของงานหลังตอบทุกงานคำนวณจากค่าคงที่จริงใน [`timing-budget.ts`](../../src/composition/timing-budget.ts) และ [`timing-budget.spec.ts`](../../src/composition/timing-budget.spec.ts) ตรึงทุกอสมการ (งานต่ำกว่า 0.9 × `maxDuration` ที่อ่านจากไฟล์ route, เวลาคืนสภาพทุกตัวมากกว่างานและ `maxDuration`) ค่าที่เปลี่ยนเพื่อให้พอดีและเหตุผลอยู่ใน [project-setup ข้อ 10.4 "เวลาแย่ที่สุด"](../architecture/project-setup.md#104-adapter-และ-route): `WEBHOOK_MAX_DURATION_S` 120 → 300, `CLAUDE_REPLY_TIMEOUT_MS` 45000 → 25000 และ `CLAUDE_EXTRACT_TIMEOUT_MS` 240000 → 120000 เพดาน 300 วินาทีของ Vercel ยังต้องยืนยัน
+- **วิธีแก้เมื่อเกิด:** ดู `durationMs` ของ `ai.model.called`, `guard.checked` และรหัส `ai.no_response`, `ai.unavailable` หรือ `ai.rate_limited` ถ้างานยาวกว่าที่คาด ให้แก้ค่าที่ตารางใน project-setup แล้วรัน `timing-budget.spec.ts` ซึ่งจะบอกอสมการที่ไม่ผ่าน (ผู้เรียกต้องรอนานกว่าผู้ถูกเรียกทุกครั้งที่ลอง และทั้งหมดต้องอยู่ใต้ `maxDuration` พร้อมส่วนเผื่อ)
 
 ### A3. ค่าใช้จ่าย AI ที่ไม่ถูกบันทึก
 
 - **อาการ:** ยอดในหน้าค่าใช้จ่ายต่ำกว่าบิลของผู้ให้บริการ และงบต่อวันตัดช้ากว่าที่ควร
 - **สาเหตุ:** บันทึกค่าใช้จ่ายเฉพาะเมื่อได้คำตอบ ขณะที่คำขอที่ timeout หรือถูกลองใหม่อาจถูกคิดเงินแล้ว
-- **การป้องกันในโปรเจกต์นี้:** บางส่วน ทุกคำตอบของ API ถูกบันทึกเป็น `AiUsage` รวมการคัดกรองและการแปลง PDF ที่ถูกปฏิเสธหลังแปลง ([usage-cost](../specs/usage-cost.md#งบต่อวัน)) และโมเดลที่ไม่อยู่ในตารางคิดด้วยราคาสูงสุด (`ai.price_unknown_model`) แต่ [`generate-ai-reply.use-case.ts`](../../src/core/use-cases/generate-ai-reply.use-case.ts) ถือว่าการเรียกที่ไม่ได้คำตอบไม่เสียเงิน และ SDK ลองใหม่เองเมื่อ timeout
-- **วิธีแก้เมื่อเกิด:** เทียบยอดรายวันในหน้าค่าใช้จ่ายกับ console ของผู้ให้บริการ ถ้าต่างมาก ให้นับ `ai.reply.failed` ที่ `errorCode` เป็น timeout ในวันนั้น ระหว่างแก้ให้ลดงบต่อวัน
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว ทุกคำตอบของ API ถูกบันทึกเป็น `AiUsage` รวมการคัดกรองและการแปลง PDF ที่ถูกปฏิเสธหลังแปลง และโมเดลที่ไม่อยู่ในตารางคิดด้วยราคาสูงสุด (`ai.price_unknown_model`) การเรียกที่ส่งไปแล้วไม่ได้คำตอบ (timeout, ถูกตัดที่ `callDeadlineMs`, การเชื่อมต่อหลุด, stream ขาด) ได้รหัส `ai.no_response` จาก [`claude.mapper.ts`](../../src/adapters/claude/claude.mapper.ts) และมีแถว `outcome = failed` ยอดเป็นศูนย์ (`noResponseUsage` ใน [`usage.logic.ts`](../../src/core/domain/usage.logic.ts)) ทั้งการตอบแชท การคัดกรอง กล่องทดลอง และการแปลง PDF หน้าค่าใช้จ่ายแสดงจำนวนของเดือน (`noResponseCount`) ([usage-cost การเรียกที่ไม่ได้คำตอบ](../specs/usage-cost.md#การเรียกที่ไม่ได้คำตอบ)) ข้อจำกัดที่ยอมรับ: retry ภายใน SDK อยู่ในการเรียกเดียว จึงนับเป็นหนึ่งแถว และ attempt ที่ timeout ก่อน attempt ที่ได้คำตอบไม่ถูกนับ
+- **วิธีแก้เมื่อเกิด:** ทำตาม [operations ค่าใช้จ่าย AI ไม่ตรงกับบิล](../runbooks/operations.md#ค่าใช้จ่าย-ai-ไม่ตรงกับบิล): เทียบยอดเดือนกับ console ของผู้ให้บริการ และดูจำนวนการเรียกที่ไม่ได้คำตอบใต้ตารางค่าใช้จ่าย ระหว่างแก้ให้ลดงบต่อวัน
 
 ### A4. ข้อความของลูกค้าหรือ PDF สั่งให้ AI ทำนอกเรื่อง
 
 - **อาการ:** AI ตอบนอกหัวข้อ ยกราคาหรือเงื่อนไขที่ไม่มีในคลังความรู้ หรือส่งลิงก์ที่มาจากข้อความของลูกค้าหรือจากในไฟล์
 - **สาเหตุ:** ข้อความที่ไว้ใจไม่ได้อยู่ใน context เดียวกับคำสั่ง และการกรองที่ทำแค่ใน prompt ถูกหลบได้
-- **การป้องกันในโปรเจกต์นี้:** บางส่วน AI ไม่มีเครื่องมือ, คำสั่งระบบไม่มีความลับ, เนื้อหา PDF ถูกแยกจากคำสั่ง, ขอบเขตหัวข้อตรวจแยกและปิดแบบปลอดภัยเมื่อไม่แน่ใจ ([threat-model](../security/threat-model.md#ภัยและการรับมือ), [ADR 0020](../adr/0020-topic-guardrail-as-separate-check.md)) และ prompt ห้ามเติมราคาที่ไม่มีในคลัง แต่ไม่มีโค้ดตรวจ URL หรือตัวเลขในคำตอบ (`sanitizeAiReply` คงลิงก์ไว้) และ LINE ทำให้ URL กดได้
+- **การป้องกันในโปรเจกต์นี้:** บางส่วน AI ไม่มีเครื่องมือ, คำสั่งระบบไม่มีความลับ, เนื้อหา PDF ถูกแยกจากคำสั่ง, ขอบเขตหัวข้อตรวจแยกและปิดแบบปลอดภัยเมื่อไม่แน่ใจ ([threat-model](../security/threat-model.md#ภัยและการรับมือ), [ADR 0020](../adr/0020-topic-guardrail-as-separate-check.md)) ลิงก์ป้องกันแล้ว: หลังทำความสะอาด คำตอบที่มี URL (`http`/`https`, `www.` หรือ domain ที่มี path) ซึ่งไม่อยู่ในคลังความรู้หรือคำแนะนำของร้านไม่ถูกส่ง แชทขึ้นรอแอดมินด้วย `ai.link_not_allowed` (`disallowedLinks` ใน [`reply-links.logic.ts`](../../src/core/domain/reply-links.logic.ts), [ai-prompt ข้อ 6.1](../specs/ai-prompt.md#61-ลิงก์ในคำตอบ)) และชุดคำถามวัดคุณภาพมีข้อ C6, C7 กับการตรวจลิงก์ทุกข้อ ที่ยังเหลือ: ราคาและเงื่อนไขที่ไม่มีในคลังกันด้วย prompt อย่างเดียว และลิงก์ที่แฝงใน PDF ถือว่าร้านเขียน
 - **วิธีแก้เมื่อเกิด:** ปิด AI ตอบแทนของลูกค้าคนนั้นหรือปิด kill switch, อ่านข้อความที่แปลงจาก PDF ในหน้าตั้งค่าว่ามีคำสั่งแฝงหรือไม่ ([operations คลังความรู้](../runbooks/operations.md#คลังความรู้)) แล้วเพิ่มกรณีนั้นในชุดคำถามวัดคุณภาพ ([ai-prompt ข้อ 8](../specs/ai-prompt.md#8-ชุดคำถามวัดคุณภาพ-ai)) ซึ่งรันเมื่อเจ้าของงานสั่งเท่านั้น
 
 ### A5. ข้อมูลภายในหลุดถึงผู้ใช้
@@ -132,14 +132,14 @@
 
 - **อาการ:** `prisma migrate deploy` ใน build ของ production ล้มด้วย checksum ไม่ตรงหรือหาไฟล์ไม่เจอ และ deploy ไม่ผ่าน
 - **สาเหตุ:** ไฟล์ใน `prisma/migrations/` ถูกแก้ จัดรูปแบบใหม่ หรือลบหลังจาก apply ไปแล้ว ทำให้ประวัติใน repo ไม่ตรงกับตาราง `_prisma_migrations`
-- **การป้องกันในโปรเจกต์นี้:** ยังไม่มี ไม่มี test หรือขั้นใน CI ที่ห้ามแก้ migration เดิม
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว ขั้น `pnpm migrations:immutable` ในงาน `check` ของ CI ([`ci.yml`](../../.github/workflows/ci.yml)) เทียบกับ base (first parent เมื่ออยู่บน `main`, merge base กับ `origin/main` เมื่ออยู่ branch อื่น) และล้มเมื่อไฟล์ใน `prisma/migrations/<name>/` ที่มีอยู่แล้วถูกแก้ ลบ เปลี่ยนชื่อ หรือมีไฟล์เพิ่ม การเพิ่ม directory ใหม่ทำได้ กฎอยู่ใน [`migrations.logic.ts`](../../scripts/migrations.logic.ts) ([test](../../e2e/migrations.unit.ts)) และสั่งรันเองได้ด้วยคำสั่งเดียวกัน (ดู [project-setup ข้อ 5](../architecture/project-setup.md#5-packagejson))
 - **วิธีแก้เมื่อเกิด:** คืนไฟล์ให้ตรงกับ commit ที่ apply ทุก byte จากประวัติของ Git แล้วเขียนการเปลี่ยนเป็น migration ใหม่ ห้ามแก้ตาราง `_prisma_migrations` ใน production โดยไม่ถามเจ้าของงาน
 
 ### D2. Migration ที่ทำให้ย้อนกลับไม่ได้
 
 - **อาการ:** Deploy ใหม่ล้มหลัง migration ผ่านแล้ว หรือเลื่อน deployment ก่อนหน้าขึ้นแล้วโค้ดรุ่นก่อนพังกับโครงตารางใหม่
 - **สาเหตุ:** Build ของ production รัน migration ก่อน build แอป ฐานข้อมูลจึงเปลี่ยนแม้ build ล้ม และ migration ที่ลบหรือเปลี่ยนชนิดคอลัมน์ทำให้โค้ดรุ่นก่อนใช้ไม่ได้
-- **การป้องกันในโปรเจกต์นี้:** บางส่วน กฎให้ migration เป็นแบบเพิ่มเท่านั้น และการลบหรือเปลี่ยนชนิดทำสองขั้นหลังถามเจ้าของงาน ([deploy ย้อนกลับ](../runbooks/deploy.md#ย้อนกลับ), [AGENTS.md](../../AGENTS.md)) กฎนี้ตรวจด้วย review เท่านั้น
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว กฎให้ migration เป็นแบบเพิ่มเท่านั้น และการลบหรือเปลี่ยนชนิดทำสองขั้นหลังถามเจ้าของงาน ([deploy ย้อนกลับ](../runbooks/deploy.md#ย้อนกลับ), [AGENTS.md](../../AGENTS.md)) ขั้น `pnpm migrations:destructive` ในงาน `check` สแกนเฉพาะไฟล์ migration ที่การเปลี่ยนนั้นเพิ่มใหม่ และล้มเมื่อมี `DROP TABLE`, `DROP COLUMN`, `ALTER COLUMN ... TYPE`, `RENAME`, `TRUNCATE` หรือ `DELETE FROM` ที่ไม่มี `WHERE` (ไม่นับใน comment และ string literal) เว้นแต่ไฟล์มีบรรทัด `-- approved-destructive: <เหตุผล>` (ต้นบรรทัด เหตุผลไม่ว่าง) ซึ่งใส่ได้หลังเจ้าของงานอนุมัติเท่านั้น บรรทัดนี้ทำให้การตัดสินใจอยู่ใน diff ให้ reviewer เห็น แต่ไม่พิสูจน์ว่าเจ้าของงานอนุมัติจริง ส่วนนั้นยังเป็นกฎของ AGENTS.md คำสั่งอื่นที่เปลี่ยนข้อมูลโดยไม่อยู่ในรายการ (เช่น `UPDATE` ไม่มี `WHERE`, `SET NOT NULL`, `DROP INDEX`) ตรวจด้วย review กฎอยู่ใน [`migrations.logic.ts`](../../scripts/migrations.logic.ts) ([test](../../e2e/migrations.unit.ts))
 - **วิธีแก้เมื่อเกิด:** ทำตาม [deploy ย้อนกลับ](../runbooks/deploy.md#ย้อนกลับ) ถ้าโค้ดรุ่นก่อนใช้กับตารางใหม่ไม่ได้ ให้แก้ไปข้างหน้าด้วย PR ใหม่แทนการย้อน
 
 ### D3. โค้ดกับฐานข้อมูลรับค่าไม่ตรงกัน
@@ -192,22 +192,22 @@
 
 - **อาการ:** หลังแก้ `ACCESS_CODE` และ deploy ใหม่ เบราว์เซอร์ที่เคยเข้าระบบยังใช้งานได้จนกว่า cookie หมดอายุ
 - **สาเหตุ:** Cookie ถูกเซ็นด้วย key ที่ไม่ขึ้นกับรหัส การเปลี่ยนรหัสจึงไม่ทำให้ cookie เดิมใช้ไม่ได้
-- **การป้องกันในโปรเจกต์นี้:** ยังไม่มี key ของ cookie มาจาก `SESSION_SECRET` อย่างเดียว ([`hmac-access-token-signer.adapter.ts`](../../src/adapters/system/hmac-access-token-signer.adapter.ts)) ขณะที่ [operations](../runbooks/operations.md#หมุน-credential) บอกให้หมุนรหัสด้วยการแก้ `ACCESS_CODE` อย่างเดียว
-- **วิธีแก้เมื่อเกิด:** เมื่อต้องตัดคนเดิมออก (รวมขั้น "ปิดระบบหลังส่งงาน") ให้เปลี่ยน `SESSION_SECRET` พร้อม `ACCESS_CODE` แล้ว deploy ใหม่
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว key ของ cookie สร้างด้วย HKDF จาก `SESSION_SECRET` โดย info มี SHA-256 ของ `ACCESS_CODE` ([`hmac-access-token-signer.adapter.ts`](../../src/adapters/system/hmac-access-token-signer.adapter.ts)) การเปลี่ยนรหัสหรือ secret จึงทำให้ cookie เดิมใช้ไม่ได้ทันทีหลัง deploy ระบบไม่เก็บรหัส และการเทียบรหัสยังเป็นเวลาคงที่ ([access-gate ข้อ 6](../specs/access-gate.md#พฤติกรรม)) ชุดทดสอบของ port ตรวจว่า token จากรหัสอื่นที่ secret เดียวกันถูกปฏิเสธ ([`access-token-signer.suite.ts`](../../src/adapters/fakes/suites/access-token-signer.suite.ts))
+- **วิธีแก้เมื่อเกิด:** เมื่อต้องตัดคนเดิมออก (รวมขั้น "ปิดระบบหลังส่งงาน") ให้เปลี่ยน `ACCESS_CODE` แล้ว deploy ใหม่ตาม [operations](../runbooks/operations.md#หมุน-credential) ถ้ายังมีคนเข้าได้ ให้ตรวจว่า deployment ใหม่ขึ้นเป็น production แล้วจริง
 
 ### S2. การจำกัดความถี่นับผิดคน
 
 - **อาการ:** ผู้ใช้จริงถูกจำกัดทั้งที่ยังไม่ได้ลอง หรือสคริปต์เดารหัสได้ไม่จำกัด
 - **สาเหตุ:** อ่าน IP จาก header ที่ผู้เรียกปลอมได้ หรือ proxy เติม IP ของตัวเอง ทุกคนจึงตกอยู่ใน key เดียวกันหรือได้ key ใหม่ทุกคำขอ
-- **การป้องกันในโปรเจกต์นี้:** บางส่วน `clientIpOf` ใช้ค่าแรกของ `x-forwarded-for` แล้ว `x-real-ip` และรับเฉพาะค่าที่เป็น IP ([`http-request.ts`](../../src/composition/http-request.ts)) แต่ยังไม่ได้ยืนยันว่า Vercel แทนที่หรือต่อท้าย header นี้ และคำขอที่ไม่มี IP ใช้ key `unknown` ร่วมกัน ([`unlock-access.use-case.ts`](../../src/core/use-cases/unlock-access.use-case.ts))
-- **วิธีแก้เมื่อเกิด:** ดู `access.unlock.rate_limited` ถ้ามีคนถูกจำกัดพร้อมกันหลายคน แปลว่า IP เป็นค่าเดียวกัน ให้รอหน้าต่างหมดแล้วแก้ที่ `clientIpOf` ห้ามแก้ด้วยการตั้ง `RATE_LIMIT_SCALE` ใน production
+- **การป้องกันในโปรเจกต์นี้:** บางส่วน (ป้องกันแล้วในโค้ด ยังต้องยืนยันบน Vercel) `clientIpOf` อ่านเฉพาะค่าสุดท้ายของ `x-forwarded-for` ซึ่ง proxy ที่ใกล้ที่สุดเขียนและผู้เรียกเลือกไม่ได้ ไม่ว่า Vercel จะแทนที่หรือต่อท้าย header ไม่อ่าน `x-real-ip` และ IPv6 นับต่อ /64 ([`http-request.ts`](../../src/composition/http-request.ts), [infrastructure IP ของผู้เรียก](../architecture/infrastructure.md#ip-ของผู้เรียก), [ADR 0022](../adr/0022-client-ip-from-last-forwarded-hop.md)) คำขอที่ไม่มี IP ของการลองรหัสนับในถังแยก `RATE_LIMIT_UNLOCK_NO_IP` ที่เข้มกว่า ผู้ที่มี IP จึงไม่ถูกล็อกตาม และทุกคำขอแบบนั้น log `access.unlock.client_ip_missing` ([`unlock-access.use-case.ts`](../../src/core/use-cases/unlock-access.use-case.ts)) พฤติกรรมของ header บน Vercel จริงยังต้องยืนยันตามขั้นใน [implementation-plan](../plans/implementation-plan.md#สิ่งที่ต้องยืนยันก่อนหรือระหว่างสร้าง)
+- **วิธีแก้เมื่อเกิด:** ดู `access.unlock.rate_limited` และ `access.unlock.client_ip_missing` ถ้ามีคนถูกจำกัดพร้อมกันหลายคน แปลว่า IP เป็นค่าเดียวกันหรือ proxy ไม่ส่ง IP ให้รอหน้าต่างหมดแล้วตรวจ header ที่ Vercel ส่งจริงตามขั้นใน implementation-plan ห้ามแก้ด้วยการตั้ง `RATE_LIMIT_SCALE` ใน production
 
 ### S3. ค่า environment ของ production ไม่ตรงกับที่โค้ดคาด
 
 - **อาการ:** Production ทำงานเหมือนเครื่อง dev (ส่งไป stub, จำกัดความถี่หลวม, ไฟล์หายหลัง deploy) หรือพฤติกรรมไม่ตรงกับโค้ดที่ deploy
 - **สาเหตุ:** ค่าที่ใช้เฉพาะการทดสอบถูกตั้งใน production หรือค่าที่ถูกรูปแบบแต่ผิดความหมาย การตรวจตอนเริ่มระบบจับได้แค่ค่าที่ขาดหรือผิดรูปแบบ
-- **การป้องกันในโปรเจกต์นี้:** บางส่วน environment ทุกตัวถูกตรวจด้วย schema ตอนเริ่มระบบและล้มพร้อมบอกชื่อ ([`env.ts`](../../src/composition/env.ts), [infrastructure](../architecture/infrastructure.md#environment-variable)) แต่ `LINE_API_BASE_URL`, `LINE_DATA_API_BASE_URL`, `ANTHROPIC_BASE_URL`, `RATE_LIMIT_SCALE` และ `FILE_STORAGE=local` ห้ามตั้งใน production ด้วยเอกสารเท่านั้น ไม่มีโค้ดปฏิเสธ
-- **วิธีแก้เมื่อเกิด:** เทียบ environment ใน Vercel กับตารางใน infrastructure และขั้นที่ 3 ของ [deploy ตั้งค่าครั้งแรก](../runbooks/deploy.md#2-vercel) ลบค่าที่ไม่ควรมีแล้ว deploy ใหม่ เมื่อพฤติกรรมไม่ตรงกับโค้ด ให้ตรวจ environment ก่อนสงสัยโค้ด
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว environment ทุกตัวถูกตรวจด้วย schema ตอนเริ่มระบบและล้มพร้อมบอกชื่อ ([`env.ts`](../../src/composition/env.ts), [infrastructure](../architecture/infrastructure.md#environment-variable)) เมื่อ `VERCEL_ENV` เป็น `production` (Vercel ตั้งให้เอง) schema ปฏิเสธเพิ่ม: `LINE_API_BASE_URL`, `LINE_DATA_API_BASE_URL` หรือ `ANTHROPIC_BASE_URL` ที่ถูกตั้งไม่ว่าค่าใด, `FILE_STORAGE=local` และ `RATE_LIMIT_SCALE` ที่ไม่ใช่ 1 โดยบอกชื่อ ไม่บอกค่า ([project-setup ข้อ 6.10](../architecture/project-setup.md#610-envexample), `env.spec.ts`) Docker, CI และเครื่อง dev ไม่มี `VERCEL_ENV` จึงทำงานเหมือนเดิม ค่าที่ถูกรูปแบบแต่ผิดความหมายแบบอื่น (เช่น `APP_BASE_URL` ของเครื่องอื่น) ยังจับไม่ได้
+- **วิธีแก้เมื่อเกิด:** ถ้า deploy แล้วแอปไม่เริ่ม ให้ดู log ของ function หา `Missing or invalid environment variables:` ซึ่งบอกชื่อตัวที่ผิด ลบหรือแก้ตามขั้นที่ 3 ของ [deploy ตั้งค่าครั้งแรก](../runbooks/deploy.md#2-vercel) แล้ว deploy ใหม่ เมื่อพฤติกรรมไม่ตรงกับโค้ด ให้ตรวจ environment ก่อนสงสัยโค้ด
 
 ### S4. ความลับหรือข้อมูลลูกค้าใน log และ URL
 
@@ -250,7 +250,7 @@
 
 - **อาการ:** Build ล้มที่ CSS parser ด้วยอักขระแปลก หรือ CSS ใหญ่ขึ้นผิดปกติ หลังมีโฟลเดอร์ output ใหม่ในเครื่อง
 - **สาเหตุ:** Tailwind 4 หา class จากทุกไฟล์ที่ `.gitignore` ไม่ได้ยกเว้น ไฟล์ cache หรือ binary ในโฟลเดอร์ที่ไม่ถูก ignore จึงกลายเป็น class
-- **การป้องกันในโปรเจกต์นี้:** บางส่วน `.gitignore` ยกเว้น `.next/`, `.data/`, `coverage/`, `test-results/` และ `playwright-report/` แต่โฟลเดอร์ output ใหม่ที่ไม่ได้เพิ่มจะถูกอ่าน และ `app/globals.css` ไม่ได้จำกัดแหล่งที่ Tailwind อ่าน
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว [`app/globals.css`](../../app/globals.css) ใช้ `@import 'tailwindcss' source(none)` ร่วมกับ `@source '.'` และ `@source '../src'` (path สัมพันธ์กับไฟล์ CSS) Tailwind จึงอ่านเฉพาะ `app/` และ `src/` ไม่ว่ามีโฟลเดอร์ใดอยู่ที่ราก และ `.gitignore` ยังยกเว้น `.next/`, `.data/`, `coverage/`, `test-results/` และ `playwright-report/` โค้ดที่มี class ของ Tailwind ต้องอยู่ใน `app/` หรือ `src/` เท่านั้น ถ้าเพิ่มที่อื่นต้องเพิ่ม `@source` ของที่นั้น
 - **วิธีแก้เมื่อเกิด:** หาโฟลเดอร์ที่ไม่ถูก ignore ด้วย `git status --ignored` เพิ่มเข้า `.gitignore` ลบทิ้ง แล้ว build ใหม่
 
 ## 8. การอัปโหลดและที่เก็บไฟล์
@@ -312,14 +312,14 @@
 
 - **อาการ:** Test ผ่านเมื่อรันเดี่ยว แต่ล้มเมื่อรันทั้งไฟล์หรือทั้งชุด
 - **สาเหตุ:** Fixture ระดับ module ถูกโค้ดที่ทดสอบแก้ค่า หรือหลายคนใช้ฐานข้อมูลทดสอบเดียวกัน
-- **การป้องกันในโปรเจกต์นี้:** บางส่วน Vitest ตั้ง `restoreMocks`, adapter test แยกฐานข้อมูลและ stub ต่อคนด้วย `ADAPTER_TEST_DATABASE_NAME` และ `ADAPTER_TEST_STUB_URL` ([project-setup ข้อ 6.7](../architecture/project-setup.md#67-vitestconfigts)) แต่ไม่มีกฎหรือ helper ที่กัน fixture ร่วมถูกแก้ค่า
-- **วิธีแก้เมื่อเกิด:** รัน test ที่ล้มเดี่ยวแล้วรันทั้งไฟล์ หา object ที่ใช้ร่วมกันแล้ว `Object.freeze` และส่งสำเนาให้แต่ละ test
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว Vitest ตั้ง `restoreMocks`, adapter test แยกฐานข้อมูลและ stub ต่อคนด้วย `ADAPTER_TEST_DATABASE_NAME` และ `ADAPTER_TEST_STUB_URL` ([project-setup ข้อ 6.7](../architecture/project-setup.md#67-vitestconfigts)) และ fixture ร่วมที่เป็น object หรือ array ห่อด้วย [`deepFreeze`](../../test-support/deep-freeze.ts) ([test](../../e2e/deep-freeze.unit.ts)) การแก้ค่าจึงล้มทันทีด้วย `TypeError` กฎอยู่ใน [test-strategy](../qa/test-strategy.md#กฎ) ตอนนี้ fixture ที่ export จาก `e2e/fixtures/**` และ `test-support/**` เป็นสตริงทั้งหมด จึงมีที่ใช้ `deepFreeze` ในค่าร่วมของ unit test (`e2e/*.unit.ts`) ไม่มี lint ที่บังคับให้ห่อ ตรวจด้วย review
+- **วิธีแก้เมื่อเกิด:** รัน test ที่ล้มเดี่ยวแล้วรันทั้งไฟล์ หา object ที่ใช้ร่วมกันแล้วห่อด้วย `deepFreeze` และให้ test ที่ต้องการค่าต่างไปสร้างสำเนาก่อน ห้ามเอา freeze ออกเพื่อให้ test ผ่าน
 
 ### Q4. Test ผ่านด้วยเหตุผลผิด
 
 - **อาการ:** Test เขียวทั้งที่ฟีเจอร์พัง เช่น ผ่านเพราะได้ 401 แทนผลที่ตั้งใจตรวจ หรือตัวปลอมเก็บค่าก่อนขั้นที่ test ตั้งใจตรวจ
 - **สาเหตุ:** Assertion ไม่ได้ผูกกับผลของกฎที่ทดสอบ
-- **การป้องกันในโปรเจกต์นี้:** บางส่วน ชุดทดสอบของ port ลดความต่างของตัวปลอม และ coverage ของ `core/` บังคับ 90% แต่ไม่มีขั้นที่บังคับให้เห็น test แดงก่อนแก้
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว ชุดทดสอบของ port ลดความต่างของตัวปลอม และ coverage ของ `core/` บังคับ 90% แม่แบบ PR ([`.github/pull_request_template.md`](../../.github/pull_request_template.md)) มีช่องติ๊ก "Each new or changed test failed before the fix" ร่วมกับช่องผลที่รันจริงและสิ่งที่ไม่ได้ตรวจ ตามกฎใน [code-style ข้อ 11](code-style.md#11-git) เครื่องยืนยันไม่ได้ว่าเคยแดงจริง ผู้เปิด PR ต้องรันเองและ reviewer ตรวจ
 - **วิธีแก้เมื่อเกิด:** ทำให้ bug กลับมา (หรือแก้ค่าคงที่ที่ test ตรึง) แล้วดูว่า test ที่ชื่อเกี่ยวข้องแดงจริง ถ้าไม่แดงให้เขียน assertion ใหม่
 
 ### Q5. Test ที่เสื่อมตามวันที่จริง
@@ -335,14 +335,14 @@
 
 - **อาการ:** ค่าในเอกสารต่างจากโค้ด, comment อธิบายเวลาหรือขั้นตอนที่ไม่เป็นจริงแล้ว หรือลิงก์ในเอกสารเสีย
 - **สาเหตุ:** แก้โค้ดโดยไม่แก้เอกสาร หรือเขียนค่าเดียวกันไว้หลายที่
-- **การป้องกันในโปรเจกต์นี้:** บางส่วน กฎให้แก้เอกสารใน commit เดียวกันและข้อเท็จจริงหนึ่งเรื่องอยู่ที่เดียว ([docs README กฎของเอกสาร](../README.md#กฎของเอกสาร), [AGENTS.md](../../AGENTS.md)) ตรวจด้วย review เท่านั้น ไม่มีเครื่องมือตรวจลิงก์หรือค่าคงที่
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว กฎให้แก้เอกสารใน commit เดียวกันและข้อเท็จจริงหนึ่งเรื่องอยู่ที่เดียว ([docs README กฎของเอกสาร](../README.md#กฎของเอกสาร), [AGENTS.md](../../AGENTS.md)) และขั้น `pnpm docs:check` ในงาน `check` ของ CI ล้มเมื่อ (1) ลิงก์ relative หรือ `#anchor` ใน `docs/**`, `README.md` และ `AGENTS.md` ชี้ไปไม่ถึง โดย anchor ใช้กฎ slug ของ GitHub รวมอักษรไทย (2) ค่าในตารางของ [project-setup ข้อ 10](../architecture/project-setup.md#10-ค่าคงที่ของระบบ) ไม่ตรงกับค่าคงที่ในโค้ด (แปลงหน่วย ms/วินาที, KB/MB, ครั้งต่อวินาที และสตริง USD ตามชื่อ) หรือ (3) บล็อก YAML ใน [project-setup ข้อ 8](../architecture/project-setup.md#8-ci) ไม่เหมือน [`ci.yml`](../../.github/workflows/ci.yml) รายงานเป็น `ไฟล์:บรรทัด` กฎอยู่ใน [`docs-check.logic.ts`](../../scripts/docs-check.logic.ts) ([test](../../e2e/docs-check.unit.ts)) ค่าในเอกสารส่วนอื่นนอกตารางนั้นและ comment ในโค้ดยังตรวจด้วย review
 - **วิธีแก้เมื่อเกิด:** ถือว่าเป็น bug ของฝั่งใดฝั่งหนึ่ง ตัดสินจาก spec แล้วแก้ทั้งสองฝั่งใน PR เดียว
 
 ### P2. หลายคนหรือหลาย agent แก้ working tree เดียวกัน
 
 - **อาการ:** Commit หนึ่งลบงานที่อีกคนเพิ่ง commit, มีไฟล์ของงานอื่นติดไปด้วย หรือ test ถูกแก้ให้อ่อนลงโดยไม่มีใครตั้งใจ
 - **สาเหตุ:** Commit จาก working tree ที่ยังเป็นสภาพก่อนงานของอีกคน หรือใช้ `git add -A` ใน tree ที่มีไฟล์ของคนอื่น
-- **การป้องกันในโปรเจกต์นี้:** บางส่วน Branch อายุสั้นผ่าน PR ([code-style ข้อ 11](code-style.md#11-git)), task memory ใน `docs/agent-memory/` และฐานข้อมูลทดสอบแยกต่อคน แต่ยังไม่มีกฎเรื่องการเลือกไฟล์ที่ commit
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว Branch อายุสั้นผ่าน PR ([code-style ข้อ 11](code-style.md#11-git)), task memory ใน `docs/agent-memory/`, ฐานข้อมูลทดสอบแยกต่อคน และกฎให้ stage ไฟล์ด้วย path ไม่ใช้ `git add -A` หรือ `git add .` เมื่อมีมากกว่าหนึ่งคนหรือหนึ่ง agent ใน checkout เดียวกัน ตรวจ `git diff --cached --name-only` ก่อน commit และอ่านไฟล์ที่คนอื่นแก้หลัง rebase (กฎใน code-style ข้อ 11 และ [AGENTS.md](../../AGENTS.md)) เป็นกฎของคนทำงาน ไม่มีเครื่องมือบังคับ
 - **วิธีแก้เมื่อเกิด:** เทียบ diff ของ commit กับขอบเขตใน task memory คืนส่วนที่หายจากประวัติของ Git และแจ้งเจ้าของงานก่อน push
 
 ### P3. บอกว่าตรวจแล้วทั้งที่ไม่ได้รัน
@@ -365,16 +365,17 @@
 
 - [ ] การเปลี่ยนสถานะใหม่เป็น compare-and-set ในคำสั่งเดียว ไม่อ่านก่อนแล้วจึงเขียน ([M2](#m2-สองคำขอแก้แถวเดียวกันแล้วผลหนึ่งหาย))
 - [ ] งานใหม่ที่ล้มได้มีสถานะหรือเหตุผลที่หน้าจอเห็น และสถานะกลางทางมีทางคืนสภาพเมื่อ function ถูกตัด ([M3](#m3-สถานะกลางทางค้างเมื่อ-function-ถูกตัด), [M4](#m4-ความล้มเหลวที่ไม่มีใครเห็น))
-- [ ] การเรียกภายนอกใหม่มี timeout ที่เหมาะกับงาน และผลรวมของ timeout × จำนวนครั้งที่ลองอยู่ใต้ `maxDuration` ([A2](#a2-timeout-ไม่สัมพันธ์กับงานและเพดานเวลาของ-function))
-- [ ] การส่งออกที่ลองใหม่ได้มี key เดิมทุกครั้ง ([L4](#l4-ลูกค้าได้ข้อความซ้ำเมื่อระบบลองส่งใหม่))
+- [ ] การเรียกภายนอกใหม่มี timeout ที่เหมาะกับงาน และเพิ่มเข้า `timing-budget.ts` จน `timing-budget.spec.ts` ยืนยันว่าเวลาแย่ที่สุดอยู่ใต้ `maxDuration` ([A2](#a2-timeout-ไม่สัมพันธ์กับงานและเพดานเวลาของ-function))
+- [ ] การส่งออกที่ลองใหม่ได้มี key เดิมทุกครั้ง ไม่ลองใหม่หลังผู้ให้บริการลืม key แล้ว และไม่ push ซ้ำเมื่อ LINE ปฏิเสธ payload เพราะทุก push กินโควตา ([L3](#l3-reply-token-หมดอายุหรือถูกใช้สองครั้ง), [L4](#l4-ลูกค้าได้ข้อความซ้ำเมื่อระบบลองส่งใหม่))
+- [ ] Webhook ตอบไม่สำเร็จเฉพาะเมื่อไม่มีอะไรถูกบันทึก และการส่งซ้ำของ LINE ถูกกันซ้ำ ([L1](#l1-event-เดิมถูกประมวลผลซ้ำ), [L6](#l6-webhook-ตอบช้าหรือตอบไม่สำเร็จจนถูกส่งซ้ำ))
 - [ ] ช่วงวันและเดือนใช้ `bangkokDayRange` หรือ `bangkokMonthRange` และมี test ที่ขอบเที่ยงคืนตามเวลาไทย ([T1](#t1-วันตามเวลาไทยกับวันของ-utc))
-- [ ] ไม่มี migration เดิมถูกแก้หรือลบ และ migration ใหม่เป็นแบบเพิ่มเท่านั้น ([D1](#d1-แก้หรือลบ-migration-ที่-apply-ไปแล้ว), [D2](#d2-migration-ที่ทำให้ย้อนกลับไม่ได้))
+- [ ] ไม่มี migration เดิมถูกแก้หรือลบ และ migration ใหม่เป็นแบบเพิ่มเท่านั้น `pnpm migrations:immutable` และ `pnpm migrations:destructive` ผ่าน ([D1](#d1-แก้หรือลบ-migration-ที่-apply-ไปแล้ว), [D2](#d2-migration-ที่ทำให้ย้อนกลับไม่ได้))
 - [ ] ค่าใหม่ของ enum หรือ schema ของ API มีใน migration ด้วย ([D3](#d3-โค้ดกับฐานข้อมูลรับค่าไม่ตรงกัน))
 - [ ] กฎใหม่ของ repository มี test ใน suite ของ port ซึ่งรันกับตัวจริงด้วย ([D4](#d4-ตัวปลอมทำงานไม่เหมือนฐานข้อมูลจริง))
-- [ ] Test ใหม่เคยแดงเมื่อ bug ยังอยู่ ([Q4](#q4-test-ผ่านด้วยเหตุผลผิด))
+- [ ] Test ใหม่เคยแดงเมื่อ bug ยังอยู่ และ fixture ร่วมที่เพิ่มถูกห่อด้วย `deepFreeze` ([Q3](#q3-state-รั่วระหว่าง-test), [Q4](#q4-test-ผ่านด้วยเหตุผลผิด))
 - [ ] หน้าใหม่ไม่ถูก prerender และไม่มี console error หรือ CSP violation ที่ 390 และ 1280 ([S5](#s5-csp-บล็อก-script-ของหน้าที่ถูก-prerender), [F2](#f2-hydration-ไม่ตรงกัน))
 - [ ] Log ใหม่ใช้ field ที่มีใน `LogFields` เท่านั้น ([S4](#s4-ความลับหรือข้อมูลลูกค้าใน-log-และ-url))
-- [ ] Diff มีเฉพาะไฟล์ของงานนี้ และเอกสารกับ comment ที่เกี่ยวข้องถูกแก้ด้วย ([P1](#p1-เอกสารหรือ-comment-ไม่ตรงกับโค้ด), [P2](#p2-หลายคนหรือหลาย-agent-แก้-working-tree-เดียวกัน))
+- [ ] Diff มีเฉพาะไฟล์ของงานนี้ (stage ด้วย path) เอกสารกับ comment ที่เกี่ยวข้องถูกแก้ด้วย และ `pnpm docs:check` ผ่าน ([P1](#p1-เอกสารหรือ-comment-ไม่ตรงกับโค้ด), [P2](#p2-หลายคนหรือหลาย-agent-แก้-working-tree-เดียวกัน))
 
 ก่อนและหลัง deploy:
 
@@ -388,18 +389,6 @@
 
 | ข้อ | สถานะ | สิ่งที่เสนอ | ขนาด |
 | --- | --- | --- | --- |
-| [L4](#l4-ลูกค้าได้ข้อความซ้ำเมื่อระบบลองส่งใหม่) (และค่าที่ต้องยืนยันใน [L3](#l3-reply-token-หมดอายุหรือถูกใช้สองครั้ง), [L5](#l5-line-ปฏิเสธทั้งคำขอเพราะรูปแบบข้อความ)) | บางส่วน | ยืนยันกับเอกสาร LINE และทดสอบด้วยมือหนึ่งรอบ: คำตอบเมื่อ retry key ซ้ำ, รูปแบบ key, อายุ reply token, ขีดความยาวและจำนวนข้อความ แล้วแก้ค่าใน project-setup และ comment ที่เป็นสมมติฐาน (ติดตามใน [implementation-plan](../plans/implementation-plan.md)) | S |
-| [M3](#m3-สถานะกลางทางค้างเมื่อ-function-ถูกตัด) | บางส่วน | เพิ่มการคืนสภาพแบบเดียวกับ `recoverStuckAiStates` สำหรับ `KbDocument` ที่ `processing` นานกว่า `KNOWLEDGE_MAX_DURATION_S`, สื่อขาเข้าที่ `pending` และข้อความขาออกที่ `pending` นานกว่าเวลาสูงสุดของการส่ง ให้เป็น `failed` พร้อมรหัสใหม่ใน error-catalog เพื่อให้ลองใหม่หรือลบได้ | M |
-| [A2](#a2-timeout-ไม่สัมพันธ์กับงานและเพดานเวลาของ-function) | บางส่วน | Unit test ที่ตรึงอสมการ: หนึ่งรอบของ AI ≤ `WEBHOOK_MAX_DURATION_S`, `AI_STUCK_AFTER_MS` > เวลาแย่ที่สุดทุกรอบ และ `CLAUDE_EXTRACT_TIMEOUT_MS` × (1 + `CLAUDE_EXTRACT_MAX_RETRIES`) ≤ `KNOWLEDGE_MAX_DURATION_S` แล้วปรับค่าที่ไม่ผ่าน | S |
-| [A3](#a3-ค่าใช้จ่าย-ai-ที่ไม่ถูกบันทึก) | บางส่วน | ตัดสินใน spec ว่าการเรียกที่ timeout นับเป็นค่าใช้จ่ายหรือไม่ อย่างน้อยนับจำนวนครั้งที่ timeout ต่อวันในส่วนสถานะระบบ และเพิ่มขั้นเทียบยอดกับ console ของผู้ให้บริการใน operations | S |
-| [A4](#a4-ข้อความของลูกค้าหรือ-pdf-สั่งให้-ai-ทำนอกเรื่อง) | บางส่วน | ฟังก์ชันล้วนใน domain ที่ส่งต่อแอดมินเมื่อคำตอบมี URL ที่ไม่อยู่ในคลังความรู้หรือคำแนะนำของร้าน พร้อม unit test และกรณีลิงก์แฝงใน PDF ในชุดคำถามวัดคุณภาพ | S |
-| [D1](#d1-แก้หรือลบ-migration-ที่-apply-ไปแล้ว) | ยังไม่มี | ขั้นในงาน `check` ของ CI ที่ล้มเมื่อไฟล์ใน `prisma/migrations/` ที่มีอยู่ใน commit ก่อนหน้าถูกแก้หรือลบ | S |
-| [D2](#d2-migration-ที่ทำให้ย้อนกลับไม่ได้) | บางส่วน | ขั้นใน CI ที่ล้มเมื่อ migration ใหม่มี `DROP`, `RENAME` หรือ `ALTER COLUMN ... TYPE` โดยไม่มีบรรทัดยืนยันที่ตกลงกันไว้ในไฟล์ | S |
-| [S1](#s1-เปลี่ยนรหัสเข้าใช้แล้วคนเดิมยังเข้าได้) | ยังไม่มี | ผูก key ของ cookie กับ `ACCESS_CODE` (เช่นรวม digest ของรหัสใน HKDF info) ให้การเปลี่ยนรหัสทำให้ cookie เดิมใช้ไม่ได้ พร้อม test และแก้ access-gate กับ operations ระหว่างนี้แก้ operations ให้หมุน `SESSION_SECRET` พร้อมรหัส | S |
-| [S2](#s2-การจำกัดความถี่นับผิดคน) | บางส่วน | ยืนยันบน Vercel ว่า header ใดเป็น IP ของผู้ใช้และผู้เรียกปลอมได้หรือไม่ แล้วแก้ `clientIpOf` และบันทึกผลใน ADR | S |
-| [S3](#s3-ค่า-environment-ของ-production-ไม่ตรงกับที่โค้ดคาด) | บางส่วน | Schema ใน `env.ts` ปฏิเสธ base URL ของ stub, `RATE_LIMIT_SCALE` ที่ไม่ใช่ 1 และ `FILE_STORAGE=local` เมื่อ `VERCEL_ENV` เป็น `production` (ต้องเพิ่ม `VERCEL_ENV` ใน schema ซึ่งเป็นการเปลี่ยนชุด environment variable ต้องถามก่อน) | S |
-| [F4](#f4-css-เพี้ยนหรือ-build-ล้มเพราะ-tailwind-อ่านไฟล์ที่ไม่ใช่โค้ด) | บางส่วน | จำกัดแหล่งที่ Tailwind อ่านใน `app/globals.css` ให้เหลือ `app/` และ `src/` แล้วตรวจว่า CSS ที่ build ได้เท่าเดิม | S |
-| [Q3](#q3-state-รั่วระหว่าง-test) | บางส่วน | Helper ใน `test-support/` ที่ deep freeze fixture ร่วม และกฎใน test-strategy ให้ส่งสำเนาต่อ test | S |
-| [Q4](#q4-test-ผ่านด้วยเหตุผลผิด) | บางส่วน | เพิ่มบรรทัด "test ใหม่เคยแดงเมื่อ bug ยังอยู่" ในแม่แบบ PR ของ code-style ข้อ 11 | S |
-| [P1](#p1-เอกสารหรือ-comment-ไม่ตรงกับโค้ด) | บางส่วน | Script ที่ตรวจลิงก์ relative และ anchor ทุกไฟล์ใน `docs/` และเทียบค่าในตารางของ project-setup ข้อ 10 กับค่าคงที่ในโค้ด รันในงาน `check` ของ CI | M |
-| [P2](#p2-หลายคนหรือหลาย-agent-แก้-working-tree-เดียวกัน) | บางส่วน | กฎใน code-style ข้อ 11 และ AGENTS.md: stage เฉพาะไฟล์ของงานด้วยชื่อ ไม่ใช้ `git add -A` เมื่อ tree มีงานของคนอื่น และ rebase แล้วอ่านไฟล์ที่คนอื่นแก้ก่อน commit | S |
+| [L4](#l4-ลูกค้าได้ข้อความซ้ำเมื่อระบบลองส่งใหม่) (และค่าที่ต้องยืนยันใน [L3](#l3-reply-token-หมดอายุหรือถูกใช้สองครั้ง), [L5](#l5-line-ปฏิเสธทั้งคำขอเพราะรูปแบบข้อความ)) | บางส่วน | รูปแบบของ retry key, หน้าต่าง 24 ชั่วโมง, การแยก 400 ของ reply, 202 ของสื่อ และการตรวจ Channel secret ทำแล้ว ([ADR 0023](../adr/0023-retry-key-v5-window-and-reply-400.md)) ที่เหลือ: เมื่อมี LINE OA จริง เจ้าของงานทำขั้นทดสอบด้วยมือ 9 ข้อใน [line-oa-setup](../runbooks/line-oa-setup.md#ทดสอบด้วยมือเมื่อมี-line-oa-จริง) แล้วแก้ค่าใน project-setup และ comment ที่เป็นสมมติฐานตามผล (ติดตามใน [implementation-plan](../plans/implementation-plan.md#สิ่งที่ต้องยืนยันก่อนหรือระหว่างสร้าง)) | S |
+| [A4](#a4-ข้อความของลูกค้าหรือ-pdf-สั่งให้-ai-ทำนอกเรื่อง) | บางส่วน | ลิงก์ทำแล้ว ที่เหลือคือราคาและเงื่อนไขที่ไม่มีในคลัง ซึ่งยังกันด้วย prompt อย่างเดียว ต้องออกแบบใน spec ก่อนว่าจะตรวจตัวเลขในคำตอบกับคลังความรู้อย่างไรโดยไม่กันคำตอบที่ถูก | M |
+| [S2](#s2-การจำกัดความถี่นับผิดคน) | บางส่วน | โค้ดทำแล้ว ([ADR 0022](../adr/0022-client-ip-from-last-forwarded-hop.md)) เหลือการยืนยันบน Vercel ตามขั้นใน [implementation-plan](../plans/implementation-plan.md#สิ่งที่ต้องยืนยันก่อนหรือระหว่างสร้าง) ถ้าค่าสุดท้ายของ `x-forwarded-for` ไม่ใช่ IP ของผู้เรียก ให้แก้ `clientIpOf` และเขียน ADR ใหม่ | S |

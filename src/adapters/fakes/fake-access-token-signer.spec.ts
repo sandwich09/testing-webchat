@@ -6,6 +6,8 @@ describeAccessTokenSignerSuite(() => ({
   signer: new FakeAccessTokenSigner({ code: 'open-sesame', secret: 'one' }),
   code: 'open-sesame',
   otherSecretSigner: new FakeAccessTokenSigner({ code: 'open-sesame', secret: 'two' }),
+  otherCodeSigner: new FakeAccessTokenSigner({ code: 'new-sesame', secret: 'one' }),
+  sameSettingsSigner: new FakeAccessTokenSigner({ code: 'open-sesame', secret: 'one' }),
 }));
 
 describe('FakeAccessTokenSigner options', () => {

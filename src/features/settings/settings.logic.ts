@@ -5,6 +5,7 @@ import {
   AI_INSTRUCTIONS_MAX_CHARS,
   CANNED_TEXT_MAX_CHARS,
   CANNED_TITLE_MAX_CHARS,
+  LINE_CHANNEL_ID_PATTERN,
   PDF_MAX_BYTES,
   type UsageReportResponse,
 } from '@/contracts';
@@ -78,11 +79,23 @@ export function validateCannedReply(input: {
   return { ok: true };
 }
 
-/** Both LINE credentials are required (after trim). */
+/** Field of the LINE credentials form that a check refers to. */
+export type LineCredentialField = 'channelId' | 'channelSecret' | 'channelAccessToken';
+
+/**
+ * All three LINE values are required (after trim), in the order of the form; the Channel ID is
+ * digits only, at most LINE_CHANNEL_ID_MAX_CHARS (the contract's LINE_CHANNEL_ID_PATTERN).
+ */
 export function validateLineCredentials(input: {
+  channelId: string;
   channelSecret: string;
   channelAccessToken: string;
-}): { ok: true } | { ok: false; field: 'channelSecret' | 'channelAccessToken'; code: 'required' } {
+}): { ok: true } | { ok: false; field: LineCredentialField; code: 'required' | 'invalid' } {
+  const channelId = input.channelId.trim();
+  if (channelId === '') return { ok: false, field: 'channelId', code: 'required' };
+  if (!LINE_CHANNEL_ID_PATTERN.test(channelId)) {
+    return { ok: false, field: 'channelId', code: 'invalid' };
+  }
   if (input.channelSecret.trim() === '') {
     return { ok: false, field: 'channelSecret', code: 'required' };
   }

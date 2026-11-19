@@ -1,6 +1,6 @@
 # หน้าจอ: component, state และพฤติกรรม
 
-> สถานะ: สร้างแล้ว · อัปเดตล่าสุด: 2026-11-18
+> สถานะ: สร้างแล้ว · อัปเดตล่าสุด: 2026-11-19
 
 เอกสารนี้แปลง spec ของแต่ละ feature เป็นสิ่งที่ต้องสร้างบนหน้าจอ: component อยู่ไฟล์ไหน ถือ state อะไร เรียก API function ไหน มีสถานะใดบ้าง ขนาดเท่าไร กดคีย์บอร์ดแล้วเกิดอะไร และ `data-testid` ที่ E2E ใช้
 
@@ -93,8 +93,8 @@
 | | `cancelUpload(uploadId: string): Promise<void>` | `DELETE /api/uploads/:uploadId` | 204 |
 | | `uploadToTarget(target: UploadTargetDto, blob: Blob, opts: { onProgress(pct: number \| null): void; signal: AbortSignal }): Promise<void>` | `PUT /api/local-storage/*key` เมื่อ `strategy` เป็น `http_put` (เมื่อเป็น `vercel_blob_client` ส่งตรงเข้า Vercel Blob ซึ่งไม่ใช่ endpoint ของแอป) | 200 |
 | `src/features/settings/settings.api.ts` | `updateSettings(patch: SettingsPatch): Promise<SettingsDto>` | `PATCH /api/settings` | `SettingsDto` |
-| | `saveLineCredentials(body: { channelSecret: string; channelAccessToken: string }): Promise<{ botName: string; basicId: string }>` | `PUT /api/settings/line-credentials` | `{ botName, basicId }` |
-| | `testLineConnection(): Promise<{ botName: string; basicId: string }>` | `POST /api/settings/line/test` | `{ botName, basicId }` |
+| | `saveLineCredentials(body: { channelId: string; channelSecret: string; channelAccessToken: string }): Promise<LineBotInfo>` | `PUT /api/settings/line-credentials` | `{ botName, basicId, secretStatus }` |
+| | `testLineConnection(): Promise<LineBotInfo>` | `POST /api/settings/line/test` | `{ botName, basicId, secretStatus }` |
 | `src/features/settings/settings.guard.api.ts` | `testTopicGuard(text: string): Promise<GuardTestResult>` | `POST /api/settings/guard/test` | `{ allowed, matchedTopic, costUsd }` |
 | | `listKbDocuments(): Promise<KbDocumentsList>` | `GET /api/knowledge/documents` | `{ documents, usedTokens, capacityTokens }` |
 | | `uploadKbDocument(file: File): Promise<DocumentDto>` | `POST /api/knowledge/documents` | `DocumentDto` (202) |
@@ -440,7 +440,7 @@ Field ของ `MessageDto` ที่ใช้: `id`, `seq`, `updatedSeq`, `dir
 | เวลาและผู้ส่ง | ข้างฟองสุดท้ายของกลุ่ม ชิดล่าง ห่าง 6px: ฝั่งลูกค้าอยู่ขวาของฟอง `formatMessageTime` ฝั่งร้านอยู่ซ้ายของฟอง เรียงเป็น 2 บรรทัด: ป้ายผู้ส่งตัวหนา (`inbox.message.senderYou` หรือ `inbox.message.senderAi`) แล้วเวลา ทั้งหมด `text-meta` สี `muted` |
 | สถานะกำลังส่ง | ฟองความทึบ 0.55 และใต้ฟองมี `inbox.message.sending` `text-meta` |
 | สถานะส่งแล้ว | ไอคอน `Check` 12px สี `muted` ก่อนเวลา พร้อมข้อความซ่อน `inbox.message.sent` |
-| สถานะส่งไม่สำเร็จ | ฟองความทึบเต็ม ขอบ 1px `danger` ใต้ฟอง: ไอคอน `AlertCircle` + `failedLineText(deliveryError)` 14px สี `danger` คือ `inbox.message.failed` + ` · ` + เหตุผลจาก error catalog (แบบ `outbound`) ที่ตัดคำ "ส่งไม่สำเร็จ" ต้นข้อความออกเพื่อไม่ให้ซ้ำ ไม่มีเหตุผลแสดงแค่ `inbox.message.failed` และปุ่มข้อความ `inbox.message.retry` 14px ตัวหนา สูง 32px (จอแคบ 44px) |
+| สถานะส่งไม่สำเร็จ | ฟองความทึบเต็ม ขอบ 1px `danger` ใต้ฟอง: ไอคอน `AlertCircle` + `failedLineText(deliveryError)` 14px สี `danger` คือ `inbox.message.failed` + ` · ` + เหตุผลจาก error catalog (แบบ `outbound`) ที่ตัดคำ "ส่งไม่สำเร็จ" ต้นข้อความออกเพื่อไม่ให้ซ้ำ ไม่มีเหตุผลแสดงแค่ `inbox.message.failed` และปุ่มข้อความ `inbox.message.retry` 14px ตัวหนา สูง 32px (จอแคบ 44px) เมื่อ `isRetryExpired(row, now)` เป็นจริง (`delivery.retryExpiresAt` ไม่หลัง `now` ของนาฬิกาที่เดินทุกนาที หรือ server ตอบ `message.retry_expired`) เหตุผลเป็นของ `message.retry_expired` (`{hours}` จาก `LINE_RETRY_KEY_WINDOW_MS`), `message-error` มี `data-code="message.retry_expired"` และไม่มีปุ่ม |
 | บรรทัดเหตุการณ์ | `SystemLine` กลาง 14px สี `muted` ไม่มีพื้น margin 12px 0 ข้อความ `eventCodeText(message.eventCode)` จาก [error-catalog](../architecture/error-catalog.md#บรรทัดเหตุการณ์) |
 
 บรรทัด `guard.blocked` ของขอบเขตหัวข้อแสดงด้วย `SystemLine` แบบเดียวกับบรรทัดอื่น และข้อความปฏิเสธที่ส่งให้ลูกค้าเป็นฟองของร้านผู้ส่ง `ai` ตามปกติ จึงไม่ต้องมี component ใหม่ในแชท ([topic-guard](topic-guard.md))
@@ -758,21 +758,22 @@ type ThreadState = { items: ThreadMessage[]; hasOlder: boolean; cursor: string }
 | --- | --- | --- |
 | `sending` | สร้าง id แล้ว ใส่ใน cache แล้ว คำขอกำลังไป | ฟองทึบ 0.55 + "กำลังส่ง" |
 | `sent` | server ตอบ `delivery.status: "sent"` | ฟองปกติ + ไอคอนส่งแล้ว |
-| `failed` | server ตอบ `delivery.status: "failed"` พร้อม `delivery.errorCode` หรือ API ตอบ error | "ส่งไม่สำเร็จ · เหตุผล" + "ส่งอีกครั้ง" |
+| `failed` | server ตอบ `delivery.status: "failed"` พร้อม `delivery.errorCode` หรือ API ตอบ error | "ส่งไม่สำเร็จ · เหตุผล" + "ส่งอีกครั้ง" (ไม่มีปุ่มเมื่อหน้าต่างของ retry key ผ่านแล้ว ข้อ 5.3) |
 | `unconfirmed` | คำขอไม่ได้คำตอบ (`client.network`) | ยังแสดง "กำลังส่ง" |
 
 การเปลี่ยนสถานะ:
 
 | จาก | เหตุการณ์ | ไป | ทำอะไร |
 | --- | --- | --- | --- |
-| (ไม่มี) | กดส่ง | `sending` | `id = uuidv7()` ในฝั่ง browser, ใส่ `{ id, seq: null, updatedSeq: null, author: "admin", direction: "outbound", delivery: { status: "pending", errorCode: null }, localState: "sending", createdAt: now }` ท้าย `items` แล้ว `sendMessage(contactId, { id, kind, ... })` |
+| (ไม่มี) | กดส่ง | `sending` | `id = uuidv7()` ในฝั่ง browser, ใส่ `{ id, seq: null, updatedSeq: null, author: "admin", direction: "outbound", delivery: { status: "pending", errorCode: null, retryExpiresAt: null }, localState: "sending", createdAt: now }` ท้าย `items` แล้ว `sendMessage(contactId, { id, kind, ... })` |
 | `sending` | ได้ `MessageDto` ที่ `delivery.status` เป็น `sent` | `sent` | แทนที่ด้วยข้อมูลจาก server (ได้ `seq` และ `updatedSeq`) |
 | `sending` | ได้ `MessageDto` ที่ `failed` | `failed` | แทนที่ด้วยข้อมูลจาก server |
 | `sending` | API ตอบ error มีรหัส (4xx/5xx) | `failed` | `localState: "failed"`, `localError: code` |
 | `sending` | ไม่มีคำตอบ | `unconfirmed` | เริ่มนับ `SEND_UNCONFIRMED_TIMEOUT_MS` |
 | `unconfirmed` | polling พบ id เดียวกันจาก server | ตามสถานะของ server | `mergeThread` แทนที่ให้เอง |
 | `unconfirmed` | ครบเวลาแล้วยังไม่พบ | `failed` | `localError: "client.network"` |
-| `failed` (มี `seq`, server รู้จัก) | กดส่งอีกครั้ง | `sending` | `retryMessage(contactId, id)` ซึ่ง server ส่งด้วย push และ retry key เดิมเสมอ |
+| `failed` (มี `seq`, server รู้จัก) | กดส่งอีกครั้ง | `sending` | `retryMessage(contactId, id)` ซึ่ง server ส่งด้วย push และ retry key เดิมเสมอ `retryPlan(row, now)` คืน null เมื่อ `isRetryExpired(row, now)` จึงไม่มีปุ่มและไม่เรียก |
+| `sending` (retry) | server ตอบ `message.retry_expired` | `failed` | `localError: "message.retry_expired"` ฟองแสดงเหตุผลนั้นและซ่อนปุ่ม |
 | `failed` (ไม่มี `seq`, server อาจไม่รู้จัก) | กดส่งอีกครั้ง | `sending` | `sendMessage` ด้วย id เดิมและเนื้อหาเดิม server กันซ้ำด้วย primary key จึงไม่ส่งสองครั้ง |
 | ทุกสถานะ | polling คืนแถวของ id นี้ | ตาม server | server ชนะเสมอเมื่อมี `updatedSeq` |
 
@@ -867,7 +868,7 @@ function mergeById<T extends { id: string; updatedSeq: string | null }>(current:
 | `inbox.logic.ts` | การจัดรูปเวลาในรายชื่อ ตัวอย่างข้อความล่าสุด การกรองและเรียงรายชื่อ การจัดกลุ่มข้อความและป้ายวัน `threadSubline`, `aiSwitchView` และ type `AttachmentState` |
 | `list/inbox.list.logic.ts` | `parseFilter`, `filterQuery`, `contactHref`, `unreadBadgeText`, `unreadAriaText`, `emptyState`, `nextRowIndex`, `nextTabIndex`, `tabbableRowId` |
 | `thread/inbox.thread.logic.ts` | `newMessages`, `planTailScroll`, `shouldLoadOlder`, `restoredScrollTop`, `resolveMedia`, `otherLabel`, `deliveryReason`, `failedLineText`, `fillCopy` |
-| `inbox.send.logic.ts` | การเปลี่ยนสถานะของการส่งแบบ optimistic ตามข้อ 7.5 และการรวมหน้าของแชท (`threadFromFirstPage`, `applyThreadPoll`, `applyOlderPage`, `loadThread`, `buildSendBody`, `optimisticMessage`, `bodyFromRow`, `applySendEvent`, `failureEvent`, `pendingSendOfUpload`, `retryPlan`, `outgoingStatus`) |
+| `inbox.send.logic.ts` | การเปลี่ยนสถานะของการส่งแบบ optimistic ตามข้อ 7.5 และการรวมหน้าของแชท (`threadFromFirstPage`, `applyThreadPoll`, `applyOlderPage`, `loadThread`, `buildSendBody`, `optimisticMessage`, `bodyFromRow`, `applySendEvent`, `failureEvent`, `pendingSendOfUpload`, `retryPlan(row, now)`, `isRetryExpired(row, now)`, `outgoingStatus`) |
 
 ```ts
 function formatListTime(iso: string, now: Date): string
@@ -1107,20 +1108,22 @@ src/features/settings/
 
 ### 9.4 ส่วน LINE Official Account
 
-ข้อมูล: `useSettings()` field `line.configured`, `line.status` (`connected` / `error` / `not_configured`), `line.botName`, `line.basicId`, `line.lastWebhookAt`, `line.webhookUrl`
+ข้อมูล: `useSettings()` field `line.configured`, `line.status` (`connected` / `error` / `not_configured`), `line.botName`, `line.basicId`, `line.channelId`, `line.secretStatus` (`verified` / `unchecked` / `no_channel_id`), `line.lastWebhookAt`, `line.webhookUrl`
 
 | แถว | Control | `data-testid` |
 | --- | --- | --- |
-| สถานะ | ป้ายสถานะ: จุด 8px + ข้อความ (`settings.line.statusConnected` สี `success`, `settings.line.statusError` สี `danger`, `settings.line.statusNotConfigured` สี `muted`) คำอธิบายคือชื่อ OA และ Basic ID และ `settings.line.lastWebhook` | `line-status`, `line-bot-name` |
+| สถานะ | ป้ายสถานะ: จุด 8px + ข้อความ (`settings.line.statusConnected` สี `success`, `settings.line.statusError` สี `danger`, `settings.line.statusNotConfigured` สี `muted`) คำอธิบายคือชื่อ OA และ Basic ID, `settings.line.lastWebhook` และเมื่อ `configured` บรรทัดของ Channel secret 14px ตาม `secretStatus`: `settings.line.secretVerified` สี `muted`, `settings.line.secretUnchecked` หรือ `settings.line.secretNoChannelId` สี `warn` (สถานะเตือนของการตรวจที่ทำไม่ได้) | `line-status`, `line-bot-name`, `line-secret-status` (`data-status` เป็นค่าของ `secretStatus`) |
 | `settings.line.webhookUrl` | ช่องอ่านอย่างเดียว ตัวอักษร monospace 14px เต็มความกว้าง + ปุ่ม `settings.line.copy` ใช้ `navigator.clipboard.writeText` toast `settings.line.copiedToast` | `line-webhook-url`, `line-webhook-copy` |
+| `settings.line.channelId` | `<input type="text" inputmode="numeric" autocomplete="off" maxlength={LINE_CHANNEL_ID_MAX_CHARS}>` เต็มความกว้าง คำอธิบาย `settings.line.channelIdDesc` placeholder `settings.line.channelIdPlaceholder` ค่าเริ่มเป็น `line.channelId` (ไม่ใช่ความลับ) และคงค่าหลังบันทึก | `line-channel-id` |
 | `settings.line.channelSecret` | `<input type="password" autocomplete="off">` เต็มความกว้าง placeholder `settings.line.secretPlaceholderSet` เมื่อตั้งแล้ว หรือ `settings.line.secretPlaceholderEmpty` | `line-channel-secret` |
 | `settings.line.accessToken` | เหมือนข้างบน | `line-access-token` |
 | ปุ่ม | `settings.line.save` (`saveLineCredentials`) และ `settings.line.test` (`testLineConnection`) เรียงขวา ปุ่มทดสอบกดไม่ได้เมื่อยังไม่ได้ตั้งค่า พร้อมเหตุผล `settings.line.testNeedsCredentials` | `line-save`, `line-test` |
-| ผลทดสอบ | บรรทัดใต้ปุ่ม `role="status"`: สำเร็จ `settings.line.testOk` สี `success` ไม่สำเร็จใช้ error catalog สี `danger` | `line-result` |
+| ผลทดสอบ | บรรทัดใต้ปุ่ม `role="status"`: สำเร็จ `settings.line.testOk` + ` · ` + ข้อความของ `secretStatus` ที่การทดสอบตอบ (`data-result="ok"` สี `success` เมื่อ `verified`, `data-result="warning"` สี `warn` เมื่อ `unchecked` หรือ `no_channel_id`) ไม่สำเร็จใช้ error catalog สี `danger` (`data-result="error"`) | `line-result` |
 
-- ระบบไม่แสดงค่า secret เดิม ช่องว่างเสมอหลังโหลดและหลังบันทึกสำเร็จ ([admin-backoffice](admin-backoffice.md))
-- บันทึกต้องกรอกทั้งสองช่อง ตรวจด้วย `validateLineCredentials` ข้อความ `settings.line.error.*Required`
-- บันทึกไม่ผ่าน (token ผิด) ค่าที่กรอกยังอยู่ ข้อความจาก error catalog
+- ระบบไม่แสดงค่า secret เดิม ช่องของ Channel secret และ Channel access token ว่างเสมอหลังโหลดและหลังบันทึกสำเร็จ ([admin-backoffice](admin-backoffice.md)) ช่อง Channel ID แสดงค่าที่บันทึกไว้
+- บันทึกต้องกรอกทั้งสามช่อง ตรวจด้วย `validateLineCredentials` ตามลำดับของฟอร์ม ข้อความ `settings.line.error.*Required` และ Channel ID ที่ไม่ใช่ตัวเลข 1 ถึง `LINE_CHANNEL_ID_MAX_CHARS` หลักได้ `settings.line.error.channelIdInvalid` (`{max}`) focus ไปที่ช่องแรกที่ไม่ผ่าน
+- บันทึกไม่ผ่าน (token ผิด หรือ `line.channel_secret_invalid`) ค่าที่กรอกยังอยู่ ข้อความจาก error catalog
+- บันทึกสำเร็จ: toast `settings.line.savedToast` เมื่อ `secretStatus` เป็น `verified` และ `common.toast.saved` เมื่อ `unchecked` (สถานะเตือนอยู่ในบรรทัดของ Channel secret ซึ่งโหลดใหม่หลังบันทึก)
 - ยังไม่ได้ตั้งค่า: ก่อนแถว secret แสดงหัว `settings.line.setupTitle` และรายการลำดับเลข `settings.line.setupStep1` ถึง `settings.line.setupStep3` และลิงก์ `settings.line.setupGuide` ไป [line-oa-setup](../runbooks/line-oa-setup.md) บน GitHub `data-testid` `line-setup-steps`
 
 ### 9.5 ส่วนคลังความรู้
@@ -1194,7 +1197,7 @@ src/features/settings/
 
 ### 9.9 ส่วนค่าใช้จ่าย AI
 
-ข้อมูล: `getUsage(month)` คืน `{ month, priceTableDate, contacts: UsageRowDto[], ingest, guard, totalCostUsd, replyCount, averageCostPerReplyUsd }` ตาม [api-contract](../architecture/api-contract.md#get-apiusage) (`usageReportResponseSchema` ใน `src/contracts/usage.contract.ts`) แถวของลูกค้าใช้ `contactId`, `displayName`, `pictureUrl`, `replyCount`, `totalTokens`, `costUsd` ส่วน `ingest` และ `guard` มี field เดียวกันคือ `count`, `inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`, `totalTokens`, `costUsd` (`guard` รวมการทดลองจากหน้าตั้งค่า และ `totalCostUsd` รวมลูกค้า + `ingest` + `guard`)
+ข้อมูล: `getUsage(month)` คืน `{ month, priceTableDate, contacts: UsageRowDto[], ingest, guard, totalCostUsd, replyCount, averageCostPerReplyUsd, noResponseCount }` ตาม [api-contract](../architecture/api-contract.md#get-apiusage) (`usageReportResponseSchema` ใน `src/contracts/usage.contract.ts`) แถวของลูกค้าใช้ `contactId`, `displayName`, `pictureUrl`, `replyCount`, `totalTokens`, `costUsd` ส่วน `ingest` และ `guard` มี field เดียวกันคือ `count`, `inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`, `totalTokens`, `costUsd` (`guard` รวมการทดลองจากหน้าตั้งค่า และ `totalCostUsd` รวมลูกค้า + `ingest` + `guard`)
 
 | ส่วน | ค่า | `data-testid` |
 | --- | --- | --- |
@@ -1204,6 +1207,7 @@ src/features/settings/
 | แถวคัดกรอง | `settings.usage.guardRow` จาก `guard` ของรายงาน: คอลัมน์ครั้งที่ตอบเป็น `—` ป้ายรองแสดงจำนวนครั้ง `settings.usage.guardCount` แทน `{n}` ด้วย `guard.count` และ token (`guard.totalTokens`), ราคา (`guard.costUsd`) กดไม่ได้ ข้อความที่ถูกกันไม่นับเป็นครั้งที่ AI ตอบ | `usage-row-guard` |
 | แถวรวม | ตัวหนา เส้นบน 1px `fg`: `settings.usage.total` + `replyCount`, `usageTokenTotal(report)` และ `totalCostUsd` จาก server | `usage-total` |
 | บรรทัดใต้ตาราง | `settings.usage.avgPerReply` แล้ว `settings.usage.disclaimer` แทน `{date}` ด้วย `priceTableDate` 14px สี `muted` | `usage-avg`, `usage-disclaimer` |
+| การเรียกที่ไม่ได้คำตอบ | แสดงเฉพาะเมื่อ `noResponseCount` > 0: `settings.usage.noResponse` แทน `{n}` ด้วย `noResponseCount` 14px สี `muted` ระหว่างบรรทัดค่าเฉลี่ยกับบรรทัดคำเตือนราคา ([usage-cost](usage-cost.md#การเรียกที่ไม่ได้คำตอบ)) | `usage-no-response` |
 | ว่าง | `settings.usage.empty` (ยังแสดงบรรทัดคำเตือนราคา) | `usage-empty` |
 
 จอแคบ: ตารางเลื่อนแนวนอนในกล่องของตัวเอง คอลัมน์ลูกค้ากว้างอย่างน้อย 160px

@@ -124,6 +124,12 @@ export function createUsageRepository(client: PrismaClient): UsageRepository {
       return { guardBlocked: row.guardBlocked, outputRejected: row.outputRejected };
     },
 
+    async countNoResponse(range) {
+      return client.aiUsage.count({
+        where: { error: 'ai.no_response', createdAt: { gte: range.from, lt: range.to } },
+      });
+    },
+
     async listForContact(contactId, range) {
       const rows = await client.aiUsage.findMany({
         where: { contactId, createdAt: { gte: range.from, lt: range.to } },

@@ -6,7 +6,7 @@
 
 | ส่วน | ภาษา |
 | --- | --- |
-| หน้าจอ | ไทย ยกเว้นชื่อ "Test webchat application" และศัพท์ที่เรียกทับศัพท์อยู่แล้ว: LINE Official Account, Webhook URL, Channel secret, Channel access token, Token, PDF, AI |
+| หน้าจอ | ไทย ยกเว้นชื่อ "Test webchat application" และศัพท์ที่เรียกทับศัพท์อยู่แล้ว: LINE Official Account, Webhook URL, Channel ID, Channel secret, Channel access token, Token, PDF, AI |
 | เอกสารและ README | ไทย คงศัพท์เทคนิคเป็นอังกฤษ |
 | โค้ด, comment, commit, PR, รหัส error, ชื่อเหตุการณ์ใน log, `AGENTS.md` | อังกฤษ |
 
@@ -43,7 +43,7 @@
 | ตั้งค่า | หน้าหลังบ้าน | หลังบ้าน, การตั้งค่า |
 | cache | ส่วนของ prompt ที่ผู้ให้บริการ AI เก็บไว้ใช้ซ้ำ ใช้ใน "Token อ่านจาก cache" และ "Token เขียน cache" | แคช, หน่วยความจำชั่วคราว |
 | webhook | ช่องทางที่ LINE ส่งข้อความเข้าระบบ ตัวพิมพ์เล็กเมื่ออยู่กลางประโยค เช่น "รับ webhook ล่าสุด", "เปิดใช้ webhook" และ "Webhook URL" เมื่อเป็นชื่อช่อง | เว็บฮุก |
-| Basic ID, LINE Developers Console, Messaging API, channel | ชื่อตามหน้าจอของ LINE และ [line-oa-setup](../runbooks/line-oa-setup.md) ใช้ตรงตัว | ไอดี, คอนโซล, ช่อง |
+| Basic ID, Channel ID, Basic settings, LINE Developers Console, Messaging API, channel | ชื่อตามหน้าจอของ LINE และ [line-oa-setup](../runbooks/line-oa-setup.md) ใช้ตรงตัว | ไอดี, คอนโซล, ช่อง |
 | JPEG, PNG, HEIC, WebP, MP4, MOV | ชื่อชนิดไฟล์ ตัวพิมพ์ใหญ่ตามนี้ | .jpg, ไฟล์ภาพ |
 | MB | หน่วยขนาดไฟล์ เว้นวรรคหลังตัวเลข เช่น "10 MB" | เมกะไบต์, เมก |
 

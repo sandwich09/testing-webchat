@@ -8,6 +8,10 @@ export const POST = withRoute(
   async ({ ctx }) => {
     const r = await testLineConnection({}, ctx);
     if (!r.ok) return r;
-    return json({ botName: r.value.botName, basicId: r.value.basicId });
+    return json({
+      botName: r.value.botName,
+      basicId: r.value.basicId,
+      secretStatus: r.value.secretStatus,
+    });
   },
 );

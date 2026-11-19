@@ -10,6 +10,20 @@ export const AI_HISTORY_LIMIT = 20;
 export const AI_REPLY_MAX_CHARS = 1000;
 export const AI_MAX_ROUNDS_PER_RUN = 2;
 export const AI_STUCK_AFTER_MS = 300_000;
+export const KNOWLEDGE_STUCK_AFTER_MS = 360_000;
+export const MEDIA_STUCK_AFTER_MS = 360_000;
+/**
+ * Longest a StoreInboundMedia job may run, measured from its first download. A step whose worst
+ * case would end past it is not started (timing-budget.spec.ts pins it under the webhook budget).
+ */
+export const MEDIA_JOB_BUDGET_MS = 255_000;
+/** Reserve for one content download from LINE; not below the adapter's worst case. */
+export const MEDIA_CONTENT_CALL_WORST_MS = 100_000;
+/** Reserve for one transcoding status call to LINE; not below the adapter's worst case. */
+export const MEDIA_STATUS_CALL_WORST_MS = 5000;
+/** Wait before each transcoding status call while LINE prepares the content. */
+export const MEDIA_NOT_READY_POLL_MS = 5000;
+export const SEND_STUCK_AFTER_MS = 360_000;
 export const AI_MAX_TOKENS = 16_000;
 export const AI_EXTRACT_MAX_TOKENS = 64_000;
 export const LINE_LOADING_SECONDS = 20;
@@ -23,6 +37,10 @@ export const UPLOAD_TICKET_TTL_MS = 900_000;
 export const LINE_TEXT_MAX_CHARS = 5000;
 export const LINE_MAX_PARTS_PER_REQUEST = 5;
 export const REPLY_TOKEN_USABLE_MS = 50_000;
+/** LINE keeps a push retry key this long; after it the same key is a new request. */
+export const LINE_RETRY_KEY_WINDOW_MS = 86_400_000;
+/** A LINE Channel ID is digits only, at most this many. */
+export const LINE_CHANNEL_ID_MAX_CHARS = 20;
 export const ADMIN_TEXT_MAX_CHARS = 5000;
 export const PREVIEW_TEXT_MAX_CHARS = 100;
 export const MESSAGE_PAGE_LIMIT = 50;
@@ -53,18 +71,20 @@ export const DEFAULT_GUARD_REFUSAL_TEXT = 'คุยได้เฉพาะห�
 
 // 10.2 Rate limits (fixed window)
 export const RATE_LIMIT_UNLOCK = { limit: 5, windowMs: 60_000 } as const;
+export const RATE_LIMIT_UNLOCK_NO_IP = { limit: 5, windowMs: 300_000 } as const;
 export const RATE_LIMIT_SEND_MESSAGE = { limit: 30, windowMs: 60_000 } as const;
 export const RATE_LIMIT_UPLOAD_TICKET = { limit: 20, windowMs: 60_000 } as const;
 export const RATE_LIMIT_PDF_INGEST = { limit: 5, windowMs: 3_600_000 } as const;
 export const RATE_LIMIT_TYPING = { limit: 1, windowMs: 10_000 } as const;
 export const RATE_LIMIT_GUARD_TEST = { limit: 10, windowMs: 60_000 } as const;
 
-/** `scaled` rules are multiplied by RATE_LIMIT_SCALE. Only `unlock` is not scaled. */
+/** `scaled` rules are multiplied by RATE_LIMIT_SCALE. The two unlock rules are not scaled. */
 export const RATE_LIMIT_RULES: Record<
   RateLimitAction,
   { limit: number; windowMs: number; scaled: boolean }
 > = {
   unlock: { ...RATE_LIMIT_UNLOCK, scaled: false },
+  unlock_no_ip: { ...RATE_LIMIT_UNLOCK_NO_IP, scaled: false },
   send_message: { ...RATE_LIMIT_SEND_MESSAGE, scaled: true },
   upload_ticket: { ...RATE_LIMIT_UPLOAD_TICKET, scaled: true },
   pdf_ingest: { ...RATE_LIMIT_PDF_INGEST, scaled: true },

@@ -131,6 +131,46 @@ describe('deliverOutbound', () => {
       expect(logger.entries[1]).toMatchObject({ channel: 'push' });
     });
 
+    it('marks line.reply_failed and never pushes the same payload after a validation 400', async () => {
+      const contact = await givenContact('rt-1');
+      // What the adapter answers for a 400 whose body is not "Invalid reply token".
+      gateway.failNext('reply', 'line.reply_failed');
+      const message = await givenPendingText(contact);
+
+      const result = await deliver(message, contact, access, 'auto');
+
+      expect(gateway.pushes).toEqual([]);
+      expect(result).toMatchObject({
+        deliveryStatus: 'failed',
+        deliveryError: 'line.reply_failed',
+        firstPushAt: null,
+      });
+      expect(logger.eventsOf()).toEqual(['line.send.failed']);
+      expect(logger.entries[0]).toMatchObject({ channel: 'reply', errorCode: 'line.reply_failed' });
+    });
+
+    it('dates the first push, and a reply leaves it unset', async () => {
+      const replied = await deliver(
+        await givenPendingText(await givenContact('rt-1')),
+        await givenContact(),
+        access,
+        'auto',
+      );
+      expect(replied).toMatchObject({ deliveryStatus: 'sent', firstPushAt: null });
+
+      const contact = await givenContact();
+      const message = await givenPendingText(contact);
+      const firstAt = clock.now();
+      gateway.failNext('push', 'line.unavailable');
+      const failed = await deliver(message, contact, access, 'auto');
+      expect(failed).toMatchObject({ deliveryStatus: 'failed', firstPushAt: firstAt });
+
+      // A later push (send again) keeps the time of the first one.
+      clock.advance(60_000);
+      const again = await deliver(failed, contact, access, 'push_only');
+      expect(again).toMatchObject({ deliveryStatus: 'sent', firstPushAt: firstAt });
+    });
+
     it('marks failed and never pushes when the reply outcome is unknown (line.unavailable)', async () => {
       const contact = await givenContact('rt-1');
       gateway.failNext('reply', 'line.unavailable');

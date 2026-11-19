@@ -1,6 +1,6 @@
 # Guardrail ของ AI
 
-> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-18
+> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-19
 
 เอกสารนี้จับคู่แนวปฏิบัติด้าน guardrail ของ AI เก้าข้อ (input validation, prompt-injection defence, data privacy, least privilege, structured output, grounding and verification, human-in-the-loop, observability และ continuous evaluation) กับสิ่งที่ระบบนี้ทำจริง แยกตามชั้น แนวปฏิบัติเหล่านี้มาจากกรอบทั่วไปอย่าง OWASP Top 10 for LLM Applications และ NIST AI RMF เอกสารนี้ไม่ได้อ้างรายละเอียดหรือข้อกำหนดเฉพาะจากกรอบเหล่านั้น เพราะยังไม่ได้ตรวจกับต้นฉบับ
 
@@ -48,7 +48,7 @@
 
 | แนวปฏิบัติ | สิ่งที่ระบบนี้ทำ | อยู่ที่ไหน | ทดสอบด้วย |
 | --- | --- | --- | --- |
-| Continuous evaluation | ชุดคำถามวัดคุณภาพ 20 ข้อ (กลุ่ม A, B, C และ G) รันสองรอบ ขอบเขตหัวข้อปิดและเปิด แล้วเขียนตัวชี้วัด attack success rate, false-positive rate, task success rate, unauthorized-action rate และภาระเพิ่มด้านเวลาและค่าใช้จ่ายของการคัดกรอง ลงไฟล์ผลใน `docs/qa/` รันเมื่อเจ้าของงานสั่งเท่านั้น ไม่อยู่ใน CI จึง "ต่อเนื่อง" ในความหมายว่ารันซ้ำได้ทุกครั้งที่เปลี่ยน prompt หรือโมเดล ไม่ใช่รันอัตโนมัติ | `scripts/ai-eval.ts`, [ai-prompt ข้อ 8](../specs/ai-prompt.md#8-ชุดคำถามวัดคุณภาพ-ai) | unit ของฟังก์ชันเกณฑ์ผ่านใน `scripts/ai-eval.ts` ตัวเลขจริงมาจากการรันด้วยมือ ([test-strategy](../qa/test-strategy.md#ชุดคำถามวัดคุณภาพ-ai)) ตรรกะของสคริปต์มี unit test ใน `e2e/ai-eval.unit.ts` ([test-strategy](../qa/test-strategy.md#ชุดคำถามวัดคุณภาพ-ai)) |
+| Continuous evaluation | ชุดคำถามวัดคุณภาพ 22 ข้อ (กลุ่ม A, B, C และ G) รันสองรอบ ขอบเขตหัวข้อปิดและเปิด แล้วเขียนตัวชี้วัด attack success rate, false-positive rate, task success rate, unauthorized-action rate และภาระเพิ่มด้านเวลาและค่าใช้จ่ายของการคัดกรอง ลงไฟล์ผลใน `docs/qa/` รันเมื่อเจ้าของงานสั่งเท่านั้น ไม่อยู่ใน CI จึง "ต่อเนื่อง" ในความหมายว่ารันซ้ำได้ทุกครั้งที่เปลี่ยน prompt หรือโมเดล ไม่ใช่รันอัตโนมัติ | `scripts/ai-eval.ts`, [ai-prompt ข้อ 8](../specs/ai-prompt.md#8-ชุดคำถามวัดคุณภาพ-ai) | unit ของฟังก์ชันเกณฑ์ผ่านใน `scripts/ai-eval.ts` ตัวเลขจริงมาจากการรันด้วยมือ ([test-strategy](../qa/test-strategy.md#ชุดคำถามวัดคุณภาพ-ai)) ตรรกะของสคริปต์มี unit test ใน `e2e/ai-eval.unit.ts` ([test-strategy](../qa/test-strategy.md#ชุดคำถามวัดคุณภาพ-ai)) |
 
 ## ข้อจำกัดที่ยอมรับ
 

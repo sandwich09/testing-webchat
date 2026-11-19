@@ -8,7 +8,7 @@ import {
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 120; // WEBHOOK_MAX_DURATION_S
+export const maxDuration = 300; // WEBHOOK_MAX_DURATION_S
 
 export const POST = withRoute(
   { route: '/api/line/webhook', access: 'webhook' },

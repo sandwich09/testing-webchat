@@ -1,6 +1,7 @@
 // Pure logic of the thread components (ui-screens 5.3, 5.4, 6.2). No clock, no browser.
 import { ERROR_MESSAGE_CODES, errorMessage, type ErrorMessageCode } from '@/common/error-messages';
 
+import { LINE_RETRY_KEY_WINDOW_MS } from '@/contracts';
 import { copy, LOAD_OLDER_THRESHOLD_PX } from '../inbox.constants';
 import type { ThreadMessage } from '../inbox.logic';
 
@@ -150,6 +151,9 @@ export function otherLabel(kind: string | null): string {
 const isKnownCode = (code: string): code is ErrorMessageCode =>
   (ERROR_MESSAGE_CODES as readonly string[]).includes(code);
 
+/** `{hours}` of the `message.retry_expired` text. */
+const RETRY_KEY_WINDOW_HOURS = LINE_RETRY_KEY_WINDOW_MS / 3_600_000;
+
 /**
  * Reason of a failed send from the error catalog (outbound wording). Catalog texts about sending
  * already start with "ส่งไม่สำเร็จ"; that word is dropped here because the line adds it. `null`
@@ -157,7 +161,7 @@ const isKnownCode = (code: string): code is ErrorMessageCode =>
  */
 export function deliveryReason(code: string | null): string | null {
   if (code === null || !isKnownCode(code)) return null;
-  const text = errorMessage(code, { variant: 'outbound' });
+  const text = errorMessage(code, { variant: 'outbound', hours: RETRY_KEY_WINDOW_HOURS });
   if (text === null) return null;
   const stripped = text.startsWith(copy.message.failed)
     ? text.slice(copy.message.failed.length).trim()

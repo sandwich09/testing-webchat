@@ -32,6 +32,12 @@ export interface KnowledgeRepository {
     id: DocumentId,
     d: { code: ErrorCode; pageCount: number | null; tokenCount: number | null; now: Date },
   ): Promise<boolean>;
+  /**
+   * One compare-and-set statement: documents still `processing` with updatedAt before
+   * `staleBefore` become `failed` with `knowledge.extract_interrupted` and updatedAt `now`, so
+   * "ลองใหม่" works. Returns the ids changed, so each row goes to one caller only.
+   */
+  failStuckProcessing(staleBefore: Date, now: Date): Promise<DocumentId[]>;
   delete(id: DocumentId): Promise<boolean>;
   sumReadyTokens(): Promise<number>;
 }

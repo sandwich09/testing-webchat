@@ -28,6 +28,7 @@ const msg = (p: Partial<Message>): Message => {
     retryKey: null,
     createdAt: new Date(0),
     sentAt: null,
+    firstPushAt: null,
     ...p,
   };
 };

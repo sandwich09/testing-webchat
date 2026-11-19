@@ -55,7 +55,7 @@
  * - Webhook: `const raw = await readWebhookBody(request); if (!raw.ok) return raw;` then
  *   `receiveLineEvents({ rawBody: raw.value, signature: request.headers.get('x-line-signature') }, ctx)`,
  *   `scheduleLineFollowUps(r.value.followUps, ctx)` and `json({})`. Also export
- *   `maxDuration = 120 // WEBHOOK_MAX_DURATION_S`.
+ *   `maxDuration = 300 // WEBHOOK_MAX_DURATION_S`.
  * - PDF upload and retry: `const file = await readPdfUpload(request); if (!file.ok) return file;`,
  *   `ingestDocument({ ...file.value, retryOf: null | asDocumentId(params.id) }, ctx)`, then
  *   `scheduleDocumentExtraction(r.value.followUp, ctx, route)` and

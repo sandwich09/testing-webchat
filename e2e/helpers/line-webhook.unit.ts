@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { STUB_CHANNEL_SECRET } from '../fixtures/line/credentials';
 import { newFixtureVars, renderFixture, signLineBody, type FixtureVars } from './line-webhook';
+import { deepFreeze } from '../../test-support/deep-freeze';
 
 const FIXTURE_DIR = fileURLToPath(new URL('../fixtures/line/', import.meta.url));
 const TEMPLATES = readdirSync(FIXTURE_DIR)
@@ -24,7 +25,7 @@ type Event = {
 };
 type Body = { destination: string; events: Event[] };
 
-const vars: FixtureVars = newFixtureVars({ text: 'สวัสดี "ค่ะ"\n{{userId}}' });
+const vars: FixtureVars = deepFreeze(newFixtureVars({ text: 'สวัสดี "ค่ะ"\n{{userId}}' }));
 const render = (name: string, v: FixtureVars = vars) => JSON.parse(renderFixture(name, v)) as Body;
 
 describe('fixture catalogue', () => {

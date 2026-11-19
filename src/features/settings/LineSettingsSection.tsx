@@ -2,7 +2,7 @@
 
 // LINE Official Account section of the settings page (ui-screens 9.4). The channel secret and the
 // access token are only ever typed here: no value from the server is put into these fields, and
-// both are emptied after a successful save.
+// both are emptied after a successful save. The Channel ID is not secret: it is shown as saved.
 import { Loader2 } from 'lucide-react';
 import { useId, useRef, useState, type SyntheticEvent } from 'react';
 
@@ -17,11 +17,11 @@ import { showToast } from '@/common/toast';
 import { Button } from '@/common/ui/button';
 import { Input } from '@/common/ui/input';
 import { Skeleton } from '@/common/ui/skeleton';
-import type { SettingsDto } from '@/contracts';
+import { LINE_CHANNEL_ID_MAX_CHARS, type SettingsDto } from '@/contracts';
 
 import { copy } from './settings.constants';
 import { useSaveLineCredentials, useTestLineConnection } from './settings.hooks';
-import { validateLineCredentials } from './settings.logic';
+import { validateLineCredentials, type LineCredentialField } from './settings.logic';
 import { SettingsRow } from './SettingsRow';
 import { SettingsSection } from './SettingsSection';
 
@@ -30,10 +30,11 @@ export const LINE_SETUP_GUIDE_URL =
   'https://github.com/sandwich09/testing-webchat/blob/main/docs/runbooks/line-oa-setup.md';
 
 type LineStatus = SettingsDto['line']['status'];
+type SecretStatus = SettingsDto['line']['secretStatus'];
 
-/** Result line under the buttons: what the last save or test said. */
+/** Result line under the buttons: what the last test said, or why a save failed. */
 export type LineResult =
-  { kind: 'ok'; botName: string } | { kind: 'error'; code: string; text: string };
+  { kind: 'ok' | 'warning'; text: string } | { kind: 'error'; code: string; text: string };
 
 // ---------------------------------------------------------------------------
 // Pure helpers (unit tested in LineSettingsSection.spec.ts)
@@ -79,6 +80,29 @@ export function testOkText(botName: string): string {
   return copy.line.testOk.replace('{name}', botName);
 }
 
+/** What is known about the stored channel secret, and its tone. */
+export function secretStatusView(status: SecretStatus): { text: string; tone: 'muted' | 'warn' } {
+  switch (status) {
+    case 'verified':
+      return { text: copy.line.secretVerified, tone: 'muted' };
+    case 'unchecked':
+      return { text: copy.line.secretUnchecked, tone: 'warn' };
+    case 'no_channel_id':
+      return { text: copy.line.secretNoChannelId, tone: 'warn' };
+  }
+}
+
+/**
+ * Result line of a passed connection test: the OA, then what the secret check found. Only a
+ * secret LINE confirmed now makes it `ok`; otherwise it is a `warning`.
+ */
+export function testResult(info: { botName: string; secretStatus: SecretStatus }): LineResult {
+  return {
+    kind: info.secretStatus === 'verified' ? 'ok' : 'warning',
+    text: `${testOkText(info.botName)} · ${secretStatusView(info.secretStatus).text}`,
+  };
+}
+
 /** Result line of a failed call: the catalog text of its code, shown where the LINE section talks. */
 export function lineFailureResult(error: unknown): LineResult {
   const code = errorCodeOf(error);
@@ -89,11 +113,21 @@ export function lineFailureResult(error: unknown): LineResult {
   return { kind: 'error', code, text };
 }
 
-/** Message under a credential field for a result code of `validateLineCredentials`. */
-export function credentialErrorText(field: 'channelSecret' | 'channelAccessToken'): string {
-  return field === 'channelSecret'
-    ? copy.line.error.channelSecretRequired
-    : copy.line.error.accessTokenRequired;
+/** Message under a credential field for a result of `validateLineCredentials`. */
+export function credentialErrorText(
+  field: LineCredentialField,
+  code: 'required' | 'invalid' = 'required',
+): string {
+  switch (field) {
+    case 'channelId':
+      return code === 'invalid'
+        ? copy.line.error.channelIdInvalid.replace('{max}', String(LINE_CHANNEL_ID_MAX_CHARS))
+        : copy.line.error.channelIdRequired;
+    case 'channelSecret':
+      return copy.line.error.channelSecretRequired;
+    case 'channelAccessToken':
+      return copy.line.error.accessTokenRequired;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -101,7 +135,12 @@ export function credentialErrorText(field: 'channelSecret' | 'channelAccessToken
 // ---------------------------------------------------------------------------
 
 const toneDot = { success: 'bg-success', danger: 'bg-danger', muted: 'bg-muted' } as const;
-const toneText = { success: 'text-success', danger: 'text-danger', muted: 'text-muted' } as const;
+const toneText = {
+  success: 'text-success',
+  danger: 'text-danger',
+  muted: 'text-muted',
+  warn: 'text-warn',
+} as const;
 
 function StatusRow({ line, now }: { line: SettingsDto['line']; now: Date }) {
   const view = lineStatusView(line.status);
@@ -118,6 +157,7 @@ function StatusRow({ line, now }: { line: SettingsDto['line']; now: Date }) {
         {line.status !== 'not_configured' ? (
           <p className="text-sub text-muted">{lastWebhookText(line.lastWebhookAt, now)}</p>
         ) : null}
+        {line.configured ? <SecretStatusLine status={line.secretStatus} /> : null}
       </div>
       <p
         data-testid={testIds.lineStatus}
@@ -128,6 +168,19 @@ function StatusRow({ line, now }: { line: SettingsDto['line']; now: Date }) {
         {view.text}
       </p>
     </div>
+  );
+}
+
+function SecretStatusLine({ status }: { status: SecretStatus }) {
+  const view = secretStatusView(status);
+  return (
+    <p
+      data-testid={testIds.lineSecretStatus}
+      data-status={status}
+      className={cn('text-sub', toneText[view.tone])}
+    >
+      {view.text}
+    </p>
   );
 }
 
@@ -193,10 +246,10 @@ function SetupSteps() {
   );
 }
 
-type CredentialField = 'channelSecret' | 'channelAccessToken';
-
 function CredentialRow({
   label,
+  description = copy.line.credentialsDesc,
+  secret = true,
   testId,
   value,
   placeholder,
@@ -206,6 +259,9 @@ function CredentialRow({
   inputRef,
 }: {
   label: string;
+  description?: string;
+  /** A secret is a password field; the Channel ID is plain digits. */
+  secret?: boolean;
   testId: string;
   value: string;
   placeholder: string;
@@ -217,14 +273,16 @@ function CredentialRow({
   return (
     <SettingsRow
       label={label}
-      description={copy.line.credentialsDesc}
+      description={description}
       wideControl
       className="medium:flex-col medium:items-stretch"
     >
       <div className="flex flex-col gap-1">
         <Input
           ref={inputRef}
-          type="password"
+          type={secret ? 'password' : 'text'}
+          inputMode={secret ? undefined : 'numeric'}
+          maxLength={secret ? undefined : LINE_CHANNEL_ID_MAX_CHARS}
           autoComplete="off"
           autoCapitalize="off"
           autoCorrect="off"
@@ -269,12 +327,19 @@ function BusyButton({
 function CredentialsForm({ line }: { line: SettingsDto['line'] }) {
   const save = useSaveLineCredentials();
   const test = useTestLineConnection();
+  // Not secret: starts from the saved value and stays as typed after a save.
+  const [channelId, setChannelId] = useState(line.channelId ?? '');
   const [secret, setSecret] = useState('');
   const [token, setToken] = useState('');
-  const [invalid, setInvalid] = useState<CredentialField | null>(null);
+  const [invalid, setInvalid] = useState<{
+    field: LineCredentialField;
+    code: 'required' | 'invalid';
+  } | null>(null);
   const [result, setResult] = useState<LineResult | null>(null);
+  const channelIdRef = useRef<HTMLInputElement>(null);
   const secretRef = useRef<HTMLInputElement>(null);
   const tokenRef = useRef<HTMLInputElement>(null);
+  const channelIdErrorId = useId();
   const secretErrorId = useId();
   const tokenErrorId = useId();
   const reasonId = useId();
@@ -288,22 +353,40 @@ function CredentialsForm({ line }: { line: SettingsDto['line'] }) {
   const onSave = (event: SyntheticEvent) => {
     event.preventDefault();
     if (busy) return;
-    const check = validateLineCredentials({ channelSecret: secret, channelAccessToken: token });
+    const check = validateLineCredentials({
+      channelId,
+      channelSecret: secret,
+      channelAccessToken: token,
+    });
     if (!check.ok) {
-      setInvalid(check.field);
-      (check.field === 'channelSecret' ? secretRef : tokenRef).current?.focus();
+      setInvalid({ field: check.field, code: check.code });
+      const refs = {
+        channelId: channelIdRef,
+        channelSecret: secretRef,
+        channelAccessToken: tokenRef,
+      };
+      refs[check.field].current?.focus();
       return;
     }
     setInvalid(null);
     setResult(null);
     save.mutate(
-      { channelSecret: secret.trim(), channelAccessToken: token.trim() },
       {
-        onSuccess: () => {
-          // Nothing the admin typed stays in the page once it is saved.
+        channelId: channelId.trim(),
+        channelSecret: secret.trim(),
+        channelAccessToken: token.trim(),
+      },
+      {
+        onSuccess: (info) => {
+          // The secrets the admin typed do not stay in the page once they are saved.
+          setChannelId(channelId.trim());
           setSecret('');
           setToken('');
-          showToast('success', copy.line.savedToast);
+          // An unchecked secret is told by the status row, which loads again after the save.
+          showToast(
+            'success',
+            info.secretStatus === 'verified' ? copy.line.savedToast : commonCopy.toast.saved,
+          );
         },
         // What was typed stays so it can be fixed and saved again.
         onError: (error) => {
@@ -318,7 +401,7 @@ function CredentialsForm({ line }: { line: SettingsDto['line'] }) {
     setResult(null);
     test.mutate(undefined, {
       onSuccess: (info) => {
-        setResult({ kind: 'ok', botName: info.botName });
+        setResult(testResult(info));
       },
       onError: (error) => {
         setResult(lineFailureResult(error));
@@ -329,11 +412,28 @@ function CredentialsForm({ line }: { line: SettingsDto['line'] }) {
   return (
     <form noValidate autoComplete="off" onSubmit={onSave}>
       <CredentialRow
+        label={copy.line.channelId}
+        description={copy.line.channelIdDesc}
+        secret={false}
+        testId={testIds.lineChannelId}
+        value={channelId}
+        placeholder={copy.line.channelIdPlaceholder}
+        errorText={
+          invalid?.field === 'channelId' ? credentialErrorText('channelId', invalid.code) : null
+        }
+        errorId={channelIdErrorId}
+        inputRef={channelIdRef}
+        onChange={(next) => {
+          setChannelId(next);
+          setInvalid(null);
+        }}
+      />
+      <CredentialRow
         label={copy.line.channelSecret}
         testId={testIds.lineChannelSecret}
         value={secret}
         placeholder={placeholder}
-        errorText={invalid === 'channelSecret' ? credentialErrorText('channelSecret') : null}
+        errorText={invalid?.field === 'channelSecret' ? credentialErrorText('channelSecret') : null}
         errorId={secretErrorId}
         inputRef={secretRef}
         onChange={(next) => {
@@ -347,7 +447,7 @@ function CredentialsForm({ line }: { line: SettingsDto['line'] }) {
         value={token}
         placeholder={placeholder}
         errorText={
-          invalid === 'channelAccessToken' ? credentialErrorText('channelAccessToken') : null
+          invalid?.field === 'channelAccessToken' ? credentialErrorText('channelAccessToken') : null
         }
         errorId={tokenErrorId}
         inputRef={tokenRef}
@@ -389,10 +489,11 @@ function CredentialsForm({ line }: { line: SettingsDto['line'] }) {
         className={cn(
           'text-sub',
           result?.kind === 'ok' && 'text-success',
+          result?.kind === 'warning' && 'text-warn',
           result?.kind === 'error' && 'text-danger',
         )}
       >
-        {result === null ? null : result.kind === 'ok' ? testOkText(result.botName) : result.text}
+        {result?.text}
       </p>
     </form>
   );
@@ -404,7 +505,7 @@ function LineSkeleton() {
       <span className="sr-only" role="status">
         {commonCopy.loading}
       </span>
-      {[0, 1, 2, 3, 4].map((row) => (
+      {[0, 1, 2, 3, 4, 5].map((row) => (
         <div
           key={row}
           className="flex min-h-16 items-center gap-6 border-b border-line py-3.5 last:border-b-0"

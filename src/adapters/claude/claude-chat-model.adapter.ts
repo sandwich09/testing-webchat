@@ -5,6 +5,7 @@ import { formatPromptNow, MODEL_HANDOFF_REASONS, ok } from '@/core/domain';
 import type { ChatModel, ChatModelRequest } from '@/core/ports';
 import { CLAUDE_REPLY_MAX_RETRIES, CLAUDE_REPLY_TIMEOUT_MS } from './claude.constants';
 import {
+  callOptions,
   type ClaudeAdapterOptions,
   createClaudeClient,
   fallbackParams,
@@ -80,17 +81,16 @@ export const buildChatParams = (
   },
 });
 
+const REPLY_LIMITS = { timeoutMs: CLAUDE_REPLY_TIMEOUT_MS, maxRetries: CLAUDE_REPLY_MAX_RETRIES };
+
 export const createClaudeChatModel = (options: ClaudeAdapterOptions): ChatModel => {
-  const client = createClaudeClient(options, {
-    timeoutMs: CLAUDE_REPLY_TIMEOUT_MS,
-    maxRetries: CLAUDE_REPLY_MAX_RETRIES,
-  });
+  const client = createClaudeClient(options, REPLY_LIMITS);
 
   const send = (req: ChatModelRequest) => {
     const params = buildChatParams(req);
     return usesServerFallback(req.model, 'reply')
-      ? client.beta.messages.create({ ...params, ...fallbackParams() })
-      : client.messages.create(params);
+      ? client.beta.messages.create({ ...params, ...fallbackParams() }, callOptions(REPLY_LIMITS))
+      : client.messages.create(params, callOptions(REPLY_LIMITS));
   };
 
   return {

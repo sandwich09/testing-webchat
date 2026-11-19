@@ -63,7 +63,7 @@ describe('DeleteDocument', () => {
     ingest = makeIngestDocument(deps, config);
     extract = makeExtractDocument(deps, config);
     del = makeDeleteDocument({ knowledge, logger }, config);
-    list = makeListDocuments({ knowledge }, config);
+    list = makeListDocuments({ knowledge, clock, logger }, config);
   });
 
   const start = async (seed: number) => {

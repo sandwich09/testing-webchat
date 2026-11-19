@@ -1,6 +1,14 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { describe, expect, it } from 'vitest';
-import { joinTextBlocks, mapClaudeError, readMessage, usesServerFallback } from './claude.mapper';
+import { CLAUDE_RETRY_WAIT_MAX_MS } from './claude.constants';
+import {
+  callDeadlineMs,
+  callOptions,
+  joinTextBlocks,
+  mapClaudeError,
+  readMessage,
+  usesServerFallback,
+} from './claude.mapper';
 
 const message = (content: unknown[], stopReason = 'end_turn'): Anthropic.Beta.BetaMessage =>
   // Only the fields the mapper reads; the full BetaMessage has many unrelated required fields.
@@ -157,18 +165,58 @@ describe('mapClaudeError', () => {
     expect(!result.ok && result.error.retryAfterSeconds).toBe(7);
   });
 
+  const notSent = (code: string) => {
+    const cause = Object.assign(new Error('connect failed'), { code });
+    return new Anthropic.APIConnectionError({ cause: new TypeError('fetch failed', { cause }) });
+  };
+
   it.each([
-    new Anthropic.APIConnectionError({ message: 'down' }),
-    new Anthropic.APIConnectionTimeoutError(),
-    new Anthropic.AnthropicError('stream ended without a message'),
-  ])('maps %s to ai.unavailable', (error) => {
+    ['a timeout', new Anthropic.APIConnectionTimeoutError()],
+    ['an abort at the call deadline', new Anthropic.APIUserAbortError()],
+    ['a dropped connection', new Anthropic.APIConnectionError({ message: 'socket hang up' })],
+    ['a reset connection', notSent('ECONNRESET')],
+    ['a broken stream', new Anthropic.AnthropicError('stream ended without a message')],
+  ])('maps %s, which may have reached the provider, to ai.no_response', (_name, error) => {
     const result = mapClaudeError(error);
-    expect(!result.ok && result.error.code).toBe('ai.unavailable');
+    expect(!result.ok && result.error.code).toBe('ai.no_response');
+  });
+
+  it.each(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'EHOSTUNREACH', 'ENETUNREACH'])(
+    'maps a connection error %s, which sent nothing, to ai.unavailable',
+    (code) => {
+      const result = mapClaudeError(notSent(code));
+      expect(!result.ok && result.error.code).toBe('ai.unavailable');
+    },
+  );
+
+  it('finds the code inside an AggregateError of several addresses', () => {
+    const cause = new AggregateError([Object.assign(new Error('v6'), { code: 'ECONNREFUSED' })]);
+    const error = new Anthropic.APIConnectionError({
+      cause: new TypeError('fetch failed', { cause }),
+    });
+    expect(mapClaudeError(error)).toMatchObject({ error: { code: 'ai.unavailable' } });
   });
 
   it('rethrows errors that do not come from the SDK', () => {
     const bug = new TypeError('bug');
     expect(() => mapClaudeError(bug)).toThrow(bug);
+  });
+});
+
+describe('callDeadlineMs and callOptions', () => {
+  it('allows every attempt its timeout plus CLAUDE_RETRY_WAIT_MAX_MS before each retry', () => {
+    expect(callDeadlineMs({ timeoutMs: 25_000, maxRetries: 1 })).toBe(
+      50_000 + CLAUDE_RETRY_WAIT_MAX_MS,
+    );
+    expect(callDeadlineMs({ timeoutMs: 10_000, maxRetries: 0 })).toBe(10_000);
+  });
+
+  it('passes the attempt timeout and a signal that aborts at the deadline', async () => {
+    const options = callOptions({ timeoutMs: 5, maxRetries: 1 });
+    expect(options.timeout).toBe(5);
+    expect(options.signal.aborted).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 10 + CLAUDE_RETRY_WAIT_MAX_MS + 50));
+    expect(options.signal.aborted).toBe(true);
   });
 });
 
