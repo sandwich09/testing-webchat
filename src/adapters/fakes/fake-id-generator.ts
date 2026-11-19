@@ -1,4 +1,4 @@
-import type { ContactId, DocumentId, MessageId, UsageId } from '@/core/domain';
+import type { ContactId, DocumentId, MessageId, NoteId, UsageId } from '@/core/domain';
 import type { Clock, IdGenerator } from '@/core/ports';
 
 const hex = (value: number | bigint, width: number): string =>
@@ -30,6 +30,10 @@ export class FakeIdGenerator implements IdGenerator {
 
   usageId(): UsageId {
     return this.uuid() as UsageId;
+  }
+
+  noteId(): NoteId {
+    return this.uuid() as NoteId;
   }
 
   requestId(): string {

@@ -5,6 +5,7 @@ export {
   stickerImageUrl,
   toContactDetailDto,
   toContactDto,
+  toContactNoteDto,
   toContactUsageResponse,
   toDocumentDetailDto,
   toDocumentDto,

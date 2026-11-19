@@ -3,6 +3,7 @@ import type {
   DocumentId,
   LineAccessToken,
   MessageId,
+  NoteId,
   Result,
   Seq,
   UploadId,
@@ -31,6 +32,7 @@ import { decodeContactCursor } from './http-request';
 
 export const asContactId = (id: string): ContactId => id as ContactId;
 export const asMessageId = (id: string): MessageId => id as MessageId;
+export const asNoteId = (id: string): NoteId => id as NoteId; // brand: path id checked by the schema
 export const asDocumentId = (id: string): DocumentId => id as DocumentId;
 export const asUploadId = (id: string): UploadId => id as UploadId;
 /** A decimal string the contract schema has already checked (seqStringSchema). */
@@ -101,8 +103,13 @@ export const toUpdateSettingsInput = (
   }
   if (body.aiPoliteParticle !== undefined) input.aiPoliteParticle = body.aiPoliteParticle;
   if (body.aiInstructions !== undefined) input.aiInstructions = body.aiInstructions;
+  if (body.aiName !== undefined) input.aiName = body.aiName;
+  if (body.aiAnswerMode !== undefined) input.aiAnswerMode = body.aiAnswerMode;
   if (body.guardEnabled !== undefined) input.guardEnabled = body.guardEnabled;
   if (body.guardTopics !== undefined) input.guardTopics = body.guardTopics;
+  if (body.howToText !== undefined) input.howToText = body.howToText;
+  if (body.welcomeEnabled !== undefined) input.welcomeEnabled = body.welcomeEnabled;
+  if (body.welcomeText !== undefined) input.welcomeText = body.welcomeText;
   return ok(input);
 };
 

@@ -1,6 +1,7 @@
 import type {
   AiUsageRecord,
   Contact,
+  ContactNote,
   ErrorCode,
   KbDocument,
   KbDocumentWithText,
@@ -8,7 +9,17 @@ import type {
   NanoUsd,
   TokenUsage,
 } from '@/core/domain';
-import { formatUsd, lineSecretStatus, retryKeyExpiresAt } from '@/core/domain';
+import {
+  defaultHowToText,
+  defaultWelcomeText,
+  formatUsd,
+  indexByLineId,
+  lineSecretStatus,
+  previewOf,
+  quoteOf,
+  retryKeyExpiresAt,
+  welcomeAccountName,
+} from '@/core/domain';
 import type { UploadTarget, UsageByContactRow } from '@/core/ports';
 import type {
   GetContactOutput,
@@ -24,6 +35,7 @@ import type {
 } from '@/core/use-cases';
 import type {
   ContactDetailDto,
+  ContactNoteDto,
   ContactDto,
   ContactUsageResponse,
   DocumentDetailDto,
@@ -33,6 +45,7 @@ import type {
   ListContactsResponse,
   ListDocumentsResponse,
   MessageDto,
+  MessageQuoteDto,
   SettingsDto,
   SystemStatusDto,
   TestTopicGuardResponse,
@@ -88,13 +101,45 @@ export const toContactDto = (c: Contact): ContactDto => ({
   updatedSeq: c.updatedSeq.toString(),
 });
 
+/** One admin note. */
+export const toContactNoteDto = (n: ContactNote): ContactNoteDto => ({
+  id: n.id,
+  contactId: n.contactId,
+  text: n.text,
+  createdAt: n.createdAt.toISOString(),
+});
+
 export const toContactDetailDto = ({ contact, stats }: GetContactOutput): ContactDetailDto => ({
   ...toContactDto(contact),
   stats: { messageCount: stats.messageCount, aiMessageCount: stats.aiMessageCount },
 });
 
-export const toMessageDto = (m: Message): MessageDto => {
-  const isMedia = m.type === 'image' || m.type === 'video';
+const UNAVAILABLE_QUOTE: MessageQuoteDto = {
+  available: false,
+  messageId: null,
+  author: null,
+  type: null,
+  textPreview: null,
+  mediaKind: null,
+};
+
+/** The quote of an inbound message from the result of quoteOf (null: quoted but not known). */
+export const toQuoteDto = (q: Message | null): MessageQuoteDto => {
+  if (q === null || q.type === 'event' || q.author === 'system') return UNAVAILABLE_QUOTE;
+  const preview = previewOf(q);
+  return {
+    available: true,
+    messageId: q.id,
+    author: q.author,
+    type: preview.type,
+    textPreview: preview.text,
+    mediaKind: q.type === 'text' ? null : q.type === 'other' ? (q.otherKind ?? 'unknown') : q.type,
+  };
+};
+
+/** `quote`: undefined when the message quotes nothing, as quoteOf answers. */
+export const toMessageDto = (m: Message, quote?: Message | null): MessageDto => {
+  const isMedia = m.type === 'image' || m.type === 'video' || m.type === 'audio';
   const mediaStatus = m.mediaStatus ?? 'pending';
   return {
     id: m.id,
@@ -111,6 +156,8 @@ export const toMessageDto = (m: Message): MessageDto => {
           // The file URL appears only once the file is stored (api-contract MessageDto.media).
           url: mediaStatus === 'ready' ? m.mediaUrl : null,
           previewUrl: m.previewUrl,
+          durationMs: m.mediaDurationMs,
+          failure: mediaStatus === 'failed' ? m.mediaFailure : null,
         }
       : null,
     sticker:
@@ -123,6 +170,7 @@ export const toMessageDto = (m: Message): MessageDto => {
         : null,
     otherKind: m.otherKind,
     eventCode: m.eventCode,
+    quote: quote === undefined ? null : toQuoteDto(quote),
     // Null for inbound messages and event lines.
     delivery:
       m.direction === 'outbound'
@@ -147,12 +195,15 @@ export const toListContactsResponse = (o: ListContactsOutput): ListContactsRespo
   lineConfigured: o.lineConfigured,
 });
 
-export const toGetMessagesResponse = (o: GetMessagesOutput): GetMessagesResponse => ({
-  messages: o.messages.map(toMessageDto),
-  hasOlder: o.hasOlder,
-  hasMore: o.hasMore,
-  highWater: o.highWater.toString(),
-});
+export const toGetMessagesResponse = (o: GetMessagesOutput): GetMessagesResponse => {
+  const index = indexByLineId(o.quoted);
+  return {
+    messages: o.messages.map((m) => toMessageDto(m, quoteOf(m, index))),
+    hasOlder: o.hasOlder,
+    hasMore: o.hasMore,
+    highWater: o.highWater.toString(),
+  };
+};
 
 // ---------------------------------------------------------------------------
 // Settings and system
@@ -169,6 +220,8 @@ export const toSettingsDto = (o: GetSettingsOutput): SettingsDto => {
       todayCostUsd: cost6(o.todayCost),
       politeParticle: s.aiPoliteParticle,
       instructions: s.aiInstructions,
+      name: s.aiName,
+      answerMode: s.aiAnswerMode,
     },
     guard: {
       enabled: s.guardEnabled,
@@ -188,6 +241,19 @@ export const toSettingsDto = (o: GetSettingsOutput): SettingsDto => {
       secretStatus: lineSecretStatus(s),
       webhookUrl: o.webhookUrl,
       lastWebhookAt: isoOrNull(s.lastWebhookAt),
+    },
+    richMenu: {
+      published: s.richMenu !== null,
+      publishedAt: s.richMenu === null ? null : iso(s.richMenu.publishedAt),
+      lastError: toErrorAt(s.richMenuError),
+      howToText: s.howToText,
+      howToDefault: defaultHowToText(s.aiPoliteParticle),
+    },
+    welcome: {
+      enabled: s.welcomeEnabled,
+      text: s.welcomeText,
+      defaultText: defaultWelcomeText(s.aiPoliteParticle),
+      accountName: welcomeAccountName(s.lineBotName),
     },
     client: { pollIntervalMs: o.pollIntervalMs },
   };

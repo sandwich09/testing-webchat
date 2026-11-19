@@ -16,9 +16,14 @@ const row: MessageRow = {
   mediaUrl: null,
   previewUrl: null,
   mediaStatus: null,
+  mediaFailure: null,
+  mediaDurationMs: null,
   stickerPackageId: null,
   stickerId: null,
   lineMessageId: null,
+  webhookEventId: null,
+  quotedLineMessageId: null,
+  lineSentIds: ['L1', 'L2'],
   deliveryStatus: 'failed',
   deliveryError: 'line.push_failed',
   retryKey: '11111111-0000-7000-8000-000000000001',
@@ -35,18 +40,27 @@ describe('message mapper', () => {
     expect(message).toEqual({
       ...row,
       deliveryAttemptAt: undefined,
+      webhookEventId: undefined,
       eventCode: 'contact.followed',
     });
+    expect(message).not.toHaveProperty('webhookEventId');
     expect(message).not.toHaveProperty('deliveryAttemptAt');
-    const { deliveryAttemptAt, ...newRow } = toNewMessageRow(message);
+    const { deliveryAttemptAt, webhookEventId, ...newRow } = toNewMessageRow(message);
     expect(newRow).not.toHaveProperty('seq');
     expect(newRow).not.toHaveProperty('updatedSeq');
     // A new row has no first push: only recordFirstPush sets it.
     expect(newRow).not.toHaveProperty('firstPushAt');
-    expect({ ...newRow, seq: row.seq, updatedSeq: row.updatedSeq, firstPushAt: null }).toEqual(
-      message,
-    );
+    // Nor any sent ids: only markSent stores them, after LINE answers.
+    expect(newRow).not.toHaveProperty('lineSentIds');
+    expect({
+      ...newRow,
+      seq: row.seq,
+      updatedSeq: row.updatedSeq,
+      firstPushAt: null,
+      lineSentIds: row.lineSentIds,
+    }).toEqual(message);
     expect(deliveryAttemptAt).toBeNull();
+    expect(webhookEventId).toBeNull();
   });
 
   it('reads the first push time', () => {

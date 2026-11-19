@@ -6,7 +6,7 @@
 
 ## กฎของเอกสารนี้
 
-- ถ้อยคำทั้งหมดเป็นไปตาม [ux-writing](../guidelines/ux-writing.md): ใช้คำตามอภิธานศัพท์ ไม่มีคำลงท้าย ปุ่มเป็นคำกริยา หนึ่งความหมายหนึ่งประโยค
+- ถ้อยคำทั้งหมดเป็นไปตาม [ux-writing](../guidelines/ux-writing.md): ใช้คำตามอภิธานศัพท์และตาราง[คำทับศัพท์](../guidelines/ux-writing.md#คำทับศัพท์) ไม่มีคำลงท้าย ปุ่มเป็นคำกริยา หนึ่งความหมายหนึ่งประโยค
 - ข้อความ error ที่มาจาก server ตามรหัส error อยู่ใน [error-catalog](../architecture/error-catalog.md) ไม่ซ้ำที่นี่ เอกสารนี้มีเฉพาะข้อความที่ตรวจในฝั่ง browser และไม่เรียก server
 - `{ชื่อ}` คือค่าที่แทนตอนแสดง ตัวเลขจัดรูปแบบด้วยฟังก์ชันใน [ui-screens](ui-screens.md#8-ฟังก์ชันล้วนฝั่งหน้าจอ) ก่อนแทน `{max}` และ `{maxMb}` มาจาก constant ใน `src/contracts/` ซึ่งค่าอยู่ใน [project-setup](../architecture/project-setup.md#10-ค่าคงที่ของระบบ)
 - ชื่อ key: `<feature>.<พื้นที่>.<ชื่อ>` เป็น camelCase key ใดที่เป็นกลุ่มย่อยใช้จุดคั่นต่อ เช่น `inbox.media.other.audio`
@@ -26,8 +26,8 @@
 | `common.nav.inbox` | แชท | เมนู |
 | `common.nav.settings` | ตั้งค่า | เมนู |
 | `common.nav.logout` | ออกจากระบบ | เมนู |
-| `common.nav.collapse` | พับเมนู | ปุ่มพับเมนู |
-| `common.nav.expand` | กางเมนู | ปุ่มเดียวกันเมื่อพับอยู่ |
+| `common.nav.collapse` | พับเมนู | `aria-label` และ tooltip ของปุ่มไอคอนพับเมนู (ไม่แสดงเป็นข้อความบนเมนู) |
+| `common.nav.expand` | กางเมนู | `aria-label` และ tooltip ของปุ่มเดียวกันเมื่อพับอยู่ |
 | `common.nav.unreadAria` | {n} แชทยังไม่อ่าน | `aria-label` ของตัวเลขในเมนู |
 
 ### ปุ่มร่วม
@@ -118,6 +118,12 @@
 | --- | --- | --- |
 | `inbox.media.image` | รูปภาพ | ข้อความล่าสุด, `alt` ของรูปในฟอง |
 | `inbox.media.video` | วิดีโอ | ข้อความล่าสุด, `aria-label` ของภาพตัวอย่างวิดีโอ |
+| `inbox.media.audio` | ข้อความเสียง | ข้อความล่าสุดในรายชื่อ และป้ายของฟองเสียงที่ยังเล่นไม่ได้ |
+| `inbox.media.audioPlay` | เล่นข้อความเสียง | ชื่อของปุ่มเล่น |
+| `inbox.media.audioPause` | หยุดข้อความเสียงชั่วคราว | ชื่อของปุ่มเมื่อกำลังเล่น |
+| `inbox.media.audioProgress` | ตำแหน่งที่เล่นของข้อความเสียง | ชื่อของแถบตำแหน่ง |
+| `inbox.media.audioLoading` | กำลังโหลดข้อความเสียง | ระหว่างดาวน์โหลด |
+| `inbox.media.audioFailed` | โหลดข้อความเสียงไม่สำเร็จ | ดาวน์โหลดหรือเล่นไม่ได้ |
 | `inbox.media.sticker` | สติกเกอร์ | ข้อความล่าสุด, `alt` ของสติกเกอร์, ข้อความแทนเมื่อโหลดสติกเกอร์ไม่ได้ |
 | `inbox.media.other.audio` | [เสียง] | `otherKind = audio` |
 | `inbox.media.other.file` | [ไฟล์] | `otherKind = file` |
@@ -125,9 +131,13 @@
 | `inbox.media.other.unknown` | [ข้อความชนิดอื่น] | ชนิดที่ไม่รู้จัก |
 | `inbox.media.otherHint` | ดูได้ในแอป LINE เท่านั้น | บรรทัดที่สองในฟองของข้อความชนิดอื่น |
 | `inbox.media.loading` | กำลังโหลดรูป | สื่อขาเข้าที่ยังดาวน์โหลดไม่เสร็จ |
-| `inbox.media.imageFailed` | โหลดรูปไม่สำเร็จ | `mediaStatus = failed` ของรูป ถ้อยคำตาม [line-messaging](line-messaging.md) |
-| `inbox.media.videoFailed` | โหลดวิดีโอไม่สำเร็จ | `mediaStatus = failed` ของวิดีโอ |
-| `inbox.media.tooLarge` | ไฟล์ใหญ่เกินกว่าจะเก็บได้ ดูได้ในแอป LINE | `mediaStatus = too_large` |
+| `inbox.media.imageFailed` | โหลดรูปไม่สำเร็จ | `mediaStatus = failed` ของรูปที่ไม่มีเหตุผล (`media.failure` เป็น null: แถวที่บันทึกก่อนมีเหตุผล) และรูปที่ browser โหลดไม่ได้ ถ้อยคำตาม [line-messaging](line-messaging.md) |
+| `inbox.media.videoFailed` | โหลดวิดีโอไม่สำเร็จ | เหมือนบรรทัดบน สำหรับวิดีโอ |
+| `inbox.media.problem.too_large` | ไฟล์ใหญ่เกิน {maxMb} MB ที่ระบบเก็บได้ ดูได้ในแอป LINE | `mediaStatus = too_large` ของรูป วิดีโอ และเสียง `{maxMb}` มาจาก `IMAGE_MAX_BYTES`, `VIDEO_MAX_BYTES` หรือ `AUDIO_MAX_BYTES` ตามชนิด |
+| `inbox.media.problem.unsupported_type` | ชนิดไฟล์นี้แสดงในหน้านี้ไม่ได้ ดูได้ในแอป LINE | `media.failure = unsupported_type` (เนื้อไฟล์ไม่ใช่ชนิดที่รับ) |
+| `inbox.media.problem.external_source` | ไฟล์มาจากลิงก์นอก LINE ระบบไม่ดึงไฟล์นี้ ดูได้ในแอป LINE | `media.failure = external_source` |
+| `inbox.media.problem.download_failed` | ดาวน์โหลดไฟล์จาก LINE ไม่สำเร็จ ดูได้ในแอป LINE | `media.failure = download_failed` |
+| `inbox.media.problem.interrupted` | ระบบหยุดก่อนเก็บไฟล์เสร็จ ดูได้ในแอป LINE | `media.failure = interrupted` (งานถูกตัดแล้วคืนสภาพ) |
 | `inbox.media.play` | เล่นวิดีโอ | `aria-label` ของภาพตัวอย่างวิดีโอ |
 | `inbox.media.openImage` | เปิดรูปขนาดเต็ม | `aria-label` ของภาพตัวอย่างรูป |
 
@@ -165,6 +175,30 @@
 | `inbox.thread.backToList` | กลับไปที่รายชื่อ | ลิงก์ในสถานะไม่พบ |
 | `inbox.thread.loadingOlder` | กำลังโหลดข้อความก่อนหน้า | ข้อความซ่อนของ skeleton ด้านบน |
 | `inbox.thread.newMessages` | ข้อความใหม่ | ปุ่มลอยเมื่อมีข้อความใหม่ขณะเลื่อนขึ้นไป |
+| `inbox.notes.title` | โน้ต (เห็นเฉพาะแอดมิน) | หัวของส่วนโน้ตในแผงข้อมูลลูกค้า |
+| `inbox.notes.hint` | ลูกค้าและ AI ไม่เห็นโน้ตนี้ | ใต้หัว |
+| `inbox.notes.inputLabel` | โน้ตใหม่ | ชื่อของช่อง |
+| `inbox.notes.placeholder` | พิมพ์โน้ตเกี่ยวกับลูกค้า | placeholder |
+| `inbox.notes.keys` | Enter เพิ่ม · Shift+Enter ขึ้นบรรทัดใหม่ | ใต้ช่อง |
+| `inbox.notes.add` | เพิ่มโน้ต | ปุ่ม |
+| `inbox.notes.counter` | {n}/{max} | ตัวนับ `{max}` จาก `CONTACT_NOTE_MAX_CHARS` |
+| `inbox.notes.empty` | ยังไม่มีโน้ต | สถานะว่าง |
+| `inbox.notes.error` | โหลดโน้ตไม่สำเร็จ | สถานะผิดพลาด |
+| `inbox.notes.saving` | กำลังบันทึก | แทนเวลาของโน้ตที่กำลังบันทึก |
+| `inbox.notes.tooLong` | โน้ตยาวเกิน {max} ตัวอักษร | ใต้ช่อง |
+| `inbox.notes.addFailed` | เพิ่มโน้ตไม่สำเร็จ ข้อความที่พิมพ์ยังอยู่ ลองอีกครั้ง | ใต้ช่อง เมื่อไม่มีข้อความของรหัส |
+| `inbox.notes.delete` | ลบโน้ตที่เขียนเมื่อ {date} | ชื่อของปุ่มลบ |
+| `inbox.notes.deleteTitle` | ลบโน้ตนี้ไหม | หัว dialog |
+| `inbox.notes.deleteDescription` | ลบแล้วกู้คืนไม่ได้ | คำอธิบายใน dialog |
+| `inbox.notes.deleteConfirm` | ลบโน้ต | ปุ่มยืนยัน |
+| `inbox.notes.deleted` | ลบโน้ตแล้ว | toast |
+| `inbox.quote.label` | ตอบกลับ {name}: {text} | ชื่อของกล่องอ้างอิงที่กดได้ |
+| `inbox.quote.labelUnavailable` | ตอบกลับข้อความที่ไม่พร้อมแสดง | ชื่อของกล่องอ้างอิงที่ไม่รู้จัก |
+| `inbox.quote.unavailable` | ข้อความต้นทางไม่พร้อมแสดง | ข้อความในกล่องอ้างอิงที่ไม่รู้จัก |
+| `inbox.quote.jumpHint` | ไปที่ข้อความต้นทาง | title ของกล่องอ้างอิงที่กดได้ |
+| `inbox.welcome.label` | ข้อความต้อนรับ | หัวของกล่องข้อความต้อนรับในแชท และชื่อที่เครื่องอ่านหน้าจออ่าน |
+| `inbox.welcome.sender` | ส่งอัตโนมัติ | ป้ายผู้ส่งข้างเวลาของกล่องข้อความต้อนรับ |
+| `inbox.welcome.buttonsLabel` | ปุ่มในการ์ด: {buttons} | ชื่อของรายการปุ่ม (ไม่ใช่ปุ่มที่กดได้) `{buttons}` คือชื่อปุ่มสามปุ่มคั่นด้วยจุลภาค |
 | `inbox.message.senderYou` | คุณ | ป้ายผู้ส่งข้างเวลา |
 | `inbox.message.senderAi` | AI | ป้ายผู้ส่งข้างเวลา |
 | `inbox.message.sending` | กำลังส่ง | ใต้ฟองที่กำลังส่ง |
@@ -184,6 +218,7 @@
 | `inbox.composer.hint` | Enter ส่ง · Shift+Enter ขึ้นบรรทัดใหม่ | ใต้ช่องพิมพ์ (จอกว้าง) |
 | `inbox.composer.send` | ส่ง | ปุ่มหลัก |
 | `inbox.composer.attach` | แนบรูปหรือวิดีโอ | ปุ่มไอคอน |
+| `inbox.composer.attachHint` | รูป JPEG, PNG, WebP, HEIC ไม่เกิน {imageMaxMb} MB · วิดีโอ MP4 ไม่เกิน {videoMaxMb} MB | tooltip ของปุ่มแนบเมื่อชี้หรือ focus และคำอธิบาย (`aria-describedby`) ของปุ่มทุกความกว้าง ก่อนเลือกไฟล์ `{imageMaxMb}` และ `{videoMaxMb}` มาจาก `IMAGE_MAX_BYTES` และ `VIDEO_MAX_BYTES` |
 | `inbox.composer.waitUpload` | ส่งได้เมื่ออัปโหลดเสร็จ | แทน hint เมื่อไฟล์แนบยังไม่พร้อม |
 | `inbox.composer.disabled.unfollowed` | ส่งข้อความหาลูกค้าที่เลิกติดตามแล้วไม่ได้ | แทนแถบเครื่องมือ |
 | `inbox.composer.disabled.lineNotConfigured` | เชื่อม LINE Official Account ที่หน้าตั้งค่าก่อนจึงจะส่งข้อความได้ | แทนแถบเครื่องมือ |
@@ -203,7 +238,7 @@
 
 | Key | ข้อความ |
 | --- | --- |
-| `inbox.attach.error.unsupported_type` | รองรับเฉพาะรูป JPEG, PNG, HEIC, WebP และวิดีโอ MP4 |
+| `inbox.attach.error.unsupported_type` | รองรับเฉพาะรูป JPEG, PNG, WebP, HEIC และวิดีโอ MP4 |
 | `inbox.attach.error.mov_not_supported` | วิดีโอ MOV ส่งไม่ได้ แปลงเป็น MP4 แล้วแนบใหม่ |
 | `inbox.attach.error.image_too_large` | รูปต้องไม่เกิน {maxMb} MB ไฟล์นี้ {sizeMb} MB |
 | `inbox.attach.error.video_too_large` | วิดีโอต้องไม่เกิน {maxMb} MB ไฟล์นี้ {sizeMb} MB |
@@ -211,7 +246,7 @@
 | `inbox.attach.error.convertFailed` | แปลงรูปนี้ไม่ได้ ใช้ไฟล์ JPEG หรือ PNG แทน |
 | `inbox.attach.error.uploadFailed` | อัปโหลดไม่สำเร็จ แนบไฟล์อีกครั้ง |
 
-การขอสิทธิ์อัปโหลดที่ server ปฏิเสธ (ชนิด ขนาด จำกัดความถี่) ใช้ข้อความจาก [error-catalog](../architecture/error-catalog.md)
+การขอสิทธิ์อัปโหลดหรือ PUT ที่ server ปฏิเสธ (ชนิด ขนาด จำกัดความถี่ ไฟล์ไม่ครบ) ใช้ข้อความจาก [error-catalog](../architecture/error-catalog.md) โดยแทน `{imageMaxMb}`, `{videoMaxMb}` จาก constant และ `{size}` ด้วยขนาดของไฟล์ที่เลือก `media.too_large` ของ PUT ใช้ข้อความของ `upload.too_large` เพื่อบอกขนาดของไฟล์ด้วย ทุกข้อความเรื่องชนิดหรือขนาดบอกสิ่งที่รับได้ ไม่มีตัวเลขเขียนตายตัวในข้อความ
 
 ### แผงข้อมูลลูกค้า
 
@@ -254,8 +289,8 @@
 | `settings.ai.killSwitchOffToast` | ปิด AI ทั้งระบบแล้ว | toast |
 | `settings.ai.model` | โมเดล | ป้ายแถว |
 | `settings.ai.modelDesc` | มีผลกับข้อความถัดไป | คำอธิบาย |
-| `settings.ai.modelOption.claude-opus-5-5` | Claude Opus 5.5 | ตัวเลือก (ค่าเริ่มต้น) |
-| `settings.ai.modelOption.claude-sonnet-5-5` | Claude Sonnet 5.5 | ตัวเลือก |
+| `settings.ai.modelOption.claude-opus-5-5` | Claude Opus 5.5 | ตัวเลือก |
+| `settings.ai.modelOption.claude-sonnet-5-5` | Claude Sonnet 5.5 | ตัวเลือก (ค่าเริ่มต้น) |
 | `settings.ai.modelOption.claude-haiku-5-5` | Claude Haiku 5.5 | ตัวเลือก |
 | `settings.ai.budget` | งบต่อวัน | ป้ายแถว |
 | `settings.ai.budgetDesc` | ถึงเพดานแล้ว AI หยุดจนถึงเที่ยงคืนตามเวลาไทย | คำอธิบาย |
@@ -264,9 +299,18 @@
 | `settings.ai.particleDesc` | คำที่ AI ใช้ลงท้ายประโยคกับลูกค้า | คำอธิบาย |
 | `settings.ai.particleOption.ka` | ค่ะ | ตัวเลือก |
 | `settings.ai.particleOption.krub` | ครับ | ตัวเลือก |
+| `settings.ai.aiName` | ชื่อ AI | ป้ายแถว และชื่อของช่อง |
+| `settings.ai.aiNameDesc` | ชื่อที่ AI ใช้เรียกตัวเองและบอกตอนทักทาย เว้นว่างได้ | คำอธิบาย |
+| `settings.ai.aiNamePlaceholder` | เช่น มินนี่ | placeholder |
+| `settings.ai.answerMode` | ขอบเขตคำตอบ | ป้ายแถว และชื่อของกลุ่มตัวเลือก |
+| `settings.ai.answerModeDesc` | สิ่งที่ AI ใช้ตอบลูกค้า | คำอธิบาย |
+| `settings.ai.answerModeOption.general` | คุยทั่วไปได้ | ตัวเลือก (ค่าเริ่มต้น) |
+| `settings.ai.answerModeOption.knowledge_only` | ตอบจากคลังความรู้เท่านั้น | ตัวเลือก |
+| `settings.ai.answerModeOptionDesc.general` | ยึดคลังความรู้ก่อน เรื่องอื่นตอบจากความรู้ทั่วไป | คำอธิบายใต้ตัวเลือก |
+| `settings.ai.answerModeOptionDesc.knowledge_only` | เรื่องที่ไม่มีในคลังความรู้ให้แอดมินตอบ | คำอธิบายใต้ตัวเลือก |
 | `settings.ai.instructions` | คำแนะนำสำหรับ AI | ป้ายแถว |
-| `settings.ai.instructionsDesc` | น้ำเสียงและข้อห้ามที่อยากให้ AI ทำตาม | คำอธิบาย |
-| `settings.ai.instructionsPlaceholder` | เช่น เรียกลูกค้าว่าคุณลูกค้า และไม่รับนัดหมายทางแชท | placeholder |
+| `settings.ai.instructionsDesc` | บทบาท น้ำเสียง เรื่องที่คุยได้ คำทักทาย และข้อห้ามเพิ่มเติม เว้นว่างได้ | คำอธิบาย |
+| `settings.ai.instructionsPlaceholder` | เช่น เป็นผู้ช่วยแนะนำหนังสือ พูดเป็นกันเอง ทักทายด้วยคำว่าสวัสดี และไม่คุยเรื่องการเมือง | placeholder |
 | `settings.ai.instructionsCounter` | {n}/{max} | ตัวนับ `{max}` จาก `AI_INSTRUCTIONS_MAX_CHARS` |
 
 ข้อความ error ที่ตรวจใน browser:
@@ -276,6 +320,7 @@
 | `settings.ai.error.budget_invalid` | ใส่งบเป็นตัวเลข ทศนิยมไม่เกิน 2 ตำแหน่ง |
 | `settings.ai.error.budget_out_of_range` | งบต่อวันต้องอยู่ระหว่าง 0 ถึง {max} ดอลลาร์ |
 | `settings.ai.error.instructions_too_long` | คำแนะนำยาวเกิน {max} ตัวอักษร |
+| `settings.ai.error.ai_name_too_long` | ชื่อ AI ยาวเกิน {max} ตัวอักษร |
 
 ### ขอบเขตหัวข้อ
 
@@ -310,7 +355,7 @@
 | `settings.guard.testNeedsTopics` | บันทึกหัวข้ออย่างน้อยหนึ่งหัวข้อก่อนจึงจะทดลองได้ | เหตุผลข้างปุ่มที่กดไม่ได้ |
 | `settings.guard.blockedToday` | วันนี้กันไป {n} ข้อความ | บรรทัดท้ายส่วน |
 
-ข้อความ error ที่ตรวจใน browser (รหัสจาก `validateGuardTopicsInput`, `validateGuardRefusal`, `validateGuardTestInput`):
+ข้อความ error ที่ตรวจใน browser (รหัสจาก `addGuardTopic`, `removeGuardTopic` และ `validateGuardTestInput`):
 
 | Key | ข้อความ |
 | --- | --- |
@@ -374,6 +419,40 @@
 
 `{max}` คือ `LINE_CHANNEL_ID_MAX_CHARS` Token ไม่ถูกต้อง Channel ID กับ Channel secret ไม่ตรงกัน และบันทึกไม่สำเร็จเพราะระบบ ใช้ข้อความจาก [error-catalog](../architecture/error-catalog.md) ซึ่งต้องตรงกับถ้อยคำใน [admin-backoffice](admin-backoffice.md)
 
+### Rich menu และข้อความต้อนรับ
+
+| Key | ข้อความ | ใช้ที่ |
+| --- | --- | --- |
+| `settings.richMenu.title` | Rich menu และข้อความต้อนรับ | หัวส่วน |
+| `settings.richMenu.status` | Rich menu | ป้ายแถวสถานะ |
+| `settings.richMenu.statusPublished` | Publish แล้ว | ป้ายสถานะ จุดสีเขียว |
+| `settings.richMenu.statusNotPublished` | ยังไม่ได้ publish | ป้ายสถานะ จุดสีเทา |
+| `settings.richMenu.publishedAt` | Publish เมื่อ {dateTime} | คำอธิบายแถวเมื่อ publish แล้ว |
+| `settings.richMenu.notPublishedDesc` | เมนูสามปุ่ม คุยกับ AI คุยกับแอดมิน และวิธีทดสอบ ใต้ช่องพิมพ์ของลูกค้า | คำอธิบายแถวเมื่อยังไม่ได้ publish |
+| `settings.richMenu.needsLine` | เชื่อม LINE Official Account ก่อนจึงจะ publish ได้ | คำอธิบายแถวเมื่อยังไม่เชื่อม LINE ปุ่ม publish ปิดอยู่ |
+| `settings.richMenu.lastError` | ครั้งล่าสุดไม่สำเร็จ: {error} | ใต้ปุ่ม `{error}` คือข้อความของรหัสจาก error catalog |
+| `settings.richMenu.publish` | Publish rich menu | ปุ่มเมื่อยังไม่ได้ publish |
+| `settings.richMenu.republish` | Publish อีกครั้ง | ปุ่มเมื่อ publish แล้ว |
+| `settings.richMenu.remove` | นำ rich menu ออก | ปุ่มเมื่อ publish แล้ว |
+| `settings.richMenu.publishedToast` | Publish rich menu แล้ว | toast |
+| `settings.richMenu.removedToast` | นำ rich menu ออกแล้ว | toast |
+| `settings.richMenu.howTo` | ข้อความวิธีทดสอบ | ป้ายแถว และชื่อของช่อง |
+| `settings.richMenu.howToDesc` | ส่งเมื่อลูกค้ากดปุ่ม "วิธีทดสอบ" | คำอธิบายแถว |
+| `settings.richMenu.welcomeSwitch` | ส่งข้อความต้อนรับเมื่อเพิ่มเพื่อน | ป้ายแถว และชื่อของสวิตช์ |
+| `settings.richMenu.welcomeSwitchDesc` | ส่งการ์ดต้อนรับพร้อมปุ่มเดียวกับ rich menu ครั้งเดียวต่อการเพิ่มเพื่อน | คำอธิบายแถว |
+| `settings.richMenu.welcomeOnToast` | เปิดข้อความต้อนรับแล้ว | toast |
+| `settings.richMenu.welcomeOffToast` | ปิดข้อความต้อนรับแล้ว | toast |
+| `settings.richMenu.welcomeText` | ข้อความต้อนรับ | ป้ายแถว และชื่อของช่อง |
+| `settings.richMenu.welcomeTextDesc` | ข้อความในการ์ดต้อนรับ ชื่อบัญชีและปุ่มระบบใส่ให้เอง | คำอธิบายแถว |
+| `settings.richMenu.counter` | {n}/{max} | ตัวนับใต้ช่อง |
+| `settings.richMenu.reset` | ใช้ข้อความเริ่มต้น | ปุ่มข้างปุ่มบันทึก แสดงเมื่อมีข้อความที่บันทึกเองหรือกำลังแก้ |
+| `settings.richMenu.resetToast` | กลับไปใช้ข้อความเริ่มต้นแล้ว | toast |
+| `settings.richMenu.tooLong` | ข้อความยาวเกิน {max} ตัวอักษร | ใต้ช่อง |
+| `settings.richMenu.preview` | ตัวอย่างการ์ดต้อนรับ | ป้ายแถว และชื่อของตัวอย่าง |
+| `settings.richMenu.previewDesc` | ลูกค้าเห็นการ์ดนี้ใน LINE หน้าตาจริงขึ้นกับแอป LINE ของลูกค้า | คำอธิบายแถว |
+
+`{max}` คือ `HOW_TO_TEXT_MAX_CHARS` หรือ `WELCOME_TEXT_MAX_CHARS` ข้อความเริ่มต้นของสองช่อง ชื่อปุ่ม และข้อความคงที่ของการ์ด ("ยินดีต้อนรับสู่" และบรรทัดหมายเหตุ) เป็นข้อความที่ลูกค้าเห็น จึงอยู่ที่ `src/core/domain/rich-menu.logic.ts` ที่เดียว ([line-messaging](line-messaging.md#rich-menu)) หน้าตั้งค่าได้ข้อความเริ่มต้นจาก `SettingsDto` และชื่อปุ่มกับข้อความคงที่จาก `src/contracts`
+
 ### คลังความรู้
 
 | Key | ข้อความ | ใช้ที่ |
@@ -381,6 +460,7 @@
 | `settings.kb.title` | คลังความรู้ | หัวส่วน (แถวบนไม่แสดงซ้ำ) |
 | `settings.kb.description` | AI ใช้เนื้อหาจาก PDF เหล่านี้ตอบลูกค้า | คำอธิบาย |
 | `settings.kb.upload` | อัปโหลด PDF | ปุ่ม |
+| `settings.kb.uploadHint` | ไฟล์ PDF ไม่เกิน {maxMb} MB และไม่เกิน {maxPages} หน้า | ข้อความใต้ปุ่มที่เห็นตลอด และคำอธิบาย (`aria-describedby`) ของปุ่ม `{maxMb}` และ `{maxPages}` มาจาก `PDF_MAX_BYTES` และ `PDF_MAX_PAGES` |
 | `settings.kb.uploading` | กำลังอัปโหลด | `aria-label` ของปุ่มขณะอัปโหลด |
 | `settings.kb.usage` | ใช้ไป {used} จาก {limit} token | ใต้แถบการใช้ |
 | `settings.kb.usageLabel` | Token ของคลังความรู้ | `aria-label` ของ meter |
@@ -438,10 +518,10 @@
 | `settings.usage.detailTitle` | {name} · {month} | หัว dialog รายข้อความ |
 | `settings.usage.colTime` | เวลา | หัวตาราง dialog |
 | `settings.usage.colModel` | โมเดล | หัวตาราง dialog |
-| `settings.usage.colInput` | Token ขาเข้า | หัวตาราง dialog |
-| `settings.usage.colOutput` | Token ขาออก | หัวตาราง dialog |
-| `settings.usage.colCacheRead` | Token อ่านจาก cache | หัวตาราง dialog |
-| `settings.usage.colCacheWrite` | Token เขียน cache | หัวตาราง dialog |
+| `settings.usage.colInput` | Input token | หัวตาราง dialog |
+| `settings.usage.colOutput` | Output token | หัวตาราง dialog |
+| `settings.usage.colCacheRead` | Cache read token | หัวตาราง dialog |
+| `settings.usage.colCacheWrite` | Cache write token | หัวตาราง dialog |
 | `settings.usage.colCost` | ราคาโดยประมาณ | ใช้ key เดียวกับตารางหลัก |
 | `settings.usage.colOutcome` | ผล | หัวตาราง dialog |
 | `settings.usage.outcome.ok` | ตอบแล้ว | `outcome = ok` |

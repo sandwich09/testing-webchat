@@ -17,9 +17,9 @@ export class FakeRateLimitRepository implements RateLimitRepository {
     return Promise.resolve({ count: row.count });
   };
 
-  readonly peek: RateLimitRepository['peek'] = (key, windowStart) => {
+  readonly refund: RateLimitRepository['refund'] = (key, windowStart) => {
     const row = this.buckets.get(key);
-    const count = row?.windowStart === windowStart.getTime() ? row.count : 0;
-    return Promise.resolve({ count });
+    if (row?.windowStart === windowStart.getTime() && row.count > 0) row.count -= 1;
+    return Promise.resolve();
   };
 }

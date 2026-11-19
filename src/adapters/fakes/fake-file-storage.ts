@@ -8,7 +8,7 @@ export const FAKE_STORAGE_BASE_URL = 'https://fake-storage.test';
 interface Ticket {
   key: StorageKey;
   contentType: string;
-  maxSizeBytes: number;
+  sizeBytes: number;
   exp: string;
   expiresAt: Date;
 }
@@ -81,13 +81,13 @@ export class FakeFileStorage implements FileStorage {
   issueUpload(spec: {
     key: StorageKey;
     contentType: string;
-    maxSizeBytes: number;
+    sizeBytes: number;
     expiresAt: Date;
   }): Promise<Result<UploadTarget, 'storage.unavailable'>> {
     if (this.unavailable) return Promise.resolve(err('storage.unavailable'));
     const exp = String(spec.expiresAt.getTime());
     const sig = createHmac('sha256', this.secret)
-      .update(`${spec.key}\n${spec.contentType}\n${String(spec.maxSizeBytes)}\n${exp}`)
+      .update(`${spec.key}\n${spec.contentType}\n${String(spec.sizeBytes)}\n${exp}`)
       .digest('base64url');
     this.tickets.set(sig, { ...spec, exp });
     return Promise.resolve(
@@ -95,8 +95,8 @@ export class FakeFileStorage implements FileStorage {
         strategy: 'http_put',
         key: spec.key,
         contentType: spec.contentType,
-        maxSizeBytes: spec.maxSizeBytes,
-        url: `${this.urlFor(spec.key)}?exp=${exp}&sig=${sig}`,
+        maxSizeBytes: spec.sizeBytes,
+        url: `${this.pathOf(spec.key)}?exp=${exp}&sig=${sig}`,
         headers: { 'Content-Type': spec.contentType },
       }),
     );
@@ -166,6 +166,7 @@ export class FakeFileStorage implements FileStorage {
       | 'upload.signature_invalid'
       | 'upload.expired'
       | 'upload.content_mismatch'
+      | 'upload.incomplete'
       | 'media.too_large'
       | 'storage.unavailable'
     >
@@ -175,7 +176,11 @@ export class FakeFileStorage implements FileStorage {
     if (ticket?.key !== key || ticket.exp !== query.exp) return err('upload.signature_invalid');
     if (now.getTime() >= ticket.expiresAt.getTime()) return err('upload.expired');
     if (contentType !== ticket.contentType) return err('upload.content_mismatch');
-    return this.put(key, body, { contentType, maxSizeBytes: ticket.maxSizeBytes });
+    const bytes = await readLimited(body, ticket.sizeBytes);
+    if (bytes === null) return err('media.too_large');
+    if (bytes.length !== ticket.sizeBytes) return err('upload.incomplete');
+    this.files.set(key, { bytes, contentType });
+    return ok(this.object(key, bytes));
   }
 
   delete(key: StorageKey): Promise<Result<void, 'storage.unavailable'>> {
@@ -184,8 +189,12 @@ export class FakeFileStorage implements FileStorage {
     return Promise.resolve(ok(undefined));
   }
 
+  private pathOf(key: string): string {
+    return `/api/local-storage/${key.split('/').map(encodeURIComponent).join('/')}`;
+  }
+
   private urlFor(key: string): string {
-    return `${this.baseUrl}/api/local-storage/${key.split('/').map(encodeURIComponent).join('/')}`;
+    return `${this.baseUrl}${this.pathOf(key)}`;
   }
 
   private object(key: string, bytes: Uint8Array): StoredObject {

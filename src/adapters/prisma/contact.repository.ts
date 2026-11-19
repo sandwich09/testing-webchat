@@ -52,9 +52,25 @@ export function createContactRepository(client: PrismaClient): ContactRepository
   const setFollowStatus: ContactRepository['setFollowStatus'] = async (id, status, at) => {
     const data: Prisma.ContactUpdateManyMutationInput =
       status === 'following'
-        ? { followStatus: status, followedAt: at }
-        : { followStatus: status, replyToken: null, replyTokenExpiresAt: null };
-    await client.contact.updateMany({ where: { id }, data });
+        ? { followStatus: status, followedAt: at, followStatusAt: at }
+        : { followStatus: status, followStatusAt: at, replyToken: null, replyTokenExpiresAt: null };
+    const { count } = await client.contact.updateMany({
+      where: {
+        id,
+        // An event older than the one that set the current status changes nothing.
+        OR: [{ followStatusAt: null }, { followStatusAt: { lte: at } }],
+        AND: [
+          {
+            OR:
+              status === 'following'
+                ? [{ followStatus: 'unfollowed' }, { followedAt: null }]
+                : [{ followStatus: 'following' }],
+          },
+        ],
+      },
+      data,
+    });
+    return count === 1;
   };
 
   const recordInbound: ContactRepository['recordInbound'] = async (id, i) => {
@@ -81,7 +97,7 @@ export function createContactRepository(client: PrismaClient): ContactRepository
     await client.contact.updateMany({
       where: { id },
       // The preview follows every message; `lastMessageAt` is the latest inbound time and the
-      // sort key of the list, so a reply from the shop does not move the chat (rule 4).
+      // sort key of the list, so a reply from the admin side does not move the chat (rule 4).
       data: {
         lastMessagePreview: o.preview.text,
         lastMessageType: o.preview.type,

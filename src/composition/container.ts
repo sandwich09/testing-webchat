@@ -10,6 +10,7 @@ import { createLineMessagingGateway } from '@/adapters/line';
 import { createLocalFileStorage } from '@/adapters/local-storage';
 import { createVercelBlobStorage } from '@/adapters/blob';
 import {
+  createContactNoteRepository,
   createContactRepository,
   createKnowledgeRepository,
   createKnowledgeSource,
@@ -47,6 +48,13 @@ import {
   makeListContacts,
   makeListDocuments,
   makeMarkContactRead,
+  makeAddContactNote,
+  makeDeleteContactNote,
+  makeHandleRichMenuAction,
+  makePublishRichMenu,
+  makeRemoveRichMenu,
+  makeSendWelcome,
+  makeListContactNotes,
   makeReceiveLineEvents,
   makeRetryMessage,
   makeSendAdminMessage,
@@ -131,6 +139,7 @@ export const realPortFactories = (env: AppEnv): PortFactories => {
           })
         : createVercelBlobStorage({ token: env.fileStorage.token }),
     contacts: () => createContactRepository(prisma()),
+    notes: () => createContactNoteRepository(prisma()),
     messages: () => createMessageRepository(prisma()),
     settings: (ports) => createSettingsRepository(prisma(), { clock: ports.clock }),
     knowledge: () => createKnowledgeRepository(prisma()),
@@ -198,6 +207,13 @@ export const assembleUseCases = (
     showTypingToCustomer: lazy(() => makeShowTypingToCustomer(ports, config)),
     setContactAi: lazy(() => makeSetContactAi(ports, config)),
     markContactRead: lazy(() => makeMarkContactRead(ports, config)),
+    listContactNotes: lazy(() => makeListContactNotes(ports, config)),
+    addContactNote: lazy(() => makeAddContactNote(ports, config)),
+    deleteContactNote: lazy(() => makeDeleteContactNote(ports, config)),
+    handleRichMenuAction: lazy(() => makeHandleRichMenuAction(ports, config)),
+    sendWelcome: lazy(() => makeSendWelcome(ports, config)),
+    publishRichMenu: lazy(() => makePublishRichMenu(ports, config)),
+    removeRichMenu: lazy(() => makeRemoveRichMenu(ports, config)),
     listContacts: lazy(() => makeListContacts(ports, config)),
     getContact: lazy(() => makeGetContact(ports, config)),
     getMessages: lazy(() => makeGetMessages(ports, config)),

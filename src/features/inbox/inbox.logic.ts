@@ -144,7 +144,32 @@ export type DisplayItem =
       author: 'customer' | 'admin' | 'ai';
       messages: ThreadMessage[];
     }
-  | { kind: 'event'; key: string; message: ThreadMessage };
+  | { kind: 'event'; key: string; message: ThreadMessage }
+  /** The welcome card sent on a follow (event code `welcome.sent`). */
+  | { kind: 'welcome'; key: string; message: ThreadMessage };
+
+/** Event codes of a customer's tap on a rich menu or welcome card button (error-catalog). */
+const TAP_EVENT_CODES: ReadonlySet<string> = new Set([
+  'customer.tapped_ai_on',
+  'customer.tapped_admin',
+  'customer.tapped_how_to',
+]);
+
+/**
+ * Whether a message shows as an event line: an event row, or a tap, which is stored as the
+ * customer's text (the button title) with the event code of the button.
+ */
+export function showsAsEventLine(message: Pick<ThreadMessage, 'type' | 'eventCode'>): boolean {
+  return (
+    message.type === 'event' ||
+    (message.eventCode !== null && TAP_EVENT_CODES.has(message.eventCode))
+  );
+}
+
+/** Whether a message is the welcome card sent on a follow. */
+export function isWelcomeCard(message: Pick<ThreadMessage, 'eventCode' | 'direction'>): boolean {
+  return message.direction === 'outbound' && message.eventCode === 'welcome.sent';
+}
 
 /** Turns a sorted thread into day chips, event lines and groups of messages by one sender. */
 export function groupMessagesForDisplay(items: readonly ThreadMessage[], now: Date): DisplayItem[] {
@@ -154,7 +179,7 @@ export function groupMessagesForDisplay(items: readonly ThreadMessage[], now: Da
   let lastAt = 0;
 
   for (const message of items) {
-    const isEvent = message.type === 'event';
+    const isEvent = showsAsEventLine(message);
     if (isEvent && (message.eventCode === null || eventCodeText(message.eventCode) === null)) {
       continue; // an unknown event code is not shown
     }
@@ -171,6 +196,11 @@ export function groupMessagesForDisplay(items: readonly ThreadMessage[], now: Da
     if (isEvent) {
       open = null;
       out.push({ kind: 'event', key: message.id, message });
+      continue;
+    }
+    if (isWelcomeCard(message)) {
+      open = null;
+      out.push({ kind: 'welcome', key: message.id, message });
       continue;
     }
 
@@ -234,6 +264,9 @@ export function buildContactPreview(c: ContactDto): Preview {
         break;
       case 'video':
         text = copy.media.video;
+        break;
+      case 'audio':
+        text = copy.media.audio;
         break;
       case 'sticker':
         text = copy.media.sticker;

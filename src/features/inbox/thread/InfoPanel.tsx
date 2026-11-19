@@ -15,6 +15,7 @@ import type { ContactDetailDto } from '@/contracts';
 import { copy } from '@/features/inbox/inbox.constants';
 import { AiSwitch } from '@/features/inbox/thread/AiSwitch';
 import { useContactDetail } from '@/features/inbox/thread/inbox.thread.hooks';
+import { NotesBlock } from '@/features/inbox/thread/NotesBlock';
 import { fillCopy } from '@/features/inbox/thread/inbox.thread.logic';
 
 type InfoPanelProps = {
@@ -118,6 +119,8 @@ function InfoBody({ contact, killSwitchOn }: { contact: ContactDetailDto; killSw
           </span>
         </DetailRow>
       </dl>
+
+      <NotesBlock contactId={contact.id} now={now} />
     </div>
   );
 }

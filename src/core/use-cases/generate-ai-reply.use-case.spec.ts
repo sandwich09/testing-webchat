@@ -15,6 +15,7 @@ import {
   AI_MAX_ROUNDS_PER_RUN,
   AI_MAX_TOKENS,
   AI_REPLY_MAX_CHARS,
+  DEFAULT_AI_MODEL,
   GUARD_CONTEXT_TURNS,
   GUARD_MAX_TOKENS,
   GUARD_MODEL,
@@ -71,8 +72,8 @@ const config: UseCaseConfig = {
 };
 const ctx = { requestId: 'req-test', clientIp: null };
 
-/** Cost of FAKE_USAGE on Opus 5.5: 100 x 4000 + 20 x 20000. */
-const OPUS_REPLY_COST = 800_000n;
+/** Cost of FAKE_USAGE on Sonnet 5.5 (DEFAULT_AI_MODEL): 100 x 2000 + 20 x 10000. */
+const DEFAULT_MODEL_REPLY_COST = 400_000n;
 /** Cost of FAKE_GUARD_USAGE on Haiku 5.5: 400 x 100 + 20 x 500. */
 const GUARD_COST = 50_000n;
 
@@ -521,7 +522,7 @@ describe('GenerateAiReply', () => {
       ).toBe(true);
       expect(usage.records.map((r) => [r.kind, r.outcome, r.cost])).toEqual([
         ['guard', 'ok', GUARD_COST],
-        ['reply', 'ok', OPUS_REPLY_COST],
+        ['reply', 'ok', DEFAULT_MODEL_REPLY_COST],
       ]);
       expect(usage.records[0]).toMatchObject({
         contactId: contact.id,
@@ -534,6 +535,40 @@ describe('GenerateAiReply', () => {
         expect.objectContaining({ event: 'guard.checked', outcome: 'ok', model: GUARD_MODEL }),
       );
       await expectUnlocked();
+    });
+
+    it('greeting while the guard is on: allowed with no topic, the chat model introduces the AI', async () => {
+      await settings.update({ aiName: 'มินนี่' });
+      const m = await customerSays('สวัสดีค่ะ');
+      topicGuard.enqueueAllowed(null);
+      replyOk('สวัสดีค่ะ มินนี่เป็นผู้ช่วย AI ค่ะ มีอะไรให้ช่วยไหมคะ');
+
+      expect(await run(m.id)).toMatchObject({ kind: 'replied' });
+      expect(topicGuard.requests.map((r) => r.message)).toEqual(['สวัสดีค่ะ']);
+      expect(chatModel.requests).toHaveLength(1);
+      const system = chatModel.requests[0]?.systemInstructions ?? '';
+      expect(system).toContain('ชื่อของคุณคือ "มินนี่"');
+      expect(system).toContain('- คำทักทาย ขอบคุณ และบอกลาสั้น ๆ ที่ไม่มีคำขออื่น รวมทั้ง');
+      expect(system).toContain('ให้ตอบตามกฎการทักทายใน <rules> ได้ needsAdmin เป็น false');
+      expect(sentTexts()).toEqual([
+        { type: 'text', text: 'สวัสดีค่ะ มินนี่เป็นผู้ช่วย AI ค่ะ มีอะไรให้ช่วยไหมคะ' },
+      ]);
+      expect(usage.records.map((r) => [r.kind, r.outcome])).toEqual([
+        ['guard', 'ok'],
+        ['reply', 'ok'],
+      ]);
+      expect(await eventCodes()).toEqual([]);
+    });
+
+    it('greeting with an off-topic request: blocked by the guard, the chat model is not called', async () => {
+      const m = await customerSays('สวัสดีค่ะ ขอพยากรณ์อากาศวันนี้หน่อย');
+      topicGuard.enqueueBlocked();
+
+      expect(await run(m.id)).toMatchObject({ kind: 'blocked' });
+      expect(chatModel.requests).toEqual([]);
+      expect(sentTexts()).toEqual([{ type: 'text', text: REFUSAL }]);
+      expect(await eventCodes()).toEqual(['guard.blocked']);
+      expect(usage.records.map((r) => [r.kind, r.outcome])).toEqual([['guard', 'blocked']]);
     });
 
     it('request to TopicGuard: guard model, limits, topics, merged message and bounded context', async () => {
@@ -561,9 +596,9 @@ describe('GenerateAiReply', () => {
       expect(req?.context).toHaveLength(GUARD_CONTEXT_TURNS);
       expect(req?.context).toEqual([
         { role: 'customer', text: 'ถามข้อ 2' },
-        { role: 'shop', text: 'ตอบข้อ 2' },
+        { role: 'assistant', text: 'ตอบข้อ 2' },
         { role: 'customer', text: 'ถามข้อ 3' },
-        { role: 'shop', text: 'ตอบข้อ 3' },
+        { role: 'assistant', text: 'ตอบข้อ 3' },
       ]);
     });
 
@@ -941,7 +976,7 @@ describe('GenerateAiReply', () => {
       // The round-1 reply did not see 'สอง', so 'สอง' comes after it in the round-2 history.
       expect(chatModel.requests[1]?.history).toEqual([
         { role: 'customer', text: 'หนึ่ง' },
-        { role: 'shop', text: 'ตอบหนึ่ง' },
+        { role: 'assistant', text: 'ตอบหนึ่ง' },
         { role: 'customer', text: 'สอง' },
       ]);
       const ai = await aiMessages();
@@ -986,7 +1021,7 @@ describe('GenerateAiReply', () => {
         const handoff = handoffText((await settings.get()).aiPoliteParticle);
         expect(chatModel.requests[1]?.history).toEqual([
           { role: 'customer', text: 'หนึ่ง' },
-          { role: 'shop', text: handoff },
+          { role: 'assistant', text: handoff },
           { role: 'customer', text: 'สอง' },
         ]);
       });
@@ -1009,13 +1044,13 @@ describe('GenerateAiReply', () => {
           message: 'สอง',
           context: [
             { role: 'customer', text: 'หนึ่ง' },
-            { role: 'shop', text: REFUSAL },
+            { role: 'assistant', text: REFUSAL },
           ],
         });
         expect(chatModel.requests).toHaveLength(1);
         expect(chatModel.requests[0]?.history).toEqual([
           { role: 'customer', text: 'หนึ่ง' },
-          { role: 'shop', text: REFUSAL },
+          { role: 'assistant', text: REFUSAL },
           { role: 'customer', text: 'สอง' },
         ]);
       });
@@ -1034,7 +1069,7 @@ describe('GenerateAiReply', () => {
         expect(chatModel.requests).toHaveLength(2);
         expect(chatModel.requests[1]?.history).toEqual([
           { role: 'customer', text: 'หนึ่ง' },
-          { role: 'shop', text: 'ตอบหนึ่ง' },
+          { role: 'assistant', text: 'ตอบหนึ่ง' },
           { role: 'customer', text: 'สอง\nสาม' },
         ]);
       });
@@ -1119,7 +1154,7 @@ describe('GenerateAiReply', () => {
         expect(chatModel.requests).toHaveLength(2);
         expect(chatModel.requests[1]?.history).toEqual([
           { role: 'customer', text: 'หนึ่ง' },
-          { role: 'shop', text: 'ตอบหนึ่ง' },
+          { role: 'assistant', text: 'ตอบหนึ่ง' },
           { role: 'customer', text: 'สอง' },
         ]);
         expect(sentTexts()).toEqual([
@@ -1374,9 +1409,9 @@ describe('GenerateAiReply', () => {
           messageId: reply?.id,
           documentId: null,
           provider: 'claude',
-          model: 'claude-opus-5-5',
+          model: DEFAULT_AI_MODEL,
           usage: FAKE_USAGE,
-          cost: OPUS_REPLY_COST,
+          cost: DEFAULT_MODEL_REPLY_COST,
           outcome: 'ok',
           error: null,
           createdAt: clock.now(),
@@ -1385,8 +1420,8 @@ describe('GenerateAiReply', () => {
       expect(logger.entries).toContainEqual(
         expect.objectContaining({
           event: 'ai.model.called',
-          model: 'claude-opus-5-5',
-          costNanoUsd: OPUS_REPLY_COST.toString(),
+          model: DEFAULT_AI_MODEL,
+          costNanoUsd: DEFAULT_MODEL_REPLY_COST.toString(),
           outcome: 'ok',
         }),
       );
@@ -1505,7 +1540,7 @@ describe('GenerateAiReply', () => {
           outcome: 'refused',
           error: 'ai.refused',
           messageId: null,
-          cost: OPUS_REPLY_COST,
+          cost: DEFAULT_MODEL_REPLY_COST,
         }),
       ]);
       expect((await settings.get()).lastAiError).toEqual({ code: 'ai.refused', at: clock.now() });
@@ -1612,7 +1647,7 @@ describe('GenerateAiReply', () => {
         ]);
       });
 
-      it('hands off a reply with a link the shop never wrote, without sending it', async () => {
+      it('hands off a reply with a link the admin never wrote, without sending it', async () => {
         await withShopLinks();
         const m = await customerSays('จ่ายเงินยังไงคะ');
         replyOk('โอนเงินได้ที่ https://pay.evil.example/x ค่ะ');
@@ -1626,7 +1661,7 @@ describe('GenerateAiReply', () => {
             outcome: 'failed',
             error: 'ai.link_not_allowed',
             messageId: null,
-            cost: OPUS_REPLY_COST,
+            cost: DEFAULT_MODEL_REPLY_COST,
           }),
         ]);
         expect((await settings.get()).lastAiError?.code).toBe('ai.link_not_allowed');
@@ -1774,7 +1809,7 @@ describe('GenerateAiReply', () => {
           outcome: 'cancelled',
           messageId: null,
           error: null,
-          cost: OPUS_REPLY_COST,
+          cost: DEFAULT_MODEL_REPLY_COST,
         }),
       ]);
       expect((await reload()).needsAdmin).toBe(false);
@@ -1855,7 +1890,11 @@ describe('GenerateAiReply', () => {
       const [sent] = await aiMessages();
       expect(sent?.deliveryStatus).toBe('failed');
       expect(usage.records).toEqual([
-        expect.objectContaining({ outcome: 'ok', messageId: sent?.id, cost: OPUS_REPLY_COST }),
+        expect.objectContaining({
+          outcome: 'ok',
+          messageId: sent?.id,
+          cost: DEFAULT_MODEL_REPLY_COST,
+        }),
       ]);
       expect((await reload()).needsAdminReason).toBe('ai_failed');
     });

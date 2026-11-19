@@ -3,8 +3,8 @@ import type { EncryptedLineCredentials, ErrorCode, Settings } from '@/core/domai
 export interface SettingsRepository {
   /**
    * Single row. Created with the defaults when missing: aiEnabled false, DEFAULT_AI_MODEL,
-   * DEFAULT_AI_DAILY_BUDGET_USD, DEFAULT_POLITE_PARTICLE, empty instructions, guardEnabled false,
-   * no guard topics.
+   * DEFAULT_AI_DAILY_BUDGET_USD, DEFAULT_POLITE_PARTICLE, empty instructions, no AI name,
+   * DEFAULT_AI_ANSWER_MODE, guardEnabled false, no guard topics.
    */
   get(): Promise<Settings>;
   update(
@@ -16,8 +16,13 @@ export interface SettingsRepository {
         | 'aiDailyBudget'
         | 'aiPoliteParticle'
         | 'aiInstructions'
+        | 'aiName'
+        | 'aiAnswerMode'
         | 'guardEnabled'
         | 'guardTopics'
+        | 'howToText'
+        | 'welcomeEnabled'
+        | 'welcomeText'
       >
     >,
   ): Promise<Settings>;
@@ -34,6 +39,17 @@ export interface SettingsRepository {
   recordWebhookReceived(at: Date): Promise<void>;
   recordLineError(e: { code: ErrorCode; at: Date } | null): Promise<void>;
   recordAiError(e: { code: ErrorCode; at: Date } | null): Promise<void>;
+  /** The published rich menu (null after removal); clears richMenuError. */
+  recordRichMenu(menu: { id: string; publishedAt: Date } | null): Promise<void>;
+  /**
+   * Compare-and-set: records `menu` (and clears richMenuError) only while the stored menu id is
+   * still `expectedId` (null: none stored). Returns false when another publish stored first.
+   */
+  replaceRichMenu(
+    expectedId: string | null,
+    menu: { id: string; publishedAt: Date },
+  ): Promise<boolean>;
+  recordRichMenuError(e: { code: ErrorCode; at: Date }): Promise<void>;
   /** Checks the database connection. Throws when it cannot connect. */
   ping(): Promise<void>;
 }

@@ -24,12 +24,10 @@ export function createRateLimitRepository(client: PrismaClient): RateLimitReposi
       return { count };
     },
 
-    async peek(key, windowStart) {
-      const row = await client.rateLimitBucket.findFirst({
-        where: { key, windowStart },
-        select: { count: true },
-      });
-      return { count: row?.count ?? 0 };
+    async refund(key, windowStart) {
+      await client.$executeRaw`
+        UPDATE "RateLimitBucket" SET "count" = "count" - 1
+        WHERE "key" = ${key} AND "windowStart" = ${windowStart}::timestamptz AND "count" > 0`;
     },
   };
 }

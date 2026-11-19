@@ -53,7 +53,7 @@ const request = (overrides: Partial<ChatModelRequest> = {}): ChatModelRequest =>
   knowledgeText: '<knowledge>\nเปิด 9 โมง\n</knowledge>',
   history: [
     { role: 'customer', text: 'สวัสดีค่ะ' },
-    { role: 'shop', text: 'สวัสดีค่ะ ยินดีต้อนรับ' },
+    { role: 'assistant', text: 'สวัสดีค่ะ ยินดีต้อนรับ' },
     { role: 'customer', text: 'เปิดกี่โมงคะ' },
   ],
   now: new Date('2026-11-18T07:32:00Z'),

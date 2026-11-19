@@ -8,14 +8,18 @@ import type {
   OtherKind,
   OutboundLinePart,
   Result,
+  RichMenuSpec,
   WebhookEventId,
 } from '@/core/domain';
-import { LINE_MAX_PARTS_PER_REQUEST, err, ok } from '@/core/domain';
-import type { MessagingGateway } from '@/core/ports';
+import { LINE_MAX_PARTS_PER_REQUEST, POSTBACK_DATA_MAX_CHARS, err, ok } from '@/core/domain';
+import type { LineBotIdentity, MessagingGateway } from '@/core/ports';
 
 export const FAKE_LINE_CHANNEL_SECRET = 'fake-channel-secret';
 /** The Channel ID the fake pairs with FAKE_LINE_CHANNEL_SECRET. */
 export const FAKE_LINE_CHANNEL_ID = '1000000001';
+/** A valid access token of another channel: its bot is not the bot of FAKE_LINE_CHANNEL_ID. */
+export const FAKE_LINE_OTHER_CHANNEL_TOKEN = 'fake-line-other-channel-token' as LineAccessToken; // brand: test token
+const OTHER_CHANNEL_BOT = { botName: 'Other Bot', basicId: '@otherbot', botUserId: 'Uotherbot' };
 export const FAKE_LINE_ACCESS_TOKEN = 'fake-access-token' as LineAccessToken;
 /** A token the fake always rejects. */
 export const FAKE_LINE_INVALID_TOKEN = 'fake-invalid-token' as LineAccessToken;
@@ -34,7 +38,12 @@ export type FakeMessagingGatewayFailable =
   | 'getContentStatus'
   | 'showLoading'
   | 'verifyChannelSecret'
-  | 'getBotInfo';
+  | 'getBotInfo'
+  | 'createRichMenu'
+  | 'uploadRichMenuImage'
+  | 'setDefaultRichMenu'
+  | 'clearDefaultRichMenu'
+  | 'deleteRichMenu';
 
 export interface FakeLineContent {
   original?: Uint8Array;
@@ -75,12 +84,31 @@ const parseMessage = (raw: unknown): InboundLineMessage | null => {
   const lineMessageId = raw.id as LineMessageId;
   switch (raw.type) {
     case 'text':
-      return typeof raw.text === 'string' ? { type: 'text', lineMessageId, text: raw.text } : null;
+      return typeof raw.text === 'string'
+        ? {
+            type: 'text',
+            lineMessageId,
+            text: raw.text,
+            quotedLineMessageId: nonEmptyString(raw.quotedMessageId)
+              ? (raw.quotedMessageId as LineMessageId) // brand: opaque LINE id
+              : null,
+          }
+        : null;
     case 'image':
     case 'video': {
       const provider = isObj(raw.contentProvider) ? raw.contentProvider.type : undefined;
       // Anything but an explicit "line" provider is not downloaded (conservative).
       return { type: raw.type, lineMessageId, hostedByLine: provider === 'line' };
+    }
+    case 'audio': {
+      const provider = isObj(raw.contentProvider) ? raw.contentProvider.type : undefined;
+      const d = raw.duration;
+      return {
+        type: 'audio',
+        lineMessageId,
+        hostedByLine: provider === 'line',
+        durationMs: typeof d === 'number' && Number.isInteger(d) && d >= 0 ? d : null,
+      };
     }
     case 'sticker':
       return nonEmptyString(raw.packageId) && nonEmptyString(raw.stickerId)
@@ -129,6 +157,12 @@ const parseEvent = (obj: Obj, webhookEventId: WebhookEventId): LineEvent => {
       return { ...base, kind: 'follow', userId, replyToken };
     case 'unfollow':
       return { ...base, kind: 'unfollow', userId };
+    case 'postback': {
+      const postback = isObj(obj.postback) ? obj.postback : {};
+      return typeof postback.data === 'string' && postback.data.length <= POSTBACK_DATA_MAX_CHARS
+        ? { ...base, kind: 'postback', userId, replyToken, data: postback.data }
+        : unsupported;
+    }
     default:
       return unsupported;
   }
@@ -170,6 +204,12 @@ export class FakeMessagingGateway implements MessagingGateway {
   readonly channelSecret: string;
   readonly replies: FakeSentReply[] = [];
   readonly pushes: FakeSentPush[] = [];
+  private sentCounter = 0;
+  private richMenuCounter = 0;
+  /** Rich menus that exist at the fake LINE, by id, and whether each has its picture. */
+  readonly richMenus = new Map<string, { menu: RichMenuSpec; hasImage: boolean }>();
+  /** The default rich menu of every user, or null. */
+  defaultRichMenuId: string | null = null;
   readonly loadingCalls: { token: LineAccessToken; userId: LineUserId; seconds: number }[] = [];
   readonly rejectedTokens = new Set<string>([FAKE_LINE_INVALID_TOKEN]);
   readonly invalidReplyTokens = new Set<string>();
@@ -182,7 +222,9 @@ export class FakeMessagingGateway implements MessagingGateway {
   private readonly profiles = new Map<string, { displayName: string; pictureUrl: string | null }>();
   private readonly contents = new Map<string, FakeLineContent>();
   private readonly failures = new Map<string, string[]>();
-  private botInfo = { botName: 'Fake Bot', basicId: '@fakebot' };
+  private botInfo = { botName: 'Fake Bot', basicId: '@fakebot', botUserId: 'Ufakebot' };
+  /** When true, verifyChannelSecret checks the pair but cannot read the channel's bot. */
+  channelBotUnreadable = false;
 
   constructor(opts: { channelSecret?: string } = {}) {
     this.channelSecret = opts.channelSecret ?? FAKE_LINE_CHANNEL_SECRET;
@@ -208,8 +250,8 @@ export class FakeMessagingGateway implements MessagingGateway {
     this.contents.set(lineMessageId, { ...content });
   }
 
-  setBotInfo(info: { botName: string; basicId: string }): void {
-    this.botInfo = info;
+  setBotInfo(info: { botName: string; basicId: string; botUserId?: string }): void {
+    this.botInfo = { ...info, botUserId: info.botUserId ?? this.botInfo.botUserId };
   }
 
   /** Signature LINE would send for this body. */
@@ -246,11 +288,83 @@ export class FakeMessagingGateway implements MessagingGateway {
     return ok(events);
   }
 
+  createRichMenu(
+    token: LineAccessToken,
+    menu: RichMenuSpec,
+  ): Promise<Result<{ richMenuId: string }, Failure<'createRichMenu'>>> {
+    const failure = this.takeFailure('createRichMenu');
+    if (failure !== null) return Promise.resolve(err(failure as Failure<'createRichMenu'>));
+    if (this.isRejected(token)) return Promise.resolve(err('line.unauthorized'));
+    this.richMenuCounter += 1;
+    const richMenuId = `richmenu-fake-${String(this.richMenuCounter)}`;
+    this.richMenus.set(richMenuId, { menu: structuredClone(menu), hasImage: false });
+    return Promise.resolve(ok({ richMenuId }));
+  }
+
+  uploadRichMenuImage(
+    token: LineAccessToken,
+    richMenuId: string,
+  ): Promise<Result<void, Failure<'uploadRichMenuImage'>>> {
+    const failure = this.takeFailure('uploadRichMenuImage');
+    if (failure !== null) return Promise.resolve(err(failure as Failure<'uploadRichMenuImage'>));
+    if (this.isRejected(token)) return Promise.resolve(err('line.unauthorized'));
+    const menu = this.richMenus.get(richMenuId);
+    // LINE takes one picture per menu; a second upload is refused.
+    if (menu === undefined || menu.hasImage) return Promise.resolve(err('line.rich_menu_failed'));
+    menu.hasImage = true;
+    return Promise.resolve(ok(undefined));
+  }
+
+  setDefaultRichMenu(
+    token: LineAccessToken,
+    richMenuId: string,
+  ): Promise<Result<void, Failure<'setDefaultRichMenu'>>> {
+    const failure = this.takeFailure('setDefaultRichMenu');
+    if (failure !== null) return Promise.resolve(err(failure as Failure<'setDefaultRichMenu'>));
+    if (this.isRejected(token)) return Promise.resolve(err('line.unauthorized'));
+    // LINE refuses a menu without its picture as the default.
+    if (this.richMenus.get(richMenuId)?.hasImage !== true) {
+      return Promise.resolve(err('line.rich_menu_failed'));
+    }
+    this.defaultRichMenuId = richMenuId;
+    return Promise.resolve(ok(undefined));
+  }
+
+  clearDefaultRichMenu(
+    token: LineAccessToken,
+  ): Promise<Result<void, Failure<'clearDefaultRichMenu'>>> {
+    const failure = this.takeFailure('clearDefaultRichMenu');
+    if (failure !== null) return Promise.resolve(err(failure as Failure<'clearDefaultRichMenu'>));
+    if (this.isRejected(token)) return Promise.resolve(err('line.unauthorized'));
+    this.defaultRichMenuId = null;
+    return Promise.resolve(ok(undefined));
+  }
+
+  deleteRichMenu(
+    token: LineAccessToken,
+    richMenuId: string,
+  ): Promise<Result<void, Failure<'deleteRichMenu'>>> {
+    const failure = this.takeFailure('deleteRichMenu');
+    if (failure !== null) return Promise.resolve(err(failure as Failure<'deleteRichMenu'>));
+    if (this.isRejected(token)) return Promise.resolve(err('line.unauthorized'));
+    this.richMenus.delete(richMenuId);
+    if (this.defaultRichMenuId === richMenuId) this.defaultRichMenuId = null;
+    return Promise.resolve(ok(undefined));
+  }
+
+  /** LINE ids of sent messages, `fake-sent-1`, `fake-sent-2` and on, one per part. */
+  private nextSentIds(count: number): LineMessageId[] {
+    return Array.from({ length: count }, () => {
+      this.sentCounter += 1;
+      return `fake-sent-${String(this.sentCounter)}` as LineMessageId; // brand: fake LINE id
+    });
+  }
+
   reply(
     token: LineAccessToken,
     replyToken: string,
     parts: OutboundLinePart[],
-  ): Promise<Result<void, Failure<'reply'>>> {
+  ): Promise<Result<{ sentIds: LineMessageId[] }, Failure<'reply'>>> {
     const failure = this.takeFailure('reply');
     if (failure !== null) return Promise.resolve(err(failure as Failure<'reply'>));
     if (this.isRejected(token)) return Promise.resolve(err('line.unauthorized'));
@@ -266,7 +380,7 @@ export class FakeMessagingGateway implements MessagingGateway {
     }
     this.usedReplyTokens.add(replyToken);
     this.replies.push({ token, replyToken, parts });
-    return Promise.resolve(ok(undefined));
+    return Promise.resolve(ok({ sentIds: this.nextSentIds(parts.length) }));
   }
 
   push(
@@ -274,19 +388,21 @@ export class FakeMessagingGateway implements MessagingGateway {
     to: LineUserId,
     parts: OutboundLinePart[],
     retryKey: string,
-  ): Promise<Result<{ alreadyAccepted: boolean }, Failure<'push'>>> {
+  ): Promise<Result<{ alreadyAccepted: boolean; sentIds: LineMessageId[] }, Failure<'push'>>> {
     const failure = this.takeFailure('push');
     if (failure !== null) return Promise.resolve(err(failure as Failure<'push'>));
     if (this.isRejected(token)) return Promise.resolve(err('line.unauthorized'));
     // A retry of an accepted request is answered as accepted and is not delivered twice.
-    if (this.acceptedRetryKeys.has(retryKey)) return Promise.resolve(ok({ alreadyAccepted: true }));
+    if (this.acceptedRetryKeys.has(retryKey)) {
+      return Promise.resolve(ok({ alreadyAccepted: true, sentIds: [] }));
+    }
     if (this.quotaExceeded) return Promise.resolve(err('line.quota_exceeded'));
     if (parts.length === 0 || parts.length > LINE_MAX_PARTS_PER_REQUEST) {
       return Promise.resolve(err('line.push_failed'));
     }
     this.acceptedRetryKeys.add(retryKey);
     this.pushes.push({ token, to, parts, retryKey });
-    return Promise.resolve(ok({ alreadyAccepted: false }));
+    return Promise.resolve(ok({ alreadyAccepted: false, sentIds: this.nextSentIds(parts.length) }));
   }
 
   getProfile(
@@ -354,15 +470,16 @@ export class FakeMessagingGateway implements MessagingGateway {
   verifyChannelSecret(
     channelId: string,
     channelSecret: string,
-  ): Promise<Result<void, Failure<'verifyChannelSecret'>>> {
+  ): Promise<Result<{ bot: LineBotIdentity | null }, Failure<'verifyChannelSecret'>>> {
     const failure = this.takeFailure('verifyChannelSecret');
     if (failure !== null) return Promise.resolve(err(failure as Failure<'verifyChannelSecret'>));
     const known = this.channels.get(channelId);
-    return Promise.resolve(
-      known !== undefined && known === channelSecret
-        ? ok(undefined)
-        : err('line.channel_secret_invalid'),
-    );
+    if (known === undefined || known !== channelSecret) {
+      return Promise.resolve(err('line.channel_secret_invalid'));
+    }
+    // Every channel of the fake is the bot of FAKE_LINE_ACCESS_TOKEN.
+    const { botUserId, basicId } = this.botInfo;
+    return Promise.resolve(ok({ bot: this.channelBotUnreadable ? null : { botUserId, basicId } }));
   }
 
   showLoading(
@@ -383,10 +500,14 @@ export class FakeMessagingGateway implements MessagingGateway {
 
   getBotInfo(
     token: LineAccessToken,
-  ): Promise<Result<{ botName: string; basicId: string }, Failure<'getBotInfo'>>> {
+  ): Promise<
+    Result<{ botName: string; basicId: string; botUserId: string }, Failure<'getBotInfo'>>
+  > {
     const failure = this.takeFailure('getBotInfo');
     if (failure !== null) return Promise.resolve(err(failure as Failure<'getBotInfo'>));
     if (this.isRejected(token)) return Promise.resolve(err('line.credentials_invalid'));
+    if (token === FAKE_LINE_OTHER_CHANNEL_TOKEN)
+      return Promise.resolve(ok({ ...OTHER_CHANNEL_BOT }));
     return Promise.resolve(ok({ ...this.botInfo }));
   }
 

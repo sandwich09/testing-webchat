@@ -14,6 +14,8 @@ import {
   FAKE_LINE_CHANNEL_SECRET,
   FakeClock,
   FakeContactRepository,
+  FakeContentHasher,
+  FakeRateLimitRepository,
   FakeIdGenerator,
   FakeLogger,
   FakeMessageRepository,
@@ -93,6 +95,8 @@ describe('ReceiveLineEvents', () => {
   let webhookEvents: FakeWebhookEventRepository;
   let contacts: FakeContactRepository;
   let messages: FakeMessageRepository;
+  let rateLimits: FakeRateLimitRepository;
+  let hasher: FakeContentHasher;
   let run: ReturnType<typeof makeReceiveLineEvents>;
 
   const configure = async (): Promise<void> => {
@@ -145,8 +149,22 @@ describe('ReceiveLineEvents', () => {
     webhookEvents = new FakeWebhookEventRepository();
     contacts = new FakeContactRepository();
     messages = new FakeMessageRepository({ contacts });
+    rateLimits = new FakeRateLimitRepository();
+    hasher = new FakeContentHasher();
     run = makeReceiveLineEvents(
-      { settings, cipher, gateway, webhookEvents, contacts, messages, ids, clock, logger },
+      {
+        settings,
+        cipher,
+        gateway,
+        webhookEvents,
+        contacts,
+        messages,
+        ids,
+        clock,
+        logger,
+        rateLimits,
+        hasher,
+      },
       config,
     );
     gateway.setProfile(USER, { displayName: DISPLAY_NAME, pictureUrl: 'https://p.test/a.jpg' });
@@ -157,7 +175,19 @@ describe('ReceiveLineEvents', () => {
     it('returns line.not_configured without parsing when no credentials are saved', async () => {
       settings = new FakeSettingsRepository();
       run = makeReceiveLineEvents(
-        { settings, cipher, gateway, webhookEvents, contacts, messages, ids, clock, logger },
+        {
+          settings,
+          cipher,
+          gateway,
+          webhookEvents,
+          contacts,
+          messages,
+          ids,
+          clock,
+          logger,
+          rateLimits,
+          hasher,
+        },
         config,
       );
       const parse = vi.spyOn(gateway, 'parseEvents');
@@ -285,6 +315,24 @@ describe('ReceiveLineEvents', () => {
       expect(followUps).toEqual([]);
     });
 
+    it('stores the LINE id a text quotes, and null for a plain text', async () => {
+      await deliver(
+        bodyOf(
+          messageEvent({
+            type: 'text',
+            text: 'ตอบอันนี้',
+            quotedMessageId: 'L-quoted',
+            quoteToken: 'q',
+          }),
+          textEvent('ธรรมดา'),
+        ),
+      );
+      expect((await messagesOf()).map((m) => [m.text, m.quotedLineMessageId])).toEqual([
+        ['ตอบอันนี้', 'L-quoted'],
+        ['ธรรมดา', null],
+      ]);
+    });
+
     it('stores the contact without a name and still stores the message when the profile fetch fails', async () => {
       gateway.failNext('getProfile', 'line.profile_unavailable'); // what the adapter returns on timeout
       const profile = vi.spyOn(gateway, 'getProfile');
@@ -398,7 +446,12 @@ describe('ReceiveLineEvents', () => {
         isRedelivery: true,
         userId: USER,
         replyToken: 'rt-redelivered',
-        message: { type: 'text', lineMessageId: 'lm-redelivered' as LineMessageId, text: 'late' }, // brand: test id
+        message: {
+          type: 'text',
+          lineMessageId: 'lm-redelivered' as LineMessageId, // brand: test id
+          text: 'late',
+          quotedLineMessageId: null,
+        },
       };
       vi.spyOn(gateway, 'parseEvents').mockReturnValue(ok([event]));
 
@@ -451,7 +504,12 @@ describe('ReceiveLineEvents', () => {
       );
 
       const [m] = await messagesOf();
-      expect(m).toMatchObject({ type: 'image', mediaStatus: 'failed', mediaUrl: null });
+      expect(m).toMatchObject({
+        type: 'image',
+        mediaStatus: 'failed',
+        mediaFailure: 'external_source',
+        mediaUrl: null,
+      });
       expect(followUps).toEqual([]);
     });
 
@@ -558,7 +616,38 @@ describe('ReceiveLineEvents', () => {
       });
     });
 
-    it.each(['audio', 'file', 'location'] as const)(
+    it('stores a voice message as audio pending with its duration and schedules store_media', async () => {
+      const followUps = await followUpsOf(
+        bodyOf(messageEvent({ type: 'audio', duration: 4200, contentProvider: { type: 'line' } })),
+      );
+      const [m] = await messagesOf();
+      expect(m).toMatchObject({
+        type: 'audio',
+        mediaStatus: 'pending',
+        mediaDurationMs: 4200,
+        otherKind: null,
+      });
+      expect(followUps).toEqual(
+        expect.arrayContaining([{ kind: 'store_media', messageId: m?.id }]),
+      );
+    });
+
+    it('stores externally hosted audio as failed and never fetches it', async () => {
+      const followUps = await followUpsOf(
+        bodyOf(
+          messageEvent({
+            type: 'audio',
+            duration: 1000,
+            contentProvider: { type: 'external', originalContentUrl: 'https://evil.example/a' },
+          }),
+        ),
+      );
+      const [m] = await messagesOf();
+      expect(m).toMatchObject({ type: 'audio', mediaStatus: 'failed' });
+      expect(followUps.filter((f) => f.kind === 'store_media')).toEqual([]);
+    });
+
+    it.each(['file', 'location'] as const)(
       'stores %s as type other with that otherKind',
       async (kind) => {
         const followUps = await followUpsOf(bodyOf(messageEvent({ type: kind })));
@@ -655,6 +744,65 @@ describe('ReceiveLineEvents', () => {
 
       expect(await contactOf(OTHER_USER)).toMatchObject({ followStatus: 'unfollowed' });
       expect(profile).not.toHaveBeenCalled();
+    });
+
+    it('ignores an unfollow older than the latest follow, also within one batch', async () => {
+      const later = new Date(T0.getTime() + 60_000);
+      await followUpsOf(bodyOf(followEvent({ at: T0 })));
+      await followUpsOf(bodyOf(unfollowEvent({ at: T0 })));
+
+      await followUpsOf(
+        bodyOf(followEvent({ at: later }), unfollowEvent({ at: new Date(T0.getTime() + 1000) })),
+      );
+
+      expect(await contactOf()).toMatchObject({ followStatus: 'following', followedAt: later });
+      expect((await messagesOf()).map((m) => m.eventCode)).toEqual([
+        'contact.followed',
+        'contact.unfollowed',
+        'contact.followed',
+      ]);
+    });
+
+    it.each([
+      ['a text', () => textEvent('ยังอยู่ไหม')],
+      [
+        'a tap',
+        () => ({
+          ...base({ at: new Date(T0.getTime() + 60_000) }),
+          type: 'postback',
+          replyToken: nextId('rt'),
+          postback: { data: 'tw1:how_to' },
+        }),
+      ],
+    ] as const)(
+      'sets a contact stored as unfollowed back to following on %s, with a contact.followed line',
+      async (_label, activity) => {
+        await followUpsOf(bodyOf(followEvent({ at: T0 })));
+        await followUpsOf(bodyOf(unfollowEvent({ at: T0 })));
+        const at = new Date(T0.getTime() + 60_000);
+        const event = activity();
+        if (event['type'] === 'message') event['timestamp'] = at.getTime();
+
+        await followUpsOf(bodyOf(event));
+
+        expect(await contactOf()).toMatchObject({ followStatus: 'following', followedAt: at });
+        const codes = (await messagesOf())
+          .filter((m) => m.type === 'event')
+          .map((m) => m.eventCode);
+        expect(codes).toEqual(['contact.followed', 'contact.unfollowed', 'contact.followed']);
+      },
+    );
+
+    it('keeps the unfollow when a customer message older than it arrives late', async () => {
+      await followUpsOf(bodyOf(followEvent({ at: T0 })));
+      await followUpsOf(bodyOf(unfollowEvent({ at: new Date(T0.getTime() + 60_000) })));
+
+      await followUpsOf(bodyOf(textEvent('เก่า', { at: new Date(T0.getTime() + 30_000) })));
+
+      expect((await contactOf()).followStatus).toBe('unfollowed');
+      expect((await messagesOf()).filter((m) => m.eventCode === 'contact.followed')).toHaveLength(
+        1,
+      );
     });
 
     it('does nothing more for a second unfollow', async () => {
@@ -815,5 +963,112 @@ describe('ReceiveLineEvents', () => {
     for (const secret of [SECRET_TEXT, DISPLAY_NAME, USER, OTHER_USER, 'rt-secret-token']) {
       expect(logged).not.toContain(secret);
     }
+  });
+
+  describe('rich menu and welcome card', () => {
+    const postbackEvent = (
+      data: unknown,
+      o: { id?: string; at?: Date; userId?: string; replyToken?: string | null } = {},
+    ): RawEvent => ({
+      ...base(o),
+      type: 'postback',
+      ...(o.replyToken === null ? {} : { replyToken: o.replyToken ?? nextId('rt') }),
+      postback: data === undefined ? {} : { data },
+    });
+
+    it('keeps a tap as the button title with its event code, and hands the action on', async () => {
+      const followUps = await followUpsOf(
+        bodyOf(postbackEvent('tw1:ai_on', { replyToken: 'rt-tap' })),
+      );
+      const contact = await contactOf();
+      const [tap] = await messagesOf();
+      expect(tap).toMatchObject({
+        direction: 'inbound',
+        author: 'customer',
+        type: 'text',
+        text: 'คุยกับ AI',
+        eventCode: 'customer.tapped_ai_on',
+        lineMessageId: null,
+      });
+      expect(followUps).toEqual([
+        { kind: 'rich_menu_action', contactId: contact.id, action: 'ai_on', tapMessageId: tap?.id },
+      ]);
+      expect(contact).toMatchObject({ replyToken: 'rt-tap', unreadCount: 1 });
+      expect(contact.displayName).toBe(DISPLAY_NAME);
+      expect(logger.entries.find((e) => e.event === 'line.postback.received')).toMatchObject({
+        reason: 'ai_on',
+      });
+    });
+
+    it.each([
+      ['tw1:admin', 'admin', 'customer.tapped_admin', 'คุยกับแอดมิน'],
+      ['tw1:how_to', 'how_to', 'customer.tapped_how_to', 'วิธีทดสอบ'],
+    ])('maps %s to %s', async (data, action, eventCode, text) => {
+      const followUps = await followUpsOf(bodyOf(postbackEvent(data)));
+      expect(followUps).toMatchObject([{ kind: 'rich_menu_action', action }]);
+      expect((await messagesOf())[0]).toMatchObject({ eventCode, text });
+    });
+
+    it('ignores data it did not make, stores nothing and does not log the data', async () => {
+      const followUps = await followUpsOf(
+        bodyOf(postbackEvent('tw9:secret-data'), postbackEvent('tw1:nope')),
+      );
+      expect(followUps).toEqual([]);
+      expect(await allContacts()).toHaveLength(0);
+      expect(logger.eventsOf()).toContain('line.postback.ignored');
+      expect(JSON.stringify(logger.entries)).not.toContain('secret-data');
+    });
+
+    it('stores a tap once and hands on one action when a redelivery races the first delivery', async () => {
+      const body = bodyOf(postbackEvent('tw1:how_to', { id: 'wev-tap-race' }));
+
+      const results = await Promise.all([followUpsOf(body), followUpsOf(body)]);
+
+      const taps = (await messagesOf()).filter((m) => m.eventCode === 'customer.tapped_how_to');
+      expect(taps).toHaveLength(1);
+      expect(results.flat().filter((j) => j.kind === 'rich_menu_action')).toHaveLength(1);
+      expect((await contactOf()).unreadCount).toBe(1);
+    });
+
+    it('treats a postback without data as unsupported', async () => {
+      expect(await followUpsOf(bodyOf(postbackEvent(undefined)))).toEqual([]);
+      expect(logger.eventsOf()).toContain('line.webhook.event_unsupported');
+    });
+
+    it('stores a redelivered tap once, by its webhook event id', async () => {
+      const event = postbackEvent('tw1:how_to', { id: 'wev-tap' });
+      await followUpsOf(bodyOf(event));
+      const again = await followUpsOf(bodyOf(event));
+      expect(again).toEqual([]);
+      expect(await messagesOf()).toHaveLength(1);
+    });
+
+    it('drops taps over the per-contact limit: no row and no job', async () => {
+      const taps = Array.from({ length: 4 }, () => postbackEvent('tw1:how_to'));
+      const followUps = await followUpsOf(bodyOf(...taps));
+      expect(followUps).toHaveLength(3);
+      expect(await messagesOf()).toHaveLength(3);
+      expect(logger.eventsOf()).toContain('line.postback.rate_limited');
+    });
+
+    it('hands a follow with a reply token to the welcome job, also on a re-follow', async () => {
+      const event = followEvent();
+      const first = await followUpsOf(bodyOf(event));
+      const contact = await contactOf();
+      expect(first).toEqual([
+        { kind: 'welcome', contactId: contact.id, replyToken: event['replyToken'] },
+      ]);
+      await followUpsOf(bodyOf(unfollowEvent()));
+      const again = await followUpsOf(bodyOf(followEvent()));
+      expect(again).toMatchObject([{ kind: 'welcome', contactId: contact.id }]);
+    });
+
+    it('gives a redelivered follow no welcome job', async () => {
+      const event = followEvent({ id: 'wev-follow' });
+      await followUpsOf(bodyOf(event));
+      expect(await followUpsOf(bodyOf(event))).toEqual([]);
+      const redelivered = { ...followEvent(), deliveryContext: { isRedelivery: true } };
+      expect(await followUpsOf(bodyOf(redelivered))).toEqual([]);
+    });
   });
 });

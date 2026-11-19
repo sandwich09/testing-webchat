@@ -1,5 +1,5 @@
 // Values live in docs/architecture/project-setup.md section 10 (one place). Change them there first.
-import type { AiModelId, PoliteParticle, RateLimitAction } from './enums.model';
+import type { AiAnswerMode, AiModelId, PoliteParticle, RateLimitAction } from './enums.model';
 
 const MB = 1024 * 1024;
 
@@ -7,6 +7,8 @@ const MB = 1024 * 1024;
 export const POLL_OVERLAP_SEQ = 20;
 export const POLL_PAGE_LIMIT = 200;
 export const AI_HISTORY_LIMIT = 20;
+/** Characters of a quoted text shown to the model before a reply that quotes it. */
+export const AI_QUOTE_SNIPPET_MAX_CHARS = 40;
 export const AI_REPLY_MAX_CHARS = 1000;
 export const AI_MAX_ROUNDS_PER_RUN = 2;
 export const AI_STUCK_AFTER_MS = 300_000;
@@ -32,6 +34,13 @@ export const PDF_MAX_BYTES = 4 * MB;
 export const PDF_MAX_PAGES = 30;
 export const IMAGE_MAX_BYTES = 10 * MB;
 export const VIDEO_MAX_BYTES = 50 * MB;
+/**
+ * `experimental.proxyClientMaxBodySize` of next.config.ts: the largest request body Next.js
+ * buffers for proxy.ts before the route reads it. A longer body reaches the route silently cut
+ * to this size, so it holds the largest local-disk upload (a video) with room to spare.
+ */
+export const PROXY_BODY_MAX_BYTES = VIDEO_MAX_BYTES + 8 * MB;
+export const AUDIO_MAX_BYTES = 20 * MB;
 export const PREVIEW_MAX_BYTES = 1 * MB;
 export const UPLOAD_TICKET_TTL_MS = 900_000;
 export const LINE_TEXT_MAX_CHARS = 5000;
@@ -43,17 +52,36 @@ export const LINE_RETRY_KEY_WINDOW_MS = 86_400_000;
 export const LINE_CHANNEL_ID_MAX_CHARS = 20;
 export const ADMIN_TEXT_MAX_CHARS = 5000;
 export const PREVIEW_TEXT_MAX_CHARS = 100;
+/**
+ * The most UTF-16 code units a preview may hold. previewOf cuts at both limits, so a screen can
+ * check a preview by its length alone, without the grapheme rules of its own browser.
+ */
+export const PREVIEW_TEXT_MAX_UNITS = PREVIEW_TEXT_MAX_CHARS * 8;
 export const MESSAGE_PAGE_LIMIT = 50;
 export const CONTACT_PAGE_LIMIT = 50;
 export const CONTACT_SEARCH_MAX_CHARS = 50;
 export const AI_INSTRUCTIONS_MAX_CHARS = 2000;
+export const AI_NAME_MAX_CHARS = 40;
+export const CONTACT_NOTE_MAX_CHARS = 1000;
+/** Text of the rich menu button "วิธีทดสอบ"; well under LINE_TEXT_MAX_CHARS. */
+export const HOW_TO_TEXT_MAX_CHARS = 1500;
+/** Body of the welcome card, short enough for one Flex text block. */
+export const WELCOME_TEXT_MAX_CHARS = 300;
+/** LINE's limit on postback data; longer data is not a postback this app made. */
+export const POSTBACK_DATA_MAX_CHARS = 300;
+/** The compact rich menu picture (LINE's 2500 wide, 843 high size). */
+export const RICH_MENU_WIDTH = 2500;
+export const RICH_MENU_HEIGHT = 843;
+/** Notes listed for one contact, newest first. */
+export const CONTACT_NOTE_LIST_LIMIT = 100;
 export const AI_DAILY_BUDGET_MAX_USD = '10.00';
 export const ACCESS_COOKIE_TTL_MS = 604_800_000;
 export const WEBHOOK_MAX_BODY_BYTES = 1 * MB;
 export const JSON_MAX_BODY_BYTES = 64 * 1024;
-export const DEFAULT_AI_MODEL: AiModelId = 'claude-opus-5-5';
+export const DEFAULT_AI_MODEL: AiModelId = 'claude-sonnet-5-5';
 export const DEFAULT_AI_DAILY_BUDGET_USD = '2.00';
 export const DEFAULT_POLITE_PARTICLE: PoliteParticle = 'ค่ะ';
+export const DEFAULT_AI_ANSWER_MODE: AiAnswerMode = 'general';
 // Topic guard (specs/topic-guard.md)
 export const GUARD_MAX_TOPICS = 20;
 export const GUARD_TOPIC_MAX_CHARS = 80;
@@ -71,6 +99,9 @@ export const RATE_LIMIT_UPLOAD_TICKET = { limit: 20, windowMs: 60_000 } as const
 export const RATE_LIMIT_PDF_INGEST = { limit: 5, windowMs: 3_600_000 } as const;
 export const RATE_LIMIT_TYPING = { limit: 1, windowMs: 10_000 } as const;
 export const RATE_LIMIT_GUARD_TEST = { limit: 10, windowMs: 60_000 } as const;
+export const RATE_LIMIT_NOTE_CREATE = { limit: 30, windowMs: 60_000 } as const;
+/** Rich menu or welcome card taps of one contact (subject: the contact id). */
+export const RATE_LIMIT_RICH_MENU_TAP = { limit: 3, windowMs: 10_000 } as const;
 
 /** `scaled` rules are multiplied by RATE_LIMIT_SCALE. The two unlock rules are not scaled. */
 export const RATE_LIMIT_RULES: Record<
@@ -84,4 +115,6 @@ export const RATE_LIMIT_RULES: Record<
   pdf_ingest: { ...RATE_LIMIT_PDF_INGEST, scaled: true },
   typing: { ...RATE_LIMIT_TYPING, scaled: true },
   guard_test: { ...RATE_LIMIT_GUARD_TEST, scaled: true },
+  note_create: { ...RATE_LIMIT_NOTE_CREATE, scaled: true },
+  rich_menu_tap: { ...RATE_LIMIT_RICH_MENU_TAP, scaled: true },
 };

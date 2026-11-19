@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 
 import { testIds } from '@/common/test-ids';
 import { Skeleton } from '@/common/ui/skeleton';
-import { copy } from '@/features/inbox/inbox.constants';
+import { copy, QUOTE_HIGHLIGHT_MS } from '@/features/inbox/inbox.constants';
 import { useNow } from '@/features/inbox/inbox.hooks';
 import {
   groupMessagesForDisplay,
@@ -21,6 +21,7 @@ import {
 } from '@/features/inbox/thread/inbox.thread.logic';
 import { MessageGroup } from '@/features/inbox/thread/MessageGroup';
 import { NewMessagesButton } from '@/features/inbox/thread/NewMessagesButton';
+import { WelcomeCardBubble } from '@/features/inbox/thread/WelcomeCardBubble';
 import { SystemLine } from '@/features/inbox/thread/SystemLine';
 
 const prefersReducedMotion = (): boolean =>
@@ -176,6 +177,37 @@ export function MessageList({
     }
   }, [hasOlder, isFetchingOlder, loadOlder, requestMarkRead]);
 
+  // A quote jumps to its message when it is in the loaded rows: centred, then highlighted for
+  // QUOTE_HIGHLIGHT_MS through `data-highlight`. A message not loaded is left alone.
+  const highlightTimer = useRef<number | null>(null);
+  const onJumpToMessage = useCallback((messageId: string) => {
+    const el = scrollRef.current;
+    const target = el?.querySelector<HTMLElement>(
+      `[data-testid="${testIds.messageBubble}"][data-message-id="${CSS.escape(messageId)}"]`,
+    );
+    if (target === null || target === undefined) return;
+    target.scrollIntoView({
+      block: 'center',
+      behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+    });
+    if (highlightTimer.current !== null) window.clearTimeout(highlightTimer.current);
+    for (const old of el?.querySelectorAll('[data-highlight="true"]') ?? []) {
+      old.removeAttribute('data-highlight');
+    }
+    target.setAttribute('data-highlight', 'true');
+    highlightTimer.current = window.setTimeout(() => {
+      target.removeAttribute('data-highlight');
+      highlightTimer.current = null;
+    }, QUOTE_HIGHLIGHT_MS);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (highlightTimer.current !== null) window.clearTimeout(highlightTimer.current);
+    },
+    [],
+  );
+
   const onJumpToBottom = useCallback(() => {
     scrollToBottom(true);
     setHasNew(false);
@@ -218,6 +250,8 @@ export function MessageList({
                   return <DayChip key={item.key} label={item.label} />;
                 case 'event':
                   return <SystemLine key={item.key} message={item.message} />;
+                case 'welcome':
+                  return <WelcomeCardBubble key={item.key} message={item.message} />;
                 case 'group':
                   return (
                     <MessageGroup
@@ -227,6 +261,7 @@ export function MessageList({
                       customer={customer}
                       onRetry={onRetry}
                       onOpenMedia={onOpenMedia}
+                      onJumpToMessage={onJumpToMessage}
                     />
                   );
               }

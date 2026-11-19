@@ -258,7 +258,7 @@ describe('RetryMessage', () => {
     async (status) => {
       const c = await givenContact();
       const { message } = await messages.insertOutboundIfAbsent(row(c.id));
-      if (status === 'sent') await messages.markSent(message.id, clock.now());
+      if (status === 'sent') await messages.markSent(message.id, clock.now(), []);
 
       const result = await retryWith()({ contactId: c.id, messageId: message.id }, ctx);
 

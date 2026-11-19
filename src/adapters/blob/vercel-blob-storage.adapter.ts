@@ -82,7 +82,9 @@ export const createVercelBlobStorage = (config: VercelBlobStorageConfig): FileSt
           token,
           pathname: spec.key,
           allowedContentTypes: [spec.contentType],
-          maximumSizeInBytes: spec.maxSizeBytes,
+          // Blob can only cap the size; the browser uploads straight to Blob, not through the
+          // app, so nothing on the way cuts the body short.
+          maximumSizeInBytes: spec.sizeBytes,
           validUntil: spec.expiresAt.getTime(),
           addRandomSuffix: false,
           // The token is bound to this one pathname, so a retry of the same upload must not fail.
@@ -92,7 +94,7 @@ export const createVercelBlobStorage = (config: VercelBlobStorageConfig): FileSt
           strategy: 'vercel_blob_client' as const,
           key: spec.key,
           contentType: spec.contentType,
-          maxSizeBytes: spec.maxSizeBytes,
+          maxSizeBytes: spec.sizeBytes,
           pathname: spec.key,
           clientToken,
         });

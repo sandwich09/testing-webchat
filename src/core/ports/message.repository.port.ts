@@ -2,25 +2,53 @@ import type {
   ContactId,
   ErrorCode,
   EventCode,
+  LineMessageId,
+  MediaFailure,
   MediaStatus,
   Message,
   MessageId,
   Seq,
+  WebhookEventId,
 } from '@/core/domain';
 import type { DateRange } from './usage.repository.port';
 
-/** `firstPushAt` starts null and is set only by `recordFirstPush`. */
-export type NewMessage = Omit<Message, 'seq' | 'updatedSeq' | 'firstPushAt'>;
+/**
+ * `firstPushAt` starts null and is set only by `recordFirstPush`; `lineSentIds` starts empty and
+ * is set by `markSent`. `quotedLineMessageId` is given for an inbound text that quotes a message.
+ */
+export type NewMessage = Omit<
+  Message,
+  | 'seq'
+  | 'updatedSeq'
+  | 'firstPushAt'
+  | 'lineSentIds'
+  | 'quotedLineMessageId'
+  | 'mediaDurationMs'
+  | 'mediaFailure'
+> & {
+  mediaFailure?: MediaFailure | null;
+  quotedLineMessageId?: LineMessageId | null;
+  mediaDurationMs?: number | null;
+  /**
+   * The webhook event of an inbound row without a lineMessageId (a rich menu or welcome card
+   * tap): its unique key, so a redelivery racing the first delivery stores the tap once.
+   */
+  webhookEventId?: WebhookEventId | null;
+};
 
 export interface MessageRepository {
   findById(id: MessageId): Promise<Message | null>;
-  /** Insert-if-absent by lineMessageId. Returns the existing row on a duplicate. */
+  /**
+   * Insert-if-absent by lineMessageId, or by webhookEventId for a row without one (a tap).
+   * Returns the existing row on a duplicate.
+   */
   insertInboundIfAbsent(m: NewMessage): Promise<{ inserted: boolean; message: Message }>;
   /** Insert-if-absent by id. */
   insertOutboundIfAbsent(m: NewMessage): Promise<{ inserted: boolean; message: Message }>;
   insertEvent(m: NewMessage): Promise<Message>;
 
-  markSent(id: MessageId, at: Date): Promise<Message>;
+  /** Sets sent, the time and the LINE ids of the parts (empty when LINE gave none). */
+  markSent(id: MessageId, at: Date, lineSentIds: readonly LineMessageId[]): Promise<Message>;
   markFailed(id: MessageId, code: ErrorCode): Promise<Message>;
   /**
    * Compare-and-set: failed to pending, clears deliveryError and sets the start of the delivery
@@ -37,15 +65,19 @@ export interface MessageRepository {
    * if the message is missing or its media is no longer pending, so one StoreInboundMedia run wins.
    */
   setMediaReady(id: MessageId, mediaUrl: string, previewUrl: string): Promise<boolean>;
-  /** Compare-and-set on `mediaStatus = pending`, like setMediaReady. */
+  /**
+   * Compare-and-set on `mediaStatus = pending`, like setMediaReady. `failed` records why
+   * (`failure`, default `download_failed`); `too_large` records none.
+   */
   setMediaStatus(
     id: MessageId,
     status: Exclude<MediaStatus, 'ready' | 'pending'>,
+    failure?: MediaFailure,
   ): Promise<boolean>;
 
   /**
    * One compare-and-set statement: media of that customer still `pending` with createdAt before
-   * `staleBefore` becomes `failed`. Returns the ids changed, so each row goes to one caller only.
+   * `staleBefore` becomes `failed` with the failure `interrupted`. Returns the ids changed, so each row goes to one caller only.
    */
   failStuckMedia(contactId: ContactId, staleBefore: Date): Promise<MessageId[]>;
   /**
@@ -55,7 +87,10 @@ export interface MessageRepository {
    */
   failStuckDeliveries(contactId: ContactId, staleBefore: Date): Promise<MessageId[]>;
 
-  /** The latest inbound message of that customer by seq. */
+  /**
+   * The latest inbound message of that customer by seq that an AI run may answer: taps answered
+   * with a fixed text only (`NO_AI_TAP_EVENT_CODES`) are skipped.
+   */
   latestInbound(contactId: ContactId): Promise<Message | null>;
   /** The latest `limit` messages that are not events, oldest first. */
   recentForAi(contactId: ContactId, limit: number): Promise<Message[]>;
@@ -75,6 +110,11 @@ export interface MessageRepository {
     limit: number,
   ): Promise<{ messages: Message[]; hasMore: boolean }>;
   maxUpdatedSeq(contactId: ContactId): Promise<Seq>;
+  /**
+   * Messages of that customer whose LINE id is one of `lineIds`: an inbound `lineMessageId` or
+   * one of the `lineSentIds` of an outbound message. One query, for the quotes of a page.
+   */
+  findByLineIds(contactId: ContactId, lineIds: readonly LineMessageId[]): Promise<Message[]>;
   countForContact(contactId: ContactId): Promise<{ total: number; byAi: number }>;
   /**
    * Event lines (type event) of every contact with createdAt in [from, to), counted by eventCode.

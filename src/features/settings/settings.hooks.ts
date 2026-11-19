@@ -2,7 +2,13 @@
 
 // Data hooks of the settings page (ui-screens 7.1 and 7.7). `useSettings` is shared with the chat
 // page and lives in src/common/common.hooks.ts.
-import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import {
+  hashKey,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from '@tanstack/react-query';
 
 import { nextPollDelay } from '@/common/common.logic';
 import { pollController, trackPoll, usePollingInterval } from '@/common/polling';
@@ -16,6 +22,8 @@ import {
   getUsage,
   getUsageDetail,
   listKbDocuments,
+  publishRichMenu,
+  removeRichMenu,
   retryKbDocument,
   saveLineCredentials,
   testLineConnection,
@@ -94,6 +102,22 @@ export function useTestLineConnection() {
   });
 }
 
+/**
+ * POST or DELETE /api/settings/rich-menu. The answer replaces `qk.settings()`; after a failure the
+ * settings load again, because the server stored the error.
+ */
+export function useRichMenuAction() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (action: 'publish' | 'remove') =>
+      action === 'publish' ? publishRichMenu() : removeRichMenu(),
+    onSuccess: (settings) => {
+      applySavedSettings(client, settings);
+    },
+    onError: () => invalidate(client, qk.settings(), qk.systemStatus()),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Knowledge base (ui-screens 9.5 to 9.7)
 // ---------------------------------------------------------------------------
@@ -105,13 +129,15 @@ export function hasProcessingDocument(list: KbDocumentsList | undefined): boolea
 
 /** GET /api/knowledge/documents, polled only while a file is `processing`. */
 export function useKbDocuments() {
-  const { intervalMs } = usePollingInterval();
+  const { intervalFor } = usePollingInterval();
+  const key = qk.kbDocuments();
   return useQuery({
-    queryKey: qk.kbDocuments(),
-    queryFn: ({ signal }) => trackPoll(pollController, () => listKbDocuments(signal), signal),
+    queryKey: key,
+    queryFn: ({ signal }) => trackPoll(pollController, key, () => listKbDocuments(signal), signal),
     staleTime: 0,
     retry: 0,
-    refetchInterval: (query) => (hasProcessingDocument(query.state.data) ? intervalMs : false),
+    refetchInterval: (query) =>
+      hasProcessingDocument(query.state.data) ? intervalFor(query.queryKey) : false,
     refetchIntervalInBackground: false,
   });
 }
@@ -177,13 +203,14 @@ export function useUsageDetail(contactId: string | null, month: string) {
 
 /** GET /api/system/status, polled every `SYSTEM_STATUS_POLL_MS` while the settings page is open. */
 export function useSystemStatus() {
-  const { failures } = usePollingInterval();
+  const key = qk.systemStatus();
   return useQuery({
-    queryKey: qk.systemStatus(),
-    queryFn: ({ signal }) => trackPoll(pollController, () => getSystemStatus(signal), signal),
+    queryKey: key,
+    queryFn: ({ signal }) => trackPoll(pollController, key, () => getSystemStatus(signal), signal),
     staleTime: 0,
     retry: 0,
-    refetchInterval: nextPollDelay(failures, SYSTEM_STATUS_POLL_MS),
+    refetchInterval: (query) =>
+      nextPollDelay(pollController.failuresOf(hashKey(query.queryKey)), SYSTEM_STATUS_POLL_MS),
     refetchIntervalInBackground: false,
   });
 }

@@ -1,4 +1,5 @@
 import {
+  DEFAULT_AI_ANSWER_MODE,
   DEFAULT_AI_DAILY_BUDGET_USD,
   DEFAULT_AI_MODEL,
   DEFAULT_POLITE_PARTICLE,
@@ -25,8 +26,15 @@ const defaults = (): Row => ({
     aiDailyBudget: DEFAULT_BUDGET,
     aiPoliteParticle: DEFAULT_POLITE_PARTICLE,
     aiInstructions: '',
+    aiName: null,
+    aiAnswerMode: DEFAULT_AI_ANSWER_MODE,
     guardEnabled: false,
     guardTopics: [],
+    howToText: '',
+    welcomeEnabled: true,
+    welcomeText: '',
+    richMenu: null,
+    richMenuError: null,
     lineConfigured: false,
     lineBotName: null,
     lineBasicId: null,
@@ -68,6 +76,12 @@ export class FakeSettingsRepository implements SettingsRepository {
     s.aiDailyBudget = patch.aiDailyBudget ?? s.aiDailyBudget;
     s.aiPoliteParticle = patch.aiPoliteParticle ?? s.aiPoliteParticle;
     s.aiInstructions = patch.aiInstructions ?? s.aiInstructions;
+    // null clears the name, so only undefined leaves it alone.
+    if (patch.aiName !== undefined) s.aiName = patch.aiName;
+    s.aiAnswerMode = patch.aiAnswerMode ?? s.aiAnswerMode;
+    s.howToText = patch.howToText ?? s.howToText;
+    s.welcomeEnabled = patch.welcomeEnabled ?? s.welcomeEnabled;
+    s.welcomeText = patch.welcomeText ?? s.welcomeText;
     s.guardEnabled = patch.guardEnabled ?? s.guardEnabled;
     s.guardTopics = patch.guardTopics ? [...patch.guardTopics] : s.guardTopics;
     return Promise.resolve(structuredClone(row.settings));
@@ -113,6 +127,26 @@ export class FakeSettingsRepository implements SettingsRepository {
 
   readonly recordAiError: SettingsRepository['recordAiError'] = (e) => {
     this.current().settings.lastAiError = e ? { ...e } : null;
+    return Promise.resolve();
+  };
+
+  readonly recordRichMenu: SettingsRepository['recordRichMenu'] = (menu) => {
+    const s = this.current().settings;
+    s.richMenu = menu ? { ...menu } : null;
+    s.richMenuError = null;
+    return Promise.resolve();
+  };
+
+  readonly replaceRichMenu: SettingsRepository['replaceRichMenu'] = (expectedId, menu) => {
+    const s = this.current().settings;
+    if ((s.richMenu?.id ?? null) !== expectedId) return Promise.resolve(false);
+    s.richMenu = { ...menu };
+    s.richMenuError = null;
+    return Promise.resolve(true);
+  };
+
+  readonly recordRichMenuError: SettingsRepository['recordRichMenuError'] = (e) => {
+    this.current().settings.richMenuError = { ...e };
     return Promise.resolve();
   };
 

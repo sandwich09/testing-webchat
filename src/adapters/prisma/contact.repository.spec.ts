@@ -8,7 +8,8 @@ import { getPrismaClient } from './prisma-client';
 const client = getPrismaClient(ADAPTER_TEST_DATABASE_URL);
 
 // Contact and every table that references it, so each test starts from empty tables.
-const truncate = () => client.$executeRaw`TRUNCATE TABLE "AiUsage", "Message", "Contact"`;
+const truncate = () =>
+  client.$executeRaw`TRUNCATE TABLE "AiUsage", "Message", "ContactNote", "Contact"`;
 
 const makeSubject = async () => {
   await truncate();
@@ -25,6 +26,31 @@ describe('Prisma ContactRepository', () => {
   const id = (n: number): ContactId =>
     `00000000-0000-7000-8000-${n.toString(16).padStart(12, '0')}` as ContactId; // brand: test id
   const lineUser = (n: number): LineUserId => `U${n.toString(16).padStart(32, '0')}` as LineUserId; // brand: test id
+
+  /** The plan Postgres picks for `sql` when a sequential scan is ruled out, as text. */
+  const planOf = (sql: string): Promise<string> =>
+    client.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET LOCAL enable_seqscan = off');
+      const rows = await tx.$queryRawUnsafe<{ 'QUERY PLAN': string }[]>(`EXPLAIN ${sql}`);
+      return rows.map((r) => r['QUERY PLAN']).join('\n');
+    });
+
+  it('has an index that serves the order of the contact list (the list query of list())', async () => {
+    await makeSubject();
+    const plan = await planOf(`
+      SELECT * FROM "Contact" WHERE TRUE
+      ORDER BY COALESCE("lastMessageAt", "createdAt") DESC, "id" DESC LIMIT 51`);
+    expect(plan).toContain('Contact_list_order_idx');
+    expect(plan).not.toMatch(/\bSort\b/);
+  });
+
+  it('has a partial index that serves the stuck AI recovery (recoverStuckAiStates)', async () => {
+    await makeSubject();
+    const plan = await planOf(`
+      UPDATE "Contact" SET "aiState" = 'idle'
+      WHERE "aiState" = 'replying' AND "aiStateAt" < now()`);
+    expect(plan).toContain('Contact_ai_replying_idx');
+  });
 
   it('list maps raw rows to the same entities as findById', async () => {
     const repo = await makeSubject();

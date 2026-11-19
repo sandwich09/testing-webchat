@@ -18,12 +18,13 @@ import {
 import { BP_NARROW } from '@/common/layout.constants';
 import { testIds } from '@/common/test-ids';
 import { Button } from '@/common/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/common/ui/tooltip';
 
 import { copy } from '../inbox.constants';
 import { useSendMessage } from '../inbox.hooks';
 import { canSend, isSubmitKey } from '../inbox.logic';
 import { AttachmentTray } from './AttachmentTray';
-import { isAttachmentPending, trayView } from './inbox.attachment.logic';
+import { attachHintText, isAttachmentPending, trayView } from './inbox.attachment.logic';
 import {
   rememberSentPreview,
   useAttachment,
@@ -57,6 +58,7 @@ export function Composer({ contactId, disabled, disabledReason }: ComposerProps)
   const fileRef = useRef<HTMLInputElement>(null);
   const hintId = useId();
   const reasonId = useId();
+  const attachHintId = useId();
 
   const waiting = isAttachmentPending(attachment);
   const sendable = !disabled && canSend(draft, attachment, null);
@@ -150,16 +152,29 @@ export function Composer({ contactId, disabled, disabledReason }: ComposerProps)
         </p>
       ) : (
         <div className="flex h-11 items-center gap-1 medium:h-9">
-          <button
-            type="button"
-            data-testid={testIds.composerAttach}
-            aria-label={copy.composer.attach}
-            disabled={disabled}
-            onClick={() => fileRef.current?.click()}
-            className={iconButton}
-          >
-            <ImagePlus aria-hidden="true" className="size-5" />
-          </button>
+          {/* What can be attached, before a file is chosen: a tooltip on hover or focus, and the
+              button's description for screen readers on every width (ui-screens 5.10). */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                data-testid={testIds.composerAttach}
+                aria-label={copy.composer.attach}
+                aria-describedby={attachHintId}
+                disabled={disabled}
+                onClick={() => fileRef.current?.click()}
+                className={iconButton}
+              >
+                <ImagePlus aria-hidden="true" className="size-5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-[min(320px,calc(100vw-32px))]">
+              {attachHintText()}
+            </TooltipContent>
+          </Tooltip>
+          <span id={attachHintId} data-testid={testIds.composerAttachHint} className="sr-only">
+            {attachHintText()}
+          </span>
           <span
             id={hintId}
             data-testid={testIds.composerHint}

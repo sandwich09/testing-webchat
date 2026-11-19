@@ -71,7 +71,7 @@ describe('FakeTopicGuard test controls', () => {
     const req = request({ context: [{ role: 'customer', text: 'ก่อนหน้า' }] });
     await guard.classify(req);
     req.topics.push('changed');
-    req.context.push({ role: 'shop', text: 'changed' });
+    req.context.push({ role: 'assistant', text: 'changed' });
     await guard.classify(request({ message: 'ขออีกมุก' }));
     expect(guard.requests).toEqual([
       request({ context: [{ role: 'customer', text: 'ก่อนหน้า' }] }),

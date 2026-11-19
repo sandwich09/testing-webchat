@@ -51,6 +51,15 @@ export const serveLocalMedia = forwardTo('serveLocalMedia');
 export const showTypingToCustomer = forwardTo('showTypingToCustomer');
 export const setContactAi = forwardTo('setContactAi');
 export const markContactRead = forwardTo('markContactRead');
+export const listContactNotes = forwardTo('listContactNotes');
+export const addContactNote = forwardTo('addContactNote');
+export const deleteContactNote = forwardTo('deleteContactNote');
+/** After-response job: call through `scheduleLineFollowUps`, not from a route directly. */
+export const handleRichMenuAction = forwardTo('handleRichMenuAction');
+/** After-response job: call through `scheduleLineFollowUps`, not from a route directly. */
+export const sendWelcome = forwardTo('sendWelcome');
+export const publishRichMenu = forwardTo('publishRichMenu');
+export const removeRichMenu = forwardTo('removeRichMenu');
 export const listContacts = forwardTo('listContacts');
 export const getContact = forwardTo('getContact');
 export const getMessages = forwardTo('getMessages');
@@ -95,6 +104,8 @@ const jobs = makeJobs(() => {
     runJob,
     storeInboundMedia: c.useCases.storeInboundMedia,
     generateAiReply: c.useCases.generateAiReply,
+    handleRichMenuAction: c.useCases.handleRichMenuAction,
+    sendWelcome: c.useCases.sendWelcome,
     extractDocument: c.useCases.extractDocument,
   };
 });
@@ -141,6 +152,8 @@ export {
   fail,
   json,
   noContent,
+  parseByteRange,
+  sliceStream,
   type RouteFailure,
 } from './http-response';
 export {
@@ -159,6 +172,7 @@ export {
   asContactId,
   asDocumentId,
   asMessageId,
+  asNoteId,
   asUploadId,
   toGetMessagesInput,
   toListContactsInput,

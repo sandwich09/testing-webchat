@@ -192,3 +192,8 @@ cp "$MEDIA/tiny.png" "$ASSETS/avatar.png"
 cp "$MEDIA/tiny.png" "$ASSETS/oa.png"
 
 echo "Fixtures written to $MEDIA, $KB and $ASSETS"
+
+# --- Audio: 3 s of a 440 Hz tone, AAC in an M4A (ftyp brand "M4A "), like a LINE voice message ----
+ffmpeg -v error -y -f lavfi -i 'sine=frequency=440:duration=3' -ac 1 -ar 16000 -c:a aac -b:a 24k \
+  -map_metadata -1 -fflags +bitexact -movflags +faststart -f ipod "$MEDIA/tiny.m4a"
+cp "$MEDIA/tiny.m4a" "$ASSETS/tiny.m4a"

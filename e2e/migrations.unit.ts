@@ -3,13 +3,14 @@
 // `e2e/**/*.unit.ts`. No test here runs git.
 import { describe, expect, it } from 'vitest';
 import {
-  addedMigrationSqlPaths,
+  findAppliedMismatches,
   findDestructiveStatements,
   findImmutabilityViolations,
   findUnapprovedDestructive,
   hasApproval,
   migrationDirOf,
   migrationDirsOf,
+  migrationSqlPaths,
   parseNameStatus,
   stripSqlNoise,
 } from '../scripts/migrations.logic';
@@ -210,20 +211,53 @@ describe('findUnapprovedDestructive', () => {
   });
 });
 
-describe('addedMigrationSqlPaths', () => {
-  it('lists added and renamed-to SQL files of migrations only', () => {
-    const entries = parseNameStatus(
-      [
-        'A\tprisma/migrations/20261201000000_n/migration.sql',
-        'M\tprisma/migrations/20261118133808_init/migration.sql',
-        'A\tprisma/migrations/20261201000000_n/README.md',
-        'A\tdocs/example.sql',
-        'R100\tx.sql\tprisma/migrations/20261202000000_m/migration.sql',
-      ].join('\n'),
-    );
-    expect(addedMigrationSqlPaths(entries)).toEqual([
+describe('migrationSqlPaths', () => {
+  it('lists every SQL file of a migration directory, existing and new, sorted', () => {
+    expect(
+      migrationSqlPaths([
+        'prisma/migrations/20261201000000_n/migration.sql',
+        'prisma/migrations/20261118133808_init/migration.sql',
+        'prisma/migrations/20261201000000_n/README.md',
+        'prisma/migrations/migration_lock.toml',
+        'docs/example.sql',
+      ]),
+    ).toEqual([
+      'prisma/migrations/20261118133808_init/migration.sql',
       'prisma/migrations/20261201000000_n/migration.sql',
-      'prisma/migrations/20261202000000_m/migration.sql',
+    ]);
+  });
+});
+
+describe('findAppliedMismatches', () => {
+  const local = new Map([
+    ['20261118133808_init', 'aaa'],
+    ['20261118143909_topic_guard', 'bbb'],
+  ]);
+
+  it('passes when every applied migration is present with the same checksum', () => {
+    expect(
+      findAppliedMismatches(
+        [
+          { name: '20261118133808_init', checksum: 'aaa' },
+          { name: '20261118143909_topic_guard', checksum: 'bbb' },
+        ],
+        local,
+      ),
+    ).toEqual([]);
+  });
+
+  it('reports an applied migration that was edited or deleted, and ignores pending ones', () => {
+    expect(
+      findAppliedMismatches(
+        [
+          { name: '20261118133808_init', checksum: 'changed' },
+          { name: '20261119000000_gone', checksum: 'ccc' },
+        ],
+        local,
+      ),
+    ).toEqual([
+      { name: '20261118133808_init', reason: 'modified' },
+      { name: '20261119000000_gone', reason: 'missing' },
     ]);
   });
 });

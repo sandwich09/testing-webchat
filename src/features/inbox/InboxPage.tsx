@@ -102,7 +102,9 @@ export function InboxPage({ contactId }: { contactId: string | null }) {
             infoMode === 'fullscreen' && 'absolute inset-0 z-20 border-l-0',
           )}
         >
-          <SectionErrorBoundary>
+          {/* Keyed by the chat: a note being typed, its error and an open dialog belong to one
+              customer and never carry over to the next (ui-screens 6). */}
+          <SectionErrorBoundary key={contactId}>
             <InfoPanel contactId={contactId} onClose={toggleInfo} mode={infoMode} />
           </SectionErrorBoundary>
         </aside>

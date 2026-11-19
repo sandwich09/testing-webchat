@@ -1,13 +1,14 @@
 'use client';
 
-import { FileWarning, ImageOff, Paperclip, Play } from 'lucide-react';
+import { FileWarning, ImageOff, Mic, Paperclip, Play } from 'lucide-react';
 import { useState } from 'react';
 
 import { cn } from '@/common/common.logic';
 import { testIds } from '@/common/test-ids';
 import { copy } from '@/features/inbox/inbox.constants';
 import type { ThreadMessage } from '@/features/inbox/inbox.logic';
-import type { MediaView } from '@/features/inbox/thread/inbox.thread.logic';
+import { AudioPlayer } from '@/features/inbox/thread/AudioPlayer';
+import { mediaProblemText, type MediaView } from '@/features/inbox/thread/inbox.thread.logic';
 
 type MediaContentProps = {
   message: ThreadMessage;
@@ -56,6 +57,8 @@ export function MediaContent({ message, view, onOpen, onStickerError }: MediaCon
     );
   }
 
+  if (view.kind === 'audio') return <AudioContent view={view} common={common} />;
+
   const failedText = view.kind === 'image' ? copy.media.imageFailed : copy.media.videoFailed;
 
   switch (view.state) {
@@ -70,16 +73,24 @@ export function MediaContent({ message, view, onOpen, onStickerError }: MediaCon
       );
     case 'failed':
       return (
-        <div {...common} className="flex h-[72px] w-60 max-w-full items-center gap-2 px-3">
+        <div
+          {...common}
+          data-failure={view.failure ?? undefined}
+          className="flex min-h-[72px] w-60 max-w-full items-center gap-2 px-3 py-2"
+        >
           <ImageOff aria-hidden="true" className="size-5 shrink-0 text-muted" />
-          <p className="text-sub text-muted">{failedText}</p>
+          <p className="text-sub [overflow-wrap:anywhere] text-muted">
+            {mediaProblemText(view.kind, 'failed', view.failure)}
+          </p>
         </div>
       );
     case 'too_large':
       return (
-        <div {...common} className="flex items-start gap-2 px-3 py-2">
+        <div {...common} data-failure="too_large" className="flex items-start gap-2 px-3 py-2">
           <FileWarning aria-hidden="true" className="mt-[3px] size-4 shrink-0 text-muted" />
-          <p className="text-sub [overflow-wrap:anywhere] text-muted">{copy.media.tooLarge}</p>
+          <p className="text-sub [overflow-wrap:anywhere] text-muted">
+            {mediaProblemText(view.kind, 'too_large', null)}
+          </p>
         </div>
       );
     case 'picture':
@@ -96,6 +107,51 @@ export function MediaContent({ message, view, onOpen, onStickerError }: MediaCon
         />
       );
   }
+}
+
+/** An audio message: the player when the file is stored, else its state (as for pictures). */
+function AudioContent({
+  view,
+  common,
+}: {
+  view: Extract<MediaView, { kind: 'audio' }>;
+  common: { 'data-testid': string; 'data-media-kind': string };
+}) {
+  const [broken, setBroken] = useState(false);
+  if (view.state === 'ready' && view.src !== null && !broken) {
+    return (
+      <div {...common}>
+        <AudioPlayer
+          src={view.src}
+          durationMs={view.durationMs}
+          onError={() => {
+            setBroken(true);
+          }}
+        />
+      </div>
+    );
+  }
+  const text =
+    view.state === 'pending'
+      ? copy.media.audioLoading
+      : view.state === 'ready'
+        ? copy.media.audioFailed
+        : mediaProblemText('audio', view.state, view.failure);
+  return (
+    <div
+      {...common}
+      className={cn(
+        'flex w-64 max-w-full items-start gap-2 px-3 py-2',
+        view.state === 'pending' && 'animate-pulse',
+      )}
+    >
+      <Mic aria-hidden="true" className="mt-[3px] size-4 shrink-0 text-muted" />
+      <div className="min-w-0">
+        <p className="text-body">{copy.media.audio}</p>
+        <p className="text-sub [overflow-wrap:anywhere] text-muted">{text}</p>
+      </div>
+    </div>
+  );
 }
 
 type PictureButtonProps = {

@@ -1,5 +1,5 @@
-import { QueryClient } from '@tanstack/react-query';
-import { describe, expect, it, vi } from 'vitest';
+import { QueryClient, QueryObserver, hashKey } from '@tanstack/react-query';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError, type ContactsPage, type ListContactsParams } from '@/common/common.api';
 import { POLL_BACKOFF_MAX_MS, POLL_FAILURES_BEFORE_BANNER } from '@/common/common.constants';
@@ -13,6 +13,7 @@ import {
   countsAsPollFailure,
   createPollController,
   latestContactCounts,
+  latestLineConfigured,
   loadContactList,
   mergeContactIntoList,
   mergeContactIntoLists,
@@ -64,24 +65,30 @@ const signal = new AbortController().signal;
 const network = (): ApiError => new ApiError('client.network', 0);
 
 describe('poll controller', () => {
-  it('counts failures and resets them on success', () => {
+  it('counts failures per query; the snapshot shows the query that fails most', () => {
     const c = createPollController();
-    c.recordFailure();
-    c.recordFailure();
+    c.recordFailure('a');
+    c.recordFailure('a');
+    c.recordFailure('b');
     expect(c.getSnapshot().failures).toBe(2);
-    c.recordSuccess();
+    expect(c.failuresOf('a')).toBe(2);
+    expect(c.failuresOf('b')).toBe(1);
+    c.recordSuccess('a');
+    expect(c.getSnapshot().failures).toBe(1);
+    c.recordSuccess('b');
     expect(c.getSnapshot().failures).toBe(0);
   });
 
-  it('asks every list to reload once the connection is back, not on a plain success', () => {
+  it('reloads once a failing query succeeds again, never on the success of a healthy one', () => {
     const c = createPollController();
     const reload = vi.fn();
     c.setReloadHandler(reload);
-    c.recordSuccess();
+    c.recordSuccess('a');
+    c.recordFailure('b');
+    c.recordSuccess('a');
     expect(reload).not.toHaveBeenCalled();
     expect(c.getSnapshot().generation).toBe(0);
-    c.recordFailure();
-    c.recordSuccess();
+    c.recordSuccess('b');
     expect(reload).toHaveBeenCalledTimes(1);
     expect(c.getSnapshot().generation).toBe(1);
   });
@@ -103,20 +110,48 @@ describe('poll controller', () => {
     const c = createPollController();
     const listener = vi.fn();
     const off = c.subscribe(listener);
-    c.recordFailure();
+    c.recordFailure('k');
     off();
-    c.recordFailure();
+    c.recordFailure('k');
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
   it('reset forgets failures, generation and loaded lists', () => {
     const c = createPollController();
-    c.recordFailure();
+    c.recordFailure('k');
     c.requestReload();
     c.markLoaded('k', 1);
     c.reset();
     expect(c.getSnapshot()).toEqual({ failures: 0, generation: 0 });
+    expect(c.failuresOf('k')).toBe(0);
     expect(c.needsReload('k')).toBe(true);
+  });
+
+  it('reloads after a recovery at most once per minimum gap, later when a reload was recent', () => {
+    let now = 0;
+    const timers: { run: () => void; at: number }[] = [];
+    const c = createPollController({
+      now: () => now,
+      setTimer: (run, ms) => timers.push({ run, at: now + ms }),
+      clearTimer: () => undefined,
+    });
+    const reload = vi.fn();
+    c.setReloadHandler(reload);
+    c.setMinReloadGap(2000);
+    c.requestReload();
+    expect(reload).toHaveBeenCalledTimes(1);
+    now = 500;
+    c.recordFailure('a');
+    c.recordFailure('b');
+    c.recordSuccess('a');
+    c.recordSuccess('b');
+    // Two recoveries inside the gap: one reload, when the gap has passed.
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(timers).toHaveLength(1);
+    expect(timers[0]?.at).toBe(2000);
+    now = 2000;
+    timers[0]?.run();
+    expect(reload).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -134,16 +169,18 @@ describe('failure accounting', () => {
 
   it('trackPoll records a failure and rethrows, and records a success', async () => {
     const c = createPollController();
-    await expect(trackPoll(c, () => Promise.reject(network()))).rejects.toBeInstanceOf(ApiError);
+    await expect(trackPoll(c, ['k'], () => Promise.reject(network()))).rejects.toBeInstanceOf(
+      ApiError,
+    );
     expect(c.getSnapshot().failures).toBe(1);
-    await expect(trackPoll(c, () => Promise.resolve(7))).resolves.toBe(7);
+    await expect(trackPoll(c, ['k'], () => Promise.resolve(7))).resolves.toBe(7);
     expect(c.getSnapshot().failures).toBe(0);
   });
 
   it('a 4xx round neither counts as a failure nor clears the counter', async () => {
     const c = createPollController();
-    c.recordFailure();
-    await trackPoll(c, () => Promise.reject(new ApiError('contact.not_found', 404))).catch(
+    c.recordFailure(hashKey(['k']));
+    await trackPoll(c, ['k'], () => Promise.reject(new ApiError('contact.not_found', 404))).catch(
       () => undefined,
     );
     expect(c.getSnapshot().failures).toBe(1);
@@ -178,14 +215,46 @@ describe('contact list transitions', () => {
     expect(s.items.map((c) => c.id)).toEqual(['a']);
   });
 
-  it('a reload replaces the rows but never moves the cursor back', () => {
-    const previous = state({ items: [contact('old', '1')], cursor: '50' });
+  it('a reload merges the fresh first page, keeps the rows and cursor of later pages, never moves the cursor back', () => {
+    const previous = state({
+      items: [contact('a', '3'), contact('p2', '1'), contact('p3', '1')],
+      before: 'after-p3',
+      hasMore: true,
+      cursor: '50',
+    });
     const s = contactListFromPage(
-      page({ contacts: [contact('a', '3')], highWater: '40' }),
+      page({
+        contacts: [contact('a', '7'), contact('new', '8')],
+        before: 'after-new',
+        hasMore: true,
+        highWater: '40',
+      }),
       previous,
     );
-    expect(s.items.map((c) => c.id)).toEqual(['a']);
+    expect(s.items.map((c) => [c.id, c.updatedSeq])).toEqual([
+      ['a', '7'],
+      ['p2', '1'],
+      ['p3', '1'],
+      ['new', '8'],
+    ]);
+    expect(s.before).toBe('after-p3');
+    expect(s.hasMore).toBe(true);
     expect(s.cursor).toBe('50');
+  });
+
+  it('a reload of a list that holds one page takes the fresh page cursor', () => {
+    const previous = state({ items: [contact('a', '3')], before: null, hasMore: false });
+    const s = contactListFromPage(
+      page({
+        contacts: [contact('a', '3'), contact('b', '4')],
+        before: 'x',
+        hasMore: true,
+        highWater: '4',
+      }),
+      previous,
+    );
+    expect(s.before).toBe('x');
+    expect(s.hasMore).toBe(true);
   });
 
   it('a poll merges by id (higher updatedSeq wins), takes the latest counts and keeps paging', () => {
@@ -344,7 +413,7 @@ describe('loadContactList', () => {
       signal,
     });
     expect(fetchPage).toHaveBeenCalledWith({ filter: 'unread', q: 'ma' }, signal);
-    expect(s.items.map((c) => c.id)).toEqual(['a']);
+    expect(s.items.map((c) => c.id)).toEqual(['gone', 'a']);
     expect(s.cursor).toBe('150');
   });
 });
@@ -454,5 +523,171 @@ describe('cache helpers', () => {
       ['messages'],
       ['contact'],
     ]);
+  });
+});
+
+describe('polling cadence of a failing query next to a healthy one (fake timers)', () => {
+  const BASE_MS = 1000;
+  const INTERVALS = 10;
+
+  /** Two polled queries on one controller, wired like the app: back-off per query, reload all. */
+  function setup(failing: { contacts: () => boolean; detail: () => boolean }) {
+    const client = new QueryClient();
+    let now = 0;
+    const controller = createPollController({
+      now: () => now,
+      setTimer: (run, ms) => setTimeout(run, ms),
+      clearTimer: (timer) => {
+        clearTimeout(timer as ReturnType<typeof setTimeout>); // only values setTimer returned
+      },
+    });
+    controller.setMinReloadGap(BASE_MS);
+    controller.setReloadHandler(() => {
+      reloadPolledQueries(client);
+    });
+    const calls = { contacts: 0, detail: 0 };
+    const contactsKey = qk.contacts({ filter: 'all', q: '' });
+    const detailKey = qk.contact('x');
+    const interval = (key: readonly unknown[]) =>
+      pollingIntervalOf(BASE_MS, controller.failuresOf(hashKey(key)));
+    const observers = [
+      new QueryObserver(client, {
+        queryKey: contactsKey,
+        queryFn: polledQueryFn(
+          contactsKey,
+          () => {
+            calls.contacts += 1;
+            return failing.contacts() ? Promise.reject(network()) : Promise.resolve(state());
+          },
+          controller,
+        ),
+        retry: 0,
+        staleTime: 0,
+        refetchInterval: (q) => interval(q.queryKey),
+      }),
+      new QueryObserver(client, {
+        queryKey: detailKey,
+        queryFn: ({ signal }) =>
+          trackPoll(
+            controller,
+            detailKey,
+            () => {
+              calls.detail += 1;
+              return failing.detail()
+                ? Promise.reject(new ApiError('internal.unexpected', 500))
+                : Promise.resolve({ id: 'x' });
+            },
+            signal,
+          ),
+        retry: 0,
+        staleTime: 0,
+        refetchInterval: (q) => interval(q.queryKey),
+      }),
+    ];
+    // TanStack Query runs no interval timers outside a browser, so the test drives them the way
+    // `refetchInterval` does: the next round of a query starts its interval after its last round.
+    const settledAt = observers.map(() => 0);
+    const unsubscribe = observers.map((o, i) =>
+      o.subscribe((result) => {
+        if (result.fetchStatus === 'idle') settledAt[i] = now;
+      }),
+    );
+    const advance = async (ms: number) => {
+      for (let t = 0; t < ms; t += 50) {
+        now += 50;
+        await vi.advanceTimersByTimeAsync(50);
+        observers.forEach((o, i) => {
+          const result = o.getCurrentResult();
+          const every = interval(o.options.queryKey);
+          if (
+            result.fetchStatus === 'idle' &&
+            every !== false &&
+            now - (settledAt[i] ?? 0) >= every
+          ) {
+            void o.refetch();
+          }
+        });
+      }
+    };
+    const stop = () => {
+      for (const u of unsubscribe) u();
+    };
+    return { controller, calls, advance, stop };
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('one failing, one healthy: the healthy query keeps its cadence, the failing one backs off, no reloads', async () => {
+    vi.useFakeTimers();
+    const t = setup({ contacts: () => false, detail: () => true });
+    await t.advance(BASE_MS * INTERVALS);
+    t.stop();
+    // First load plus one round per interval.
+    expect(t.calls.contacts).toBeGreaterThanOrEqual(INTERVALS);
+    expect(t.calls.contacts).toBeLessThanOrEqual(INTERVALS + 1);
+    // Back-off: 1, 2, 4 and 8 base intervals apart.
+    expect(t.calls.detail).toBeLessThanOrEqual(5);
+    expect(t.controller.getSnapshot().generation).toBe(0);
+    expect(t.controller.getSnapshot().failures).toBeGreaterThanOrEqual(POLL_FAILURES_BEFORE_BANNER);
+  });
+
+  it('all failing: every query backs off and the banner shows', async () => {
+    vi.useFakeTimers();
+    const t = setup({ contacts: () => true, detail: () => true });
+    await t.advance(BASE_MS * INTERVALS);
+    t.stop();
+    expect(t.calls.contacts).toBeLessThanOrEqual(5);
+    expect(t.calls.detail).toBeLessThanOrEqual(5);
+    expect(t.controller.getSnapshot().failures).toBeGreaterThanOrEqual(POLL_FAILURES_BEFORE_BANNER);
+  });
+
+  it('recovery: one reload, the banner goes, and both go back to the base cadence', async () => {
+    vi.useFakeTimers();
+    let down = true;
+    const t = setup({ contacts: () => false, detail: () => down });
+    await t.advance(BASE_MS * 4);
+    down = false;
+    const before = { ...t.calls };
+    // The failing query tries again after its back-off, recovers, and both lists reload once.
+    await t.advance(BASE_MS * INTERVALS);
+    expect(t.controller.getSnapshot().generation).toBe(1);
+    expect(t.controller.getSnapshot().failures).toBe(0);
+    expect(t.calls.contacts - before.contacts).toBeLessThanOrEqual(INTERVALS + 2);
+    expect(t.calls.detail - before.detail).toBeLessThanOrEqual(INTERVALS + 2);
+    // Then both are back at the base cadence, with no further reload.
+    const settled = { ...t.calls };
+    await t.advance(BASE_MS * 5);
+    t.stop();
+    expect(t.calls.contacts - settled.contacts).toBe(5);
+    expect(t.calls.detail - settled.detail).toBe(5);
+    expect(t.controller.getSnapshot().generation).toBe(1);
+  });
+});
+
+describe('latestLineConfigured', () => {
+  it('reads the most recently updated contact list of any filter, true before any has loaded', () => {
+    const client = new QueryClient();
+    expect(latestLineConfigured(client)).toBe(true);
+    client.setQueryData(
+      qk.contacts({ filter: 'unread', q: 'x' }),
+      state({ lineConfigured: false }),
+      {
+        updatedAt: 1,
+      },
+    );
+    client.setQueryData(qk.contacts({ filter: 'all', q: '' }), state({ lineConfigured: true }), {
+      updatedAt: 2,
+    });
+    expect(latestLineConfigured(client)).toBe(true);
+    client.setQueryData(
+      qk.contacts({ filter: 'unread', q: 'x' }),
+      state({ lineConfigured: false }),
+      {
+        updatedAt: 3,
+      },
+    );
+    expect(latestLineConfigured(client)).toBe(false);
   });
 });

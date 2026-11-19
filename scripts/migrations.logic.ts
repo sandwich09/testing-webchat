@@ -261,10 +261,34 @@ export function findUnapprovedDestructive(
   return reports;
 }
 
-/** Paths of SQL files that the change adds (new files, and the target of a rename or copy). */
-export function addedMigrationSqlPaths(entries: readonly DiffEntry[]): string[] {
-  return entries
-    .filter((e) => ['A', 'R', 'C'].includes(e.status))
-    .map((e) => e.path)
-    .filter((p) => migrationDirOf(p) !== null && p.endsWith('.sql'));
+/**
+ * Every SQL file of a migration directory among `paths` (the working tree), sorted. The
+ * destructive check scans all of them on every run, so a statement added in a commit whose own
+ * run failed or was cancelled is still found by the next run.
+ */
+export function migrationSqlPaths(paths: readonly string[]): string[] {
+  return paths.filter((p) => migrationDirOf(p) !== null && p.endsWith('.sql')).sort();
+}
+
+/** One row of `_prisma_migrations` that `prisma migrate deploy` counts as applied. */
+export type AppliedMigration = { name: string; checksum: string };
+
+export type AppliedMismatch = { name: string; reason: 'missing' | 'modified' };
+
+/**
+ * Applied migrations whose directory is gone or whose migration.sql no longer has the checksum
+ * Prisma stored (SHA-256 hex of the file). `prisma migrate deploy` itself only applies pending
+ * migrations and does not notice either case (Prisma 7.10.1).
+ */
+export function findAppliedMismatches(
+  applied: readonly AppliedMigration[],
+  local: ReadonlyMap<string, string>,
+): AppliedMismatch[] {
+  const mismatches: AppliedMismatch[] = [];
+  for (const row of applied) {
+    const checksum = local.get(row.name);
+    if (checksum === undefined) mismatches.push({ name: row.name, reason: 'missing' });
+    else if (checksum !== row.checksum) mismatches.push({ name: row.name, reason: 'modified' });
+  }
+  return mismatches;
 }

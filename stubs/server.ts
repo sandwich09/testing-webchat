@@ -20,12 +20,27 @@ const MAX_RECORDS = 2000;
 const MAX_BODY_BYTES = 128 * 1024 * 1024;
 const MAX_LINE_MESSAGES = 5;
 const MAX_TEXT_LENGTH = 5000;
+const MAX_FLEX_ALT_TEXT = 400;
+/** LINE's documented limit on one bubble's JSON. */
+const MAX_FLEX_BUBBLE_BYTES = 30 * 1024;
+/** Rich menu limits the stub checks (LINE Messaging API reference, rich menu object). */
+const RICH_MENU_MAX_IMAGE_BYTES = 1024 * 1024;
+const RICH_MENU_MAX_AREAS = 20;
+const RICH_MENU_MAX_CHAT_BAR = 14;
+const RICH_MENU_MAX_POSTBACK_DATA = 300;
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const MIB = 1024 * 1024;
 const BIG_IMAGE_BYTES = 11 * MIB;
 const BIG_VIDEO_BYTES = 51 * MIB;
 const STREAM_CHUNK_BYTES = 64 * 1024;
 
 const INVALID_LINE_TOKEN = 'stub-invalid-token';
+/**
+ * A valid access token of another channel: `GET /v2/bot/info` answers another bot for it, so
+ * saving it with the stub's Channel ID and channel secret is a channel mismatch. Same value as
+ * STUB_OTHER_CHANNEL_ACCESS_TOKEN in e2e/fixtures/line/credentials.ts.
+ */
+const OTHER_CHANNEL_TOKEN = 'stub-access-token-other-channel';
 /**
  * The one Channel ID and channel secret pair the client-credentials route accepts. Same values as
  * STUB_CHANNEL_ID and STUB_CHANNEL_SECRET in e2e/fixtures/line/credentials.ts, which this file
@@ -80,7 +95,12 @@ type LineEndpoint =
   | 'content-preview'
   | 'content-transcoding'
   | 'oauth-token'
-  | 'oauth-revoke';
+  | 'oauth-revoke'
+  | 'richmenu-create'
+  | 'richmenu-upload'
+  | 'richmenu-default'
+  | 'richmenu-default-clear'
+  | 'richmenu-delete';
 const LINE_ENDPOINTS: readonly string[] = [
   'reply',
   'push',
@@ -92,6 +112,11 @@ const LINE_ENDPOINTS: readonly string[] = [
   'content-transcoding',
   'oauth-token',
   'oauth-revoke',
+  'richmenu-create',
+  'richmenu-upload',
+  'richmenu-default',
+  'richmenu-default-clear',
+  'richmenu-delete',
 ];
 
 type RecordedRequest = {
@@ -113,6 +138,8 @@ type RecordedRequest = {
   };
   body: unknown;
   status: number;
+  /** reply and push answered 200: the ids of `sentMessages`, so tests can quote a sent message. */
+  sentIds?: string[];
 };
 
 type Payload =
@@ -137,6 +164,8 @@ type Incoming = {
   bodyIsJson: boolean;
   /** The body as text, for the form-encoded oauth routes. */
   rawText: string;
+  /** The body as bytes, for the rich menu picture. */
+  raw: Buffer;
 };
 
 type LineMatch = {
@@ -201,15 +230,25 @@ type State = {
   transcoding: Map<string, Transcoding>;
   /** Tokens the client-credentials route issued and that were not revoked yet. */
   issuedTokens: Set<string>;
+  /** Rich menus created and not deleted, by id. */
+  richMenus: Map<string, StubRichMenu>;
+  defaultRichMenuId: string | null;
+};
+type StubRichMenu = {
+  body: Record<string, unknown>;
+  image: { contentType: string; bytes: number } | null;
 };
 
 type Params = readonly string[];
 type LineRoute = {
   endpoint: LineEndpoint;
   service: 'line' | 'line-data';
-  method: 'GET' | 'POST';
-  /** `form`: the oauth routes take form fields and no bearer token (default `json`). */
-  body?: 'json' | 'form';
+  method: 'GET' | 'POST' | 'DELETE';
+  /**
+   * `form`: the oauth routes take form fields and no bearer token (default `json`). `none`: a POST
+   * without a body. `image`: the rich menu picture.
+   */
+  body?: 'json' | 'form' | 'none' | 'image';
   pattern: RegExp;
   facts: (inc: Incoming, params: Params) => LineFacts;
   validate: (inc: Incoming, params: Params) => Reply | undefined;
@@ -237,6 +276,8 @@ function createState(seq: number, ids: number): State {
     lineContent: new Map(),
     transcoding: new Map(),
     issuedTokens: new Set(),
+    richMenus: new Map(),
+    defaultRichMenuId: null,
   };
 }
 
@@ -358,6 +399,20 @@ function isValidLineMessage(message: unknown): string | undefined {
     }
     return undefined;
   }
+  if (type === 'flex') {
+    const altText = message['altText'];
+    if (typeof altText !== 'string' || altText.length < 1 || altText.length > MAX_FLEX_ALT_TEXT) {
+      return `altText must be 1 to ${String(MAX_FLEX_ALT_TEXT)} characters`;
+    }
+    const contents = message['contents'];
+    if (!isRecord(contents) || (contents['type'] !== 'bubble' && contents['type'] !== 'carousel')) {
+      return 'contents must be a bubble or a carousel';
+    }
+    if (Buffer.byteLength(JSON.stringify(contents)) > MAX_FLEX_BUBBLE_BYTES) {
+      return 'contents is too large';
+    }
+    return undefined;
+  }
   return 'unsupported message type';
 }
 
@@ -393,6 +448,17 @@ function sentMessages(body: Record<string, unknown>): Reply {
     return { id: String(id), quoteToken: `stub-qt-${String(id)}` };
   });
   return json(200, { sentMessages: sent });
+}
+
+/** The `sentMessages` ids of a 200 answer of reply or push, for the recorded request. */
+function sentIdsOfReply(reply: Reply): { sentIds?: string[] } {
+  if (reply.status !== 200 || reply.payload.kind !== 'json') return {};
+  const value = reply.payload.value;
+  if (!isRecord(value) || !Array.isArray(value['sentMessages'])) return {};
+  const ids = value['sentMessages'].flatMap((m) =>
+    isRecord(m) && typeof m['id'] === 'string' ? [m['id']] : [],
+  );
+  return { sentIds: ids };
 }
 
 function bodyRecord(inc: Incoming): Record<string, unknown> {
@@ -480,6 +546,8 @@ async function contentReply(messageId: string): Promise<Reply> {
   if (messageId.startsWith('fakeimg')) return bytesReply('image/jpeg', Buffer.from('not an image'));
   if (messageId.startsWith('img')) return fileReply('tiny.jpg', 'image/jpeg');
   if (messageId.startsWith('vid')) return fileReply('tiny.mp4', 'video/mp4');
+  // LINE voice messages are M4A; the Content-Type LINE sends for them is to be confirmed.
+  if (messageId.startsWith('aud')) return fileReply('tiny.m4a', 'audio/x-m4a');
   return json(404, { message: 'Not found' });
 }
 
@@ -590,6 +658,99 @@ function validateLoading(inc: Incoming): Reply | undefined {
   return undefined;
 }
 
+function validateRichMenu(inc: Incoming): Reply | undefined {
+  const body = bodyRecord(inc);
+  const size = body['size'];
+  if (!isRecord(size) || size['width'] !== 2500 || ![843, 1686].includes(Number(size['height']))) {
+    return lineBadRequest('size must be 2500x843 or 2500x1686', '/size');
+  }
+  const height = Number(size['height']);
+  if (typeof body['selected'] !== 'boolean')
+    return lineBadRequest('selected must be a boolean', '/selected');
+  if (!isNonEmptyString(body['name']) || body['name'].length > 300) {
+    return lineBadRequest('name must be 1 to 300 characters', '/name');
+  }
+  const chatBar = body['chatBarText'];
+  if (!isNonEmptyString(chatBar) || chatBar.length > RICH_MENU_MAX_CHAT_BAR) {
+    return lineBadRequest(
+      `chatBarText must be 1 to ${String(RICH_MENU_MAX_CHAT_BAR)} characters`,
+      '/chatBarText',
+    );
+  }
+  const areas = body['areas'];
+  if (!Array.isArray(areas) || areas.length < 1 || areas.length > RICH_MENU_MAX_AREAS) {
+    return lineBadRequest(`areas must have 1 to ${String(RICH_MENU_MAX_AREAS)} items`, '/areas');
+  }
+  for (const [index, area] of areas.entries()) {
+    const at = `/areas/${String(index)}`;
+    const bounds = isRecord(area) ? area['bounds'] : undefined;
+    const action = isRecord(area) ? area['action'] : undefined;
+    if (!isRecord(bounds)) return lineBadRequest('bounds must be an object', `${at}/bounds`);
+    const [x, y, w, h] = ['x', 'y', 'width', 'height'].map((k) => bounds[k]);
+    const ints = [x, y, w, h].every((v) => typeof v === 'number' && Number.isInteger(v) && v >= 0);
+    if (!ints || Number(x) + Number(w) > 2500 || Number(y) + Number(h) > height) {
+      return lineBadRequest('bounds must lie inside the image', `${at}/bounds`);
+    }
+    if (!isRecord(action) || action['type'] !== 'postback') {
+      return lineBadRequest('the stub accepts postback actions only', `${at}/action`);
+    }
+    const data = action['data'];
+    if (!isNonEmptyString(data) || data.length > RICH_MENU_MAX_POSTBACK_DATA) {
+      return lineBadRequest('data must be 1 to 300 characters', `${at}/action/data`);
+    }
+    const display = action['displayText'];
+    if (display !== undefined && (!isNonEmptyString(display) || display.length > 300)) {
+      return lineBadRequest('displayText must be 1 to 300 characters', `${at}/action/displayText`);
+    }
+  }
+  return undefined;
+}
+
+function handleRichMenuCreate(inc: Incoming): Reply {
+  const id = `richmenu-${String(nextId()).padStart(32, '0')}`;
+  state.richMenus.set(id, { body: bodyRecord(inc), image: null });
+  return json(200, { richMenuId: id });
+}
+
+const RICH_MENU_NOT_FOUND = (): Reply => json(404, { message: 'Not found' });
+
+function handleRichMenuUpload(inc: Incoming, params: Params): Reply {
+  const menu = state.richMenus.get(param(params, 0));
+  if (menu === undefined) return RICH_MENU_NOT_FOUND();
+  if (menu.image !== null)
+    return json(400, { message: 'An image has already been uploaded to the richmenu' });
+  if (inc.raw.length === 0 || inc.raw.length > RICH_MENU_MAX_IMAGE_BYTES) {
+    return json(400, { message: 'The image must be 1 byte to 1 MB' });
+  }
+  const contentType = headerValue(inc, 'content-type') ?? '';
+  if (/png/i.test(contentType) && !inc.raw.subarray(0, 8).equals(PNG_SIGNATURE)) {
+    return json(400, { message: 'The image is not a PNG' });
+  }
+  menu.image = { contentType, bytes: inc.raw.length };
+  return json(200, {});
+}
+
+function handleRichMenuDefault(_inc: Incoming, params: Params): Reply {
+  const id = param(params, 0);
+  const menu = state.richMenus.get(id);
+  if (menu === undefined) return RICH_MENU_NOT_FOUND();
+  if (menu.image === null) return json(400, { message: 'An image must be uploaded first' });
+  state.defaultRichMenuId = id;
+  return json(200, {});
+}
+
+function handleRichMenuDefaultClear(): Reply {
+  state.defaultRichMenuId = null;
+  return json(200, {});
+}
+
+function handleRichMenuDelete(_inc: Incoming, params: Params): Reply {
+  const id = param(params, 0);
+  if (!state.richMenus.delete(id)) return RICH_MENU_NOT_FOUND();
+  if (state.defaultRichMenuId === id) state.defaultRichMenuId = null;
+  return json(200, {});
+}
+
 const LINE_ROUTES: readonly LineRoute[] = [
   {
     endpoint: 'reply',
@@ -645,15 +806,28 @@ const LINE_ROUTES: readonly LineRoute[] = [
     pattern: /^\/line\/v2\/bot\/info$/,
     facts: () => ({}),
     validate: () => undefined,
-    handle: () =>
-      json(200, {
-        userId: 'Ustub00000000000000000000000000000',
-        basicId: '@000stub',
-        displayName: 'ต้นหอม คาเฟ่ (ทดสอบ)',
-        pictureUrl: `${PUBLIC_URL}/assets/oa.png`,
-        chatMode: 'bot',
-        markAsReadMode: 'auto',
-      }),
+    // Every token is the stub's bot (tokens issued by the client-credentials route included),
+    // except the token of the other channel.
+    handle: (inc) =>
+      json(
+        200,
+        bearerToken(inc) === OTHER_CHANNEL_TOKEN
+          ? {
+              userId: 'Ustubother000000000000000000000000',
+              basicId: '@000other',
+              displayName: 'Other channel (ทดสอบ)',
+              chatMode: 'bot',
+              markAsReadMode: 'auto',
+            }
+          : {
+              userId: 'Ustub00000000000000000000000000000',
+              basicId: '@000stub',
+              displayName: 'ต้นหอม คาเฟ่ (ทดสอบ)',
+              pictureUrl: `${PUBLIC_URL}/assets/oa.png`,
+              chatMode: 'bot',
+              markAsReadMode: 'auto',
+            },
+      ),
   },
   {
     endpoint: 'content',
@@ -681,6 +855,53 @@ const LINE_ROUTES: readonly LineRoute[] = [
     facts: (_inc, params) => ({ messageId: param(params, 0) }),
     validate: () => undefined,
     handle: (_inc, params) => transcodingReply(param(params, 0)),
+  },
+  {
+    endpoint: 'richmenu-create',
+    service: 'line',
+    method: 'POST',
+    pattern: /^\/line\/v2\/bot\/richmenu$/,
+    facts: () => ({}),
+    validate: validateRichMenu,
+    handle: handleRichMenuCreate,
+  },
+  {
+    endpoint: 'richmenu-upload',
+    service: 'line-data',
+    method: 'POST',
+    body: 'image',
+    pattern: /^\/line-data\/v2\/bot\/richmenu\/([^/]+)\/content$/,
+    facts: () => ({}),
+    validate: () => undefined,
+    handle: handleRichMenuUpload,
+  },
+  {
+    endpoint: 'richmenu-default',
+    service: 'line',
+    method: 'POST',
+    body: 'none',
+    pattern: /^\/line\/v2\/bot\/user\/all\/richmenu\/([^/]+)$/,
+    facts: () => ({}),
+    validate: () => undefined,
+    handle: handleRichMenuDefault,
+  },
+  {
+    endpoint: 'richmenu-default-clear',
+    service: 'line',
+    method: 'DELETE',
+    pattern: /^\/line\/v2\/bot\/user\/all\/richmenu$/,
+    facts: () => ({}),
+    validate: () => undefined,
+    handle: handleRichMenuDefaultClear,
+  },
+  {
+    endpoint: 'richmenu-delete',
+    service: 'line',
+    method: 'DELETE',
+    pattern: /^\/line\/v2\/bot\/richmenu\/([^/]+)$/,
+    facts: () => ({}),
+    validate: () => undefined,
+    handle: handleRichMenuDelete,
   },
   {
     endpoint: 'oauth-token',
@@ -715,8 +936,14 @@ function checkLineCommon(route: LineRoute, inc: Incoming): Reply | undefined {
   if (authorizationKind(inc) !== 'bearer' || token === INVALID_LINE_TOKEN) {
     return json(401, { message: LINE_AUTH_MESSAGE });
   }
+  if (route.body === 'image') {
+    return /^image\/(png|jpeg)$/i.test(headerValue(inc, 'content-type') ?? '')
+      ? undefined
+      : lineBadRequest('Content-Type must be image/png or image/jpeg');
+  }
   if (
     route.method === 'POST' &&
+    route.body !== 'none' &&
     (!isJsonContentType(inc) || !inc.bodyIsJson || !isRecord(inc.body))
   ) {
     return json(400, { message: 'The request body has 1 error(s)' });
@@ -1339,11 +1566,22 @@ const CONTROL_POST: Record<string, (body: Record<string, unknown>) => Reply> = {
   '/__control/claude/count-tokens': controlCountTokens,
 };
 
+/** The rich menus the stub holds and the default one, for tests to check the end state. */
+function controlRichMenus(): Reply {
+  const menus = [...state.richMenus].map(([id, m]) => ({
+    richMenuId: id,
+    ...m.body,
+    image: m.image,
+  }));
+  return json(200, { menus, defaultRichMenuId: state.defaultRichMenuId });
+}
+
 function runControl(inc: Incoming): Reply {
   if (inc.method === 'GET') {
     if (inc.path === '/__control/health') return OK();
     if (inc.path === '/__control/line/requests') return controlLineRequests(inc);
     if (inc.path === '/__control/claude/requests') return controlClaudeRequests(inc);
+    if (inc.path === '/__control/line/rich-menus') return controlRichMenus();
   }
   if (inc.method === 'POST') {
     if (inc.path === '/__control/reset') {
@@ -1509,6 +1747,12 @@ async function assetReply(name: string): Promise<Reply> {
   return fileReply(name, ASSET_TYPES[extension] ?? 'application/octet-stream');
 }
 
+/** A non-JSON body is recorded by its type and size only. */
+function bodySummary(inc: Incoming): unknown {
+  if (inc.raw.length === 0) return null;
+  return { contentType: headerValue(inc, 'content-type') ?? null, bytes: inc.raw.length };
+}
+
 async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = new URL(req.url ?? '/', 'http://stub.local');
   const raw = await readBody(req);
@@ -1525,6 +1769,7 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     body: parsed.value,
     bodyIsJson: parsed.ok,
     rawText: raw.toString('utf8'),
+    raw,
   };
 
   let reply: Reply;
@@ -1544,8 +1789,9 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       method: inc.method,
       path: inc.path,
       headers: recordedHeaders(inc, routed.service),
-      body: parsed.ok ? parsed.value : null,
+      body: parsed.ok ? parsed.value : bodySummary(inc),
       status: reply.status,
+      ...sentIdsOfReply(reply),
     });
   }
   console.log(`${inc.method} ${inc.path} ${String(reply.status)}`);

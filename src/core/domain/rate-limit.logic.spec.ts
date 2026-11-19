@@ -3,7 +3,6 @@ import { RATE_LIMIT_RULES } from './constants';
 import { RATE_LIMIT_ACTIONS } from './enums.model';
 import {
   effectiveLimit,
-  isAtLimit,
   isRateLimited,
   rateWindowStart,
   retryAfterSeconds,
@@ -37,14 +36,6 @@ describe('isRateLimited (after hit)', () => {
     expect(isRateLimited({ count: 4 }, 5)).toBe(false);
     expect(isRateLimited({ count: 5 }, 5)).toBe(false);
     expect(isRateLimited({ count: 6 }, 5)).toBe(true);
-  });
-});
-
-describe('isAtLimit (after peek)', () => {
-  it('is true at and above the limit', () => {
-    expect(isAtLimit({ count: 4 }, 5)).toBe(false);
-    expect(isAtLimit({ count: 5 }, 5)).toBe(true);
-    expect(isAtLimit({ count: 6 }, 5)).toBe(true);
   });
 });
 

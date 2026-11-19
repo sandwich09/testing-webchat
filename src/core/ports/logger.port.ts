@@ -74,6 +74,20 @@ export type LogEvent =
   | 'line.credentials.rejected'
   | 'line.credentials.unreadable'
   | 'line.connection.tested'
+  // Rich menu and welcome card (fields: contactId, reason = the button, errorCode, outcome = the
+  // step that failed; never postback data or texts)
+  | 'line.postback.received'
+  | 'line.postback.ignored'
+  | 'line.postback.rate_limited'
+  | 'line.rich_menu.action_handled'
+  | 'line.rich_menu.published'
+  | 'line.rich_menu.publish_failed'
+  | 'line.rich_menu.removed'
+  | 'line.rich_menu.remove_failed'
+  | 'line.rich_menu.cleanup_failed'
+  | 'line.welcome.sent'
+  | 'line.welcome.skipped'
+  | 'line.welcome.failed'
   // Media and uploads
   | 'media.store.succeeded'
   | 'media.store.failed'
@@ -106,7 +120,11 @@ export type LogEvent =
   | 'knowledge.ingest.stuck_recovered'
   | 'knowledge.document.deleted'
   // Settings
-  | 'settings.values.updated';
+  | 'settings.values.updated'
+  // Admin notes (fields: contactId only, never the text)
+  | 'contact.note.added'
+  | 'contact.note.deleted'
+  | 'contact.note.rate_limited';
 
 export interface Logger {
   log(level: LogLevel, event: LogEvent, fields?: LogFields): void;

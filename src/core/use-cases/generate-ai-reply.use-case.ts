@@ -31,6 +31,7 @@ import {
   guardVerdictOf,
   guardRefusalText,
   handoffText,
+  isNoAiTap,
   isNoResponse,
   noResponseUsage,
   ok,
@@ -92,6 +93,35 @@ interface RoundTrace {
 }
 
 const compareSeq = (a: Seq, b: Seq): number => (a < b ? -1 : a > b ? 1 : 0);
+
+/**
+ * Taps answered with a fixed text that came after the message a round answers, each with the
+ * fixed reply right after it, are moved before that message. The customer's message then stays
+ * the last turn and is answered; the model still sees the tap. Every other row after it (another
+ * reply that already answered it) keeps its place, so a message is never answered twice.
+ */
+const deferNoAiTaps = (rows: Message[], answeredId: MessageId): Message[] => {
+  const at = rows.findIndex((m) => m.id === answeredId);
+  const answered = rows[at];
+  if (answered === undefined) return rows;
+  const moved: Message[] = [];
+  const kept: Message[] = [];
+  for (let i = at + 1; i < rows.length; i += 1) {
+    const m = rows[i];
+    if (m === undefined) continue;
+    if (!isNoAiTap(m)) {
+      kept.push(m);
+      continue;
+    }
+    moved.push(m);
+    const next = rows[i + 1];
+    if (next?.direction === 'outbound' && next.author === 'ai') {
+      moved.push(next);
+      i += 1;
+    }
+  }
+  return moved.length === 0 ? rows : [...rows.slice(0, at), ...moved, answered, ...kept];
+};
 
 /** Usage-cost and log fields shared by every billed call. */
 const tokenFields = (u: TokenUsage) => ({
@@ -324,8 +354,8 @@ export const makeGenerateAiReply: (
   };
 
   /**
-   * replyOnce steps 5 to 8: knowledge and the chat model. Also returns the texts the shop wrote
-   * (knowledge and instructions), against which the links of the reply are checked.
+   * replyOnce steps 5 to 8: knowledge and the chat model. Also returns the texts the admins wrote
+   * (knowledge and custom instructions), against which the links of the reply are checked.
    */
   const callChatModel = async (s: Settings, history: ChatTurn[]) => {
     const knowledge = await knowledgeSource.getKnowledge();
@@ -341,18 +371,18 @@ export const makeGenerateAiReply: (
       now: clock.now(),
       maxTokens: AI_MAX_TOKENS,
     });
-    return { res, shopTexts: [knowledge.text, s.aiInstructions] };
+    return { res, authoredTexts: [knowledge.text, s.aiInstructions] };
   };
 
   /**
-   * replyOnce steps 9 to 11: cost, outcome and the cleaned text. A reply with a link the shop
+   * replyOnce steps 9 to 11: cost, outcome and the cleaned text. A reply with a link the admins
    * never wrote is not sent (ai-prompt 6.1): it fails with ai.link_not_allowed.
    */
   const readReply = (
     c: Contact,
     r: ChatModelResponse,
     durationMs: number,
-    shopTexts: readonly string[],
+    authoredTexts: readonly string[],
   ) => {
     const d = draftOf('reply', c.id, r);
     let o = usageOutcomeOf(r);
@@ -361,7 +391,7 @@ export const makeGenerateAiReply: (
       text = sanitizeAiReply(r.output.reply);
       if (text === null) {
         o = { outcome: 'failed', error: 'ai.invalid_output', handoff: 'ai_failed' };
-      } else if (disallowedLinks(text, shopTexts).length > 0) {
+      } else if (disallowedLinks(text, authoredTexts).length > 0) {
         text = null;
         o = { outcome: 'failed', error: 'ai.link_not_allowed', handoff: 'ai_failed' };
       }
@@ -381,17 +411,18 @@ export const makeGenerateAiReply: (
    * History of replyOnce step 3. recentForAi applies AI_HISTORY_LIMIT; toHistoryTurns only shapes
    * the turns. A message that arrived during an earlier round's model call has a lower seq than
    * that round's reply although the reply never saw it; left in seq order, the history would end
-   * with the shop and the message would never be answered. So each earlier reply of this run is
+   * with the admin side and the message would never be answered. So each earlier reply of this run is
    * placed right after the last row its round saw, and every other row keeps its seq order.
    */
   const loadHistory = async (
     contactId: ContactId,
+    answeredId: MessageId,
     earlier: readonly RoundTrace[],
     trace: RoundTrace,
   ): Promise<ChatTurn[]> => {
     const rows = await messages.recentForAi(contactId, AI_HISTORY_LIMIT);
     for (const m of rows) if (m.seq > trace.seenSeq) trace.seenSeq = m.seq;
-    if (earlier.length === 0) return toHistoryTurns(rows);
+    if (earlier.length === 0) return toHistoryTurns(deferNoAiTaps(rows, answeredId));
     const placedAfter = new Map<MessageId, Seq>();
     for (const r of earlier) for (const id of r.replyIds) placedAfter.set(id, r.seenSeq);
     const keyed = rows.map((m) => {
@@ -401,12 +432,18 @@ export const makeGenerateAiReply: (
     keyed.sort(
       (a, b) => compareSeq(a.key, b.key) || a.placed - b.placed || compareSeq(a.m.seq, b.m.seq),
     );
-    return toHistoryTurns(keyed.map((k) => k.m));
+    return toHistoryTurns(
+      deferNoAiTaps(
+        keyed.map((k) => k.m),
+        answeredId,
+      ),
+    );
   };
 
   const replyOnce = async (
     c: Contact,
     s: Settings,
+    answeredId: MessageId,
     earlier: readonly RoundTrace[],
     trace: RoundTrace,
   ): Promise<AiReplyRunOutcome> => {
@@ -424,7 +461,7 @@ export const makeGenerateAiReply: (
       logger.log('warn', 'line.loading.failed', { contactId: c.id, errorCode: loading.error.code });
     }
 
-    const history = await loadHistory(c.id, earlier, trace);
+    const history = await loadHistory(c.id, answeredId, earlier, trace);
     if (history.length === 0) {
       logger.log('info', 'ai.reply.skipped', { contactId: c.id, reason: 'no_history' });
       return { kind: 'skipped', reason: 'no_history' };
@@ -436,14 +473,14 @@ export const makeGenerateAiReply: (
     }
 
     const started = clock.now().getTime();
-    const { res, shopTexts } = await callChatModel(s, history);
+    const { res, authoredTexts } = await callChatModel(s, history);
     if (!res.ok) {
       await recordNoResponse('reply', c.id, s.aiModel, res.error.code);
       await settings.recordAiError({ code: res.error.code, at: clock.now() });
       logger.log('error', 'ai.reply.failed', { contactId: c.id, errorCode: res.error.code });
       return handoff(c, 'ai_failed');
     }
-    const { d, o, text } = readReply(c, res.value, clock.now().getTime() - started, shopTexts);
+    const { d, o, text } = readReply(c, res.value, clock.now().getTime() - started, authoredTexts);
 
     // Second layer of the topic guard: the chat model judged the message off-topic.
     if (s.guardEnabled && o.handoff === 'ai_unsafe_or_offtopic') {
@@ -535,7 +572,7 @@ export const makeGenerateAiReply: (
       for (let round = 1; ; round += 1) {
         const { c, s, latest } = checked.ready;
         const trace: RoundTrace = { seenSeq: latest.seq, replyIds: [] };
-        const outcome = await replyOnce(c, s, earlier, trace);
+        const outcome = await replyOnce(c, s, latest.id, earlier, trace);
         if (outcome.kind === 'cancelled') return ok(outcome);
         earlier.push(trace);
         // A message the model already saw in this round's history is not newer, so it is not

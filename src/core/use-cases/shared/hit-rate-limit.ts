@@ -22,7 +22,7 @@ export type HitRateLimit = (
 
 /**
  * Bucket key for one action and subject. The subject (an IP, a contact id) is keyed-hashed so
- * no raw IP is ever stored. Shared with checkRateLimit so peek reads the bucket hit writes.
+ * no raw IP is ever stored. Shared with refundRateLimit so a refund reaches the bucket hit wrote.
  */
 export const rateLimitKey = (
   hasher: ContentHasher,
@@ -43,3 +43,18 @@ export const makeHitRateLimit: (
     if (!isRateLimited(bucket, limit)) return { limited: false };
     return { limited: true, retryAfterSeconds: retryAfterSeconds(windowStart, rule.windowMs, now) };
   };
+
+/** Takes back one hit of the current window, for a result that should not count (a right code). */
+export type RefundRateLimit = (
+  action: RateLimitAction,
+  subject: string,
+  now: Date,
+) => Promise<void>;
+
+export const makeRefundRateLimit: (deps: HitRateLimitDeps) => RefundRateLimit =
+  ({ rateLimits, hasher }) =>
+  (action, subject, now) =>
+    rateLimits.refund(
+      rateLimitKey(hasher, action, subject),
+      rateWindowStart(now, RATE_LIMIT_RULES[action].windowMs),
+    );

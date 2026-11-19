@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   FAKE_LINE_CHANNEL_ID,
   FAKE_LINE_CHANNEL_SECRET,
+  FAKE_LINE_OTHER_CHANNEL_TOKEN,
   FAKE_LINE_INVALID_TOKEN,
   FakeClock,
   FakeLogger,
@@ -77,6 +78,25 @@ describe('TestLineConnection', () => {
     const s = await settings.get();
     expect(s.lineSecretVerifiedAt).toBeNull();
     expect(s.lastLineError?.code).toBe('line.channel_secret_invalid');
+  });
+
+  it('fails with line.channel_mismatch when the stored token is of another channel', async () => {
+    await store(FAKE_LINE_OTHER_CHANNEL_TOKEN);
+    await settings.recordLineSecretCheck(new Date('2026-11-01T00:00:00Z'));
+
+    const result = await run({}, ctx);
+
+    expect(result.ok ? null : result.error.code).toBe('line.channel_mismatch');
+    const s = await settings.get();
+    expect(s.lineSecretVerifiedAt).toBeNull();
+    expect(s.lastLineError?.code).toBe('line.channel_mismatch');
+  });
+
+  it('reports unchecked when the bot of the Channel ID cannot be read', async () => {
+    await store('good-token');
+    gateway.channelBotUnreadable = true;
+
+    expect(await run({}, ctx)).toMatchObject({ ok: true, value: { secretStatus: 'unchecked' } });
   });
 
   it('reports unchecked and keeps the stored result when LINE cannot check the secret', async () => {

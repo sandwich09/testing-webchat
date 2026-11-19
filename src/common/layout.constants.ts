@@ -1,7 +1,7 @@
 // Layout sizes of the screens (project-setup.md section 10.5). Lengths are in CSS px unless noted.
 
 /** Left rail, expanded. */
-export const RAIL_WIDTH_EXPANDED = 184;
+export const RAIL_WIDTH_EXPANDED = 212;
 /** Left rail, collapsed. */
 export const RAIL_WIDTH_COLLAPSED = 56;
 /** Top strip that replaces the rail on a narrow screen. */

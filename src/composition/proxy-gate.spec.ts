@@ -15,7 +15,7 @@ let gate: ReturnType<typeof makeProxyGate>;
 let token: string;
 let nonces: number;
 
-const build = (development = false) =>
+const build = (development = false, appOrigin = ORIGIN) =>
   makeProxyGate({
     verifyAccess: makeVerifyAccess(
       { signer, clock },
@@ -30,7 +30,7 @@ const build = (development = false) =>
     ),
     ids: new FakeIdGenerator(),
     logger,
-    appOrigin: ORIGIN,
+    appOrigin,
     development,
     nonce: () => `nonce${String(++nonces)}`,
   });
@@ -115,6 +115,18 @@ describe('proxy gate: API', () => {
     expect(passedThrough(await gate(req('POST', '/api/contacts/1/read', { origin: ORIGIN })))).toBe(
       true,
     );
+  });
+
+  it('passes a same-origin POST when APP_BASE_URL is another origin', async () => {
+    gate = build(false, 'https://configured.example');
+    const headers = { host: 'localhost:3000' };
+    const same = req('POST', '/api/contacts/1/read', { origin: ORIGIN, headers });
+    expect(passedThrough(await gate(same))).toBe(true);
+    const crossSite = req('POST', '/api/contacts/1/read', {
+      origin: 'https://evil.example',
+      headers,
+    });
+    expect((await gate(crossSite)).status).toBe(403);
   });
 
   it('checks the origin before the cookie', async () => {

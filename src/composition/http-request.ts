@@ -3,7 +3,8 @@ import type { z } from 'zod';
 import type { ContactListCursor } from '@/core/ports';
 import type { ContactId, Result } from '@/core/domain';
 import { JSON_MAX_BODY_BYTES, PDF_MAX_BYTES, WEBHOOK_MAX_BODY_BYTES, err, ok } from '@/core/domain';
-import { KNOWLEDGE_FILE_FIELD, knowledgeFilePartSchema } from '@/contracts';
+import type { PathNotFoundCode } from '@/contracts';
+import { KNOWLEDGE_FILE_FIELD, hasNulCharacter, knowledgeFilePartSchema } from '@/contracts';
 
 type Invalid = 'request.invalid';
 type TooLarge = 'request.too_large';
@@ -63,13 +64,28 @@ const utf8 = new TextDecoder('utf-8', { fatal: true });
 // ---------------------------------------------------------------------------
 
 const check = <T>(schema: z.ZodType<T>, value: unknown): Result<T, Invalid> => {
+  if (hasNulCharacter(value)) return err('request.invalid');
   const parsed = schema.safeParse(value);
   return parsed.success ? ok(parsed.data) : err('request.invalid');
 };
 
-/** Path params (already awaited) against a contract schema. */
-export const parseParams = <T>(schema: z.ZodType<T>, params: unknown): Result<T, Invalid> =>
-  check(schema, params ?? {});
+/**
+ * Path params (already awaited) against a contract schema. A malformed id (pathIdSchema) is
+ * answered with the not-found code of its resource, like an id that does not exist.
+ */
+export const parseParams = <T>(
+  schema: z.ZodType<T>,
+  params: unknown,
+): Result<T, Invalid | PathNotFoundCode> => {
+  if (hasNulCharacter(params)) return err('request.invalid');
+  const parsed = schema.safeParse(params ?? {});
+  if (parsed.success) return ok(parsed.data);
+  for (const issue of parsed.error.issues) {
+    const notFound: unknown = issue.code === 'custom' ? issue.params?.['notFound'] : undefined;
+    if (typeof notFound === 'string') return err(notFound as PathNotFoundCode); // brand: set only by pathIdSchema
+  }
+  return err('request.invalid');
+};
 
 /** Query string against a contract schema. A repeated key is invalid. */
 export const parseQuery = <T>(schema: z.ZodType<T>, request: Request): Result<T, Invalid> => {
@@ -159,11 +175,9 @@ export const readPdfUpload = async (
   const file = first[1];
   if (typeof file === 'string') return err('request.invalid');
 
-  const part = knowledgeFilePartSchema.safeParse({
-    fileName: baseName(file.name),
-    sizeBytes: file.size,
-  });
-  if (!part.success) return err('request.invalid');
+  const fileName = baseName(file.name);
+  const part = knowledgeFilePartSchema.safeParse({ fileName, sizeBytes: file.size });
+  if (!part.success || hasNulCharacter(fileName)) return err('request.invalid');
   return ok({ fileName: part.data.fileName, bytes: new Uint8Array(await file.arrayBuffer()) });
 };
 

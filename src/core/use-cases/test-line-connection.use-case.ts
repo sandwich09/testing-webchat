@@ -34,13 +34,18 @@ export const makeTestLineConnection: (
   | 'line.credentials_unreadable'
   | 'line.credentials_invalid'
   | 'line.channel_secret_invalid'
+  | 'line.channel_mismatch'
   | 'line.unavailable'
 > = (deps) => {
   const { settings, gateway, clock, logger } = deps;
   const loadLineAccess = makeLoadLineAccess(deps);
 
   const failed = async (
-    code: 'line.credentials_invalid' | 'line.channel_secret_invalid' | 'line.unavailable',
+    code:
+      | 'line.credentials_invalid'
+      | 'line.channel_secret_invalid'
+      | 'line.channel_mismatch'
+      | 'line.unavailable',
     requestId: string,
   ) => {
     await settings.recordLineError({ code, at: clock.now() });
@@ -54,7 +59,8 @@ export const makeTestLineConnection: (
 
     const bot = await gateway.getBotInfo(access.value.channelAccessToken);
     if (!bot.ok) return failed(bot.error.code, ctx.requestId);
-    await settings.updateLineBotInfo(bot.value);
+    const botInfo = { botName: bot.value.botName, basicId: bot.value.basicId };
+    await settings.updateLineBotInfo(botInfo);
 
     const { lineChannelId } = await settings.get();
     let secretStatus: LineSecretStatus = 'no_channel_id';
@@ -64,9 +70,14 @@ export const makeTestLineConnection: (
         await settings.recordLineSecretCheck(null);
         return failed(secret.error.code, ctx.requestId);
       }
+      const channelBot = secret.ok ? secret.value.bot : null;
+      if (channelBot !== null && channelBot.botUserId !== bot.value.botUserId) {
+        await settings.recordLineSecretCheck(null);
+        return failed('line.channel_mismatch', ctx.requestId);
+      }
       // A check LINE could not answer leaves the stored result as it was.
-      if (secret.ok) await settings.recordLineSecretCheck(clock.now());
-      secretStatus = secret.ok ? 'verified' : 'unchecked';
+      if (channelBot !== null) await settings.recordLineSecretCheck(clock.now());
+      secretStatus = channelBot !== null ? 'verified' : 'unchecked';
     }
 
     await settings.recordLineError(null);
@@ -74,6 +85,6 @@ export const makeTestLineConnection: (
       requestId: ctx.requestId,
       outcome: secretStatus,
     });
-    return ok({ ...bot.value, secretStatus });
+    return ok({ ...botInfo, secretStatus });
   };
 };

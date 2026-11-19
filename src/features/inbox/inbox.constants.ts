@@ -17,6 +17,9 @@ export const STICK_TO_BOTTOM_PX = 80;
 /** Distance from the top at which older messages start loading. */
 export const LOAD_OLDER_THRESHOLD_PX = 200;
 
+/** How long a message stays highlighted after a quote jumped to it. */
+export const QUOTE_HIGHLIGHT_MS = 1600;
+
 export const copy = {
   list: {
     title: 'แชท',
@@ -54,6 +57,12 @@ export const copy = {
   media: {
     image: 'รูปภาพ',
     video: 'วิดีโอ',
+    audio: 'ข้อความเสียง',
+    audioPlay: 'เล่นข้อความเสียง',
+    audioPause: 'หยุดข้อความเสียงชั่วคราว',
+    audioProgress: 'ตำแหน่งที่เล่นของข้อความเสียง',
+    audioLoading: 'กำลังโหลดข้อความเสียง',
+    audioFailed: 'โหลดข้อความเสียงไม่สำเร็จ',
     sticker: 'สติกเกอร์',
     other: {
       audio: '[เสียง]',
@@ -65,7 +74,13 @@ export const copy = {
     loading: 'กำลังโหลดรูป',
     imageFailed: 'โหลดรูปไม่สำเร็จ',
     videoFailed: 'โหลดวิดีโอไม่สำเร็จ',
-    tooLarge: 'ไฟล์ใหญ่เกินกว่าจะเก็บได้ ดูได้ในแอป LINE',
+    problem: {
+      too_large: 'ไฟล์ใหญ่เกิน {maxMb} MB ที่ระบบเก็บได้ ดูได้ในแอป LINE',
+      unsupported_type: 'ชนิดไฟล์นี้แสดงในหน้านี้ไม่ได้ ดูได้ในแอป LINE',
+      external_source: 'ไฟล์มาจากลิงก์นอก LINE ระบบไม่ดึงไฟล์นี้ ดูได้ในแอป LINE',
+      download_failed: 'ดาวน์โหลดไฟล์จาก LINE ไม่สำเร็จ ดูได้ในแอป LINE',
+      interrupted: 'ระบบหยุดก่อนเก็บไฟล์เสร็จ ดูได้ในแอป LINE',
+    },
     play: 'เล่นวิดีโอ',
     openImage: 'เปิดรูปขนาดเต็ม',
   },
@@ -85,6 +100,11 @@ export const copy = {
     loadingOlder: 'กำลังโหลดข้อความก่อนหน้า',
     newMessages: 'ข้อความใหม่',
   },
+  welcome: {
+    label: 'ข้อความต้อนรับ',
+    sender: 'ส่งอัตโนมัติ',
+    buttonsLabel: 'ปุ่มในการ์ด: {buttons}',
+  },
   ai: {
     label: 'AI ตอบแทน',
     labelKilled: 'AI ปิดจากหน้าตั้งค่า',
@@ -92,6 +112,12 @@ export const copy = {
     noteOn: 'AI ตอบลูกค้าคนนี้ และปิดเองเมื่อคุณส่งข้อความ',
     noteKilled: 'AI ถูกปิดทั้งระบบ เปิดได้ที่ ตั้งค่า › AI ตอบแทน',
     noteUnfollowed: 'ลูกค้าเลิกติดตามแล้ว AI จึงตอบไม่ได้',
+  },
+  quote: {
+    label: 'ตอบกลับ {name}: {text}',
+    labelUnavailable: 'ตอบกลับข้อความที่ไม่พร้อมแสดง',
+    unavailable: 'ข้อความต้นทางไม่พร้อมแสดง',
+    jumpHint: 'ไปที่ข้อความต้นทาง',
   },
   message: {
     senderYou: 'คุณ',
@@ -106,6 +132,8 @@ export const copy = {
     hint: 'Enter ส่ง · Shift+Enter ขึ้นบรรทัดใหม่',
     send: 'ส่ง',
     attach: 'แนบรูปหรือวิดีโอ',
+    /** Shown as the attach button's tooltip (wide screens) and its description. */
+    attachHint: 'รูป JPEG, PNG, WebP, HEIC ไม่เกิน {imageMaxMb} MB · วิดีโอ MP4 ไม่เกิน {videoMaxMb} MB',
     waitUpload: 'ส่งได้เมื่ออัปโหลดเสร็จ',
     disabled: {
       unfollowed: 'ส่งข้อความหาลูกค้าที่เลิกติดตามแล้วไม่ได้',
@@ -120,7 +148,7 @@ export const copy = {
     cancel: 'ยกเลิกไฟล์แนบ',
     remove: 'นำไฟล์แนบออก',
     error: {
-      unsupported_type: 'รองรับเฉพาะรูป JPEG, PNG, HEIC, WebP และวิดีโอ MP4',
+      unsupported_type: 'รองรับเฉพาะรูป JPEG, PNG, WebP, HEIC และวิดีโอ MP4',
       mov_not_supported: 'วิดีโอ MOV ส่งไม่ได้ แปลงเป็น MP4 แล้วแนบใหม่',
       image_too_large: 'รูปต้องไม่เกิน {maxMb} MB ไฟล์นี้ {sizeMb} MB',
       video_too_large: 'วิดีโอต้องไม่เกิน {maxMb} MB ไฟล์นี้ {sizeMb} MB',
@@ -128,6 +156,25 @@ export const copy = {
       convertFailed: 'แปลงรูปนี้ไม่ได้ ใช้ไฟล์ JPEG หรือ PNG แทน',
       uploadFailed: 'อัปโหลดไม่สำเร็จ แนบไฟล์อีกครั้ง',
     },
+  },
+  notes: {
+    title: 'โน้ต (เห็นเฉพาะแอดมิน)',
+    hint: 'ลูกค้าและ AI ไม่เห็นโน้ตนี้',
+    inputLabel: 'โน้ตใหม่',
+    placeholder: 'พิมพ์โน้ตเกี่ยวกับลูกค้า',
+    keys: 'Enter เพิ่ม · Shift+Enter ขึ้นบรรทัดใหม่',
+    add: 'เพิ่มโน้ต',
+    counter: '{n}/{max}',
+    empty: 'ยังไม่มีโน้ต',
+    error: 'โหลดโน้ตไม่สำเร็จ',
+    saving: 'กำลังบันทึก',
+    tooLong: 'โน้ตยาวเกิน {max} ตัวอักษร',
+    addFailed: 'เพิ่มโน้ตไม่สำเร็จ ข้อความที่พิมพ์ยังอยู่ ลองอีกครั้ง',
+    delete: 'ลบโน้ตที่เขียนเมื่อ {date}',
+    deleteTitle: 'ลบโน้ตนี้ไหม',
+    deleteDescription: 'ลบแล้วกู้คืนไม่ได้',
+    deleteConfirm: 'ลบโน้ต',
+    deleted: 'ลบโน้ตแล้ว',
   },
   info: {
     title: 'ข้อมูลลูกค้า',

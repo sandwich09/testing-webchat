@@ -1,4 +1,11 @@
-import { EVENT_CODES, type EventCode, type Message, type MessageId, type Seq } from '@/core/domain';
+import {
+  EVENT_CODES,
+  NO_AI_TAP_EVENT_CODES,
+  type EventCode,
+  type Message,
+  type MessageId,
+  type Seq,
+} from '@/core/domain';
 import type { MessageRepository, NewMessage } from '@/core/ports';
 import type { Message as MessageRow, Prisma } from './generated/client';
 import { toMessage, toNewMessageRow } from './message.mapper';
@@ -43,7 +50,14 @@ export function createMessageRepository(client: PrismaClient): MessageRepository
   };
 
   const insertInboundIfAbsent: MessageRepository['insertInboundIfAbsent'] = (m) =>
-    insertIfAbsent(m, m.lineMessageId === null ? { id: m.id } : { lineMessageId: m.lineMessageId });
+    insertIfAbsent(
+      m,
+      m.lineMessageId !== null
+        ? { lineMessageId: m.lineMessageId }
+        : m.webhookEventId
+          ? { webhookEventId: m.webhookEventId }
+          : { id: m.id },
+    );
 
   const insertOutboundIfAbsent: MessageRepository['insertOutboundIfAbsent'] = (m) =>
     insertIfAbsent(m, { id: m.id });
@@ -52,11 +66,16 @@ export function createMessageRepository(client: PrismaClient): MessageRepository
     toMessage(await client.message.create({ data: toNewMessageRow(m) }));
 
   // `update` throws when the row is missing, which is a bug for these two methods.
-  const markSent: MessageRepository['markSent'] = async (id, at) =>
+  const markSent: MessageRepository['markSent'] = async (id, at, lineSentIds) =>
     toMessage(
       await client.message.update({
         where: { id },
-        data: { deliveryStatus: 'sent', deliveryError: null, sentAt: at },
+        data: {
+          deliveryStatus: 'sent',
+          deliveryError: null,
+          sentAt: at,
+          lineSentIds: { set: [...lineSentIds] },
+        },
       }),
     );
 
@@ -94,10 +113,13 @@ export function createMessageRepository(client: PrismaClient): MessageRepository
     return count === 1;
   };
 
-  const setMediaStatus: MessageRepository['setMediaStatus'] = async (id, status) => {
+  const setMediaStatus: MessageRepository['setMediaStatus'] = async (id, status, failure) => {
     const { count } = await client.message.updateMany({
       where: { id, mediaStatus: 'pending' },
-      data: { mediaStatus: status },
+      data: {
+        mediaStatus: status,
+        mediaFailure: status === 'failed' ? (failure ?? 'download_failed') : null,
+      },
     });
     return count === 1;
   };
@@ -106,7 +128,7 @@ export function createMessageRepository(client: PrismaClient): MessageRepository
   // each: a concurrent caller waits for the row lock, then no longer sees `pending`.
   const failStuckMedia: MessageRepository['failStuckMedia'] = async (contactId, staleBefore) => {
     const rows = await client.$queryRaw<{ id: string }[]>`
-      UPDATE "Message" SET "mediaStatus" = 'failed'
+      UPDATE "Message" SET "mediaStatus" = 'failed', "mediaFailure" = 'interrupted'
       WHERE "contactId" = ${contactId}::uuid
         AND "mediaStatus" = 'pending'
         AND "createdAt" < ${staleBefore}::timestamptz
@@ -129,7 +151,12 @@ export function createMessageRepository(client: PrismaClient): MessageRepository
 
   const latestInbound: MessageRepository['latestInbound'] = async (contactId) => {
     const row = await client.message.findFirst({
-      where: { contactId, direction: 'inbound' },
+      where: {
+        contactId,
+        direction: 'inbound',
+        // A plain NOT IN would also drop rows whose eventCode is NULL.
+        OR: [{ eventCode: null }, { eventCode: { notIn: [...NO_AI_TAP_EVENT_CODES] } }],
+      },
       orderBy: { seq: 'desc' },
     });
     return row ? toMessage(row) : null;
@@ -185,6 +212,19 @@ export function createMessageRepository(client: PrismaClient): MessageRepository
     return (_max.updatedSeq ?? 0n) as Seq; // brand: max of change_seq values, or 0n when none
   };
 
+  const findByLineIds: MessageRepository['findByLineIds'] = async (contactId, lineIds) => {
+    if (lineIds.length === 0) return [];
+    const ids = [...new Set(lineIds)];
+    const rows = await client.message.findMany({
+      where: {
+        contactId,
+        OR: [{ lineMessageId: { in: ids } }, { lineSentIds: { hasSome: ids } }],
+      },
+      orderBy: { seq: 'asc' },
+    });
+    return rows.map(toMessage);
+  };
+
   const countForContact: MessageRepository['countForContact'] = async (contactId) => {
     // One statement so both counts come from the same snapshot.
     const [row] = await client.$queryRaw<{ total: number; byAi: number }[]>`
@@ -235,6 +275,7 @@ export function createMessageRepository(client: PrismaClient): MessageRepository
     listBefore,
     listChangedAfter,
     maxUpdatedSeq,
+    findByLineIds,
     countForContact,
     countEventsByCode,
   };

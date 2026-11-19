@@ -5,6 +5,7 @@ import type {
   ContactId,
   DocumentId,
   KbDocumentWithText,
+  LineMessageId,
   LineUserId,
   Message,
   MessageId,
@@ -51,7 +52,7 @@ import {
   toUploadTicketDto,
   toUsageReportResponse,
 } from './to-dto';
-import { LINE_RETRY_KEY_WINDOW_MS } from '@/core/domain';
+import { LINE_RETRY_KEY_WINDOW_MS, defaultHowToText, defaultWelcomeText } from '@/core/domain';
 
 const T = new Date('2026-11-18T07:32:10.123Z');
 const T2 = new Date('2026-11-18T08:00:00.000Z');
@@ -94,11 +95,15 @@ const message = (over: Partial<Message> = {}): Message => ({
   mediaUrl: null,
   previewUrl: null,
   mediaStatus: null,
+  mediaFailure: null,
+  mediaDurationMs: null,
   stickerPackageId: null,
   stickerId: null,
   otherKind: null,
   eventCode: null,
   lineMessageId: null,
+  quotedLineMessageId: null,
+  lineSentIds: [],
   deliveryStatus: null,
   deliveryError: null,
   retryKey: null,
@@ -115,8 +120,15 @@ const settings = (over: Partial<Settings> = {}): Settings => ({
   aiDailyBudget: usd(2_000_000_000n),
   aiPoliteParticle: 'ค่ะ',
   aiInstructions: '',
+  aiName: 'มินนี่',
+  aiAnswerMode: 'knowledge_only',
   guardEnabled: true,
   guardTopics: ['เมนู', 'เวลาเปิด'],
+  howToText: '',
+  welcomeEnabled: true,
+  welcomeText: '',
+  richMenu: null,
+  richMenuError: null,
   lineConfigured: true,
   lineBotName: 'Shop',
   lineBasicId: '@shop',
@@ -208,11 +220,37 @@ describe('messages', () => {
     expect(dto).not.toHaveProperty('retryKey');
   });
 
+  it('gives the reason of failed media only, and null for every other status', () => {
+    const failed = toMessageDto(
+      message({
+        type: 'image',
+        text: null,
+        mediaStatus: 'failed',
+        mediaFailure: 'unsupported_type',
+      }),
+    );
+    expect(failed.media?.failure).toBe('unsupported_type');
+    const old = toMessageDto(
+      message({ type: 'image', text: null, mediaStatus: 'failed', mediaFailure: null }),
+    );
+    expect(old.media?.failure).toBeNull();
+    const tooLarge = toMessageDto(
+      message({ type: 'video', text: null, mediaStatus: 'too_large', mediaFailure: 'interrupted' }),
+    );
+    expect(tooLarge.media?.failure).toBeNull();
+  });
+
   it('hides the media URL until the file is ready', () => {
     const pending = toMessageDto(
       message({ type: 'image', mediaStatus: 'pending', mediaUrl: 'https://x/a.jpg', text: null }),
     );
-    expect(pending.media).toEqual({ status: 'pending', url: null, previewUrl: null });
+    expect(pending.media).toEqual({
+      status: 'pending',
+      url: null,
+      previewUrl: null,
+      durationMs: null,
+      failure: null,
+    });
     const ready = toMessageDto(
       message({
         type: 'video',
@@ -225,6 +263,25 @@ describe('messages', () => {
       status: 'ready',
       url: 'https://x/a.mp4',
       previewUrl: 'https://x/p.jpg',
+      durationMs: null,
+      failure: null,
+    });
+    const audio = toMessageDto(
+      message({
+        type: 'audio',
+        text: null,
+        mediaStatus: 'ready',
+        mediaUrl: 'https://x/a.m4a',
+        previewUrl: 'https://x/a.m4a',
+        mediaDurationMs: 4000,
+      }),
+    );
+    expect(audio.media).toEqual({
+      status: 'ready',
+      url: 'https://x/a.m4a',
+      previewUrl: 'https://x/a.m4a',
+      durationMs: 4000,
+      failure: null,
     });
     expect(messageDtoSchema.parse(ready)).toBeTruthy();
   });
@@ -285,10 +342,76 @@ describe('messages', () => {
     expect(messageDtoSchema.parse(event).eventCode).toBe('guard.blocked');
   });
 
+  it('maps the quote of an inbound message from the quoted rows of the page', () => {
+    const quoted = message({
+      id: '0193a0b1-0000-7000-8000-0000000000a1' as MessageId,
+      direction: 'outbound',
+      author: 'ai',
+      text: 'บรรทัดหนึ่ง\nบรรทัดสอง',
+      lineMessageId: null,
+      lineSentIds: ['L-9' as LineMessageId],
+    });
+    const audio = message({
+      id: '0193a0b1-0000-7000-8000-0000000000a2' as MessageId,
+      type: 'other',
+      otherKind: 'audio',
+      text: null,
+      lineMessageId: 'L-audio' as LineMessageId,
+    });
+    const quoting = (id: string, q: string | null) =>
+      message({
+        id: id as MessageId,
+        lineMessageId: `in-${id}` as LineMessageId,
+        quotedLineMessageId: q as LineMessageId | null,
+      });
+    const r = getMessagesResponseSchema.parse(
+      toGetMessagesResponse({
+        messages: [
+          quoting('0193a0b1-0000-7000-8000-0000000000b1', 'L-9'),
+          quoting('0193a0b1-0000-7000-8000-0000000000b2', 'L-audio'),
+          quoting('0193a0b1-0000-7000-8000-0000000000b3', 'L-gone'),
+          quoting('0193a0b1-0000-7000-8000-0000000000b4', null),
+        ],
+        quoted: [quoted, audio],
+        hasOlder: false,
+        hasMore: false,
+        highWater: seq(7n),
+      }),
+    );
+    expect(r.messages.map((m) => m.quote)).toEqual([
+      {
+        available: true,
+        messageId: quoted.id,
+        author: 'ai',
+        type: 'text',
+        textPreview: 'บรรทัดหนึ่ง บรรทัดสอง',
+        mediaKind: null,
+      },
+      {
+        available: true,
+        messageId: audio.id,
+        author: 'customer',
+        type: 'other',
+        textPreview: null,
+        mediaKind: 'audio',
+      },
+      {
+        available: false,
+        messageId: null,
+        author: null,
+        type: null,
+        textPreview: null,
+        mediaKind: null,
+      },
+      null,
+    ]);
+  });
+
   it('maps the messages response', () => {
     const r = getMessagesResponseSchema.parse(
       toGetMessagesResponse({
         messages: [message()],
+        quoted: [],
         hasOlder: null,
         hasMore: true,
         highWater: seq(7n),
@@ -308,7 +431,16 @@ describe('settings and system', () => {
 
   it('maps SettingsDto with money strings, guard fields and the poll interval', () => {
     const dto = settingsDtoSchema.parse(toSettingsDto({ settings: settings(), ...base }));
-    expect(dto.ai).toMatchObject({ dailyBudgetUsd: '2.00', todayCostUsd: '0.012345' });
+    expect(dto.ai).toMatchObject({
+      dailyBudgetUsd: '2.00',
+      todayCostUsd: '0.012345',
+      name: 'มินนี่',
+      answerMode: 'knowledge_only',
+    });
+    expect(
+      settingsDtoSchema.parse(toSettingsDto({ settings: settings({ aiName: null }), ...base })).ai
+        .name,
+    ).toBeNull();
     expect(dto.guard).toEqual({
       enabled: true,
       topics: ['เมนู', 'เวลาเปิด'],
@@ -316,6 +448,50 @@ describe('settings and system', () => {
     });
     expect(dto.client).toEqual({ pollIntervalMs: 2000 });
     expect(dto.line.status).toBe('connected');
+  });
+
+  it('maps the rich menu and the welcome card with their default texts', () => {
+    const empty = settingsDtoSchema.parse(toSettingsDto({ settings: settings(), ...base }));
+    expect(empty.richMenu).toEqual({
+      published: false,
+      publishedAt: null,
+      lastError: null,
+      howToText: '',
+      howToDefault: defaultHowToText('ค่ะ'),
+    });
+    expect(empty.welcome).toEqual({
+      enabled: true,
+      text: '',
+      defaultText: defaultWelcomeText('ค่ะ'),
+      accountName: 'Shop',
+    });
+    const set = settingsDtoSchema.parse(
+      toSettingsDto({
+        settings: settings({
+          aiPoliteParticle: 'ครับ',
+          richMenu: { id: 'richmenu-1', publishedAt: T },
+          richMenuError: { code: 'line.rich_menu_failed', at: T },
+          howToText: 'ลอง',
+          welcomeEnabled: false,
+          welcomeText: 'สวัสดี',
+          lineBotName: null,
+        }),
+        ...base,
+      }),
+    );
+    expect(set.richMenu).toEqual({
+      published: true,
+      publishedAt: '2026-11-18T07:32:10.123Z',
+      lastError: { code: 'line.rich_menu_failed', at: '2026-11-18T07:32:10.123Z' },
+      howToText: 'ลอง',
+      howToDefault: defaultHowToText('ครับ'),
+    });
+    expect(set.welcome).toMatchObject({
+      enabled: false,
+      text: 'สวัสดี',
+      accountName: 'Test webchat',
+    });
+    expect(JSON.stringify(set)).not.toContain('richmenu-1');
   });
 
   it.each([

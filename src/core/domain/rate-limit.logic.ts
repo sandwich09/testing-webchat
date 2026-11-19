@@ -18,10 +18,6 @@ export const isRateLimited: (bucket: { count: number }, limit: number) => boolea
   limit,
 ) => bucket.count > limit;
 
-/** Use after `peek`: the bucket count does not include the current attempt yet. */
-export const isAtLimit: (bucket: { count: number }, limit: number) => boolean = (bucket, limit) =>
-  bucket.count >= limit;
-
 export const retryAfterSeconds: (windowStart: Date, windowMs: number, now: Date) => number = (
   windowStart,
   windowMs,

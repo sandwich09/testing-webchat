@@ -1,13 +1,17 @@
 import { z } from 'zod';
 import { ADMIN_TEXT_MAX_CHARS, MESSAGE_PAGE_LIMIT } from '@/core/domain';
-import { idSchema, messageDtoSchema, seqStringSchema, uploadIdSchema } from './dto.contract';
+import { messageDtoSchema, pathIdSchema, seqStringSchema, uploadIdSchema } from './dto.contract';
 
 /** Path of GET and POST /api/contacts/:id/messages. */
-export const messagesParamsSchema = z.strictObject({ id: idSchema });
+export const messagesParamsSchema = z.strictObject({ id: pathIdSchema('contact.not_found') });
 export type MessagesParams = z.infer<typeof messagesParamsSchema>;
 
 /** Path of POST /api/contacts/:id/messages/:messageId/retry. Empty body, response 200 MessageDto. */
-export const retryMessageParamsSchema = z.strictObject({ id: idSchema, messageId: idSchema });
+/** RetryMessage answers message.not_found for a message of another or unknown contact. */
+export const retryMessageParamsSchema = z.strictObject({
+  id: pathIdSchema('message.not_found'),
+  messageId: pathIdSchema('message.not_found'),
+});
 export type RetryMessageParams = z.infer<typeof retryMessageParamsSchema>;
 export const retryMessageResponseSchema = messageDtoSchema;
 

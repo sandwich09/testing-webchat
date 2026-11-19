@@ -20,6 +20,23 @@ const setup = (overrides: Partial<JobDeps> = {}) => {
       calls.push(`ai:${input.contactId}:${input.triggerMessageId}:${c.requestId}`);
       return Promise.resolve(ok({ outcome: 'sent' } as never));
     },
+    handleRichMenuAction: (input, c) => {
+      calls.push(`tap:${input.action}:${input.tapMessageId}:${c.requestId}`);
+      const aiReply =
+        input.action === 'ai_on'
+          ? { contactId: input.contactId, triggerMessageId: input.tapMessageId }
+          : null;
+      return Promise.resolve(
+        ok({
+          outcome: aiReply === null ? ('how_to_sent' as const) : ('ai_started' as const),
+          aiReply,
+        }),
+      );
+    },
+    sendWelcome: (input, c) => {
+      calls.push(`welcome:${input.contactId}:${input.replyToken}:${c.requestId}`);
+      return Promise.resolve(ok({ outcome: 'disabled' as const }));
+    },
     extractDocument: (job) => {
       calls.push(`extract:${job.documentId}:${String(job.bytes.byteLength)}:${job.model}`);
       return Promise.resolve();
@@ -43,6 +60,36 @@ describe('scheduleLineFollowUps', () => {
     expect(tasks).toHaveLength(2);
     for (const t of tasks) await t();
     expect(calls).toEqual(['media:m1:req-7', 'ai:c1:m2:req-7']);
+  });
+
+  it('runs a tap, then GenerateAiReply in the same job only when the tap starts the AI', async () => {
+    const { jobs, tasks, calls } = setup();
+    jobs.scheduleLineFollowUps(
+      [
+        {
+          kind: 'rich_menu_action',
+          contactId: 'c1' as ContactId,
+          action: 'ai_on',
+          tapMessageId: 'm1' as MessageId,
+        },
+        {
+          kind: 'rich_menu_action',
+          contactId: 'c1' as ContactId,
+          action: 'how_to',
+          tapMessageId: 'm2' as MessageId,
+        },
+        { kind: 'welcome', contactId: 'c2' as ContactId, replyToken: 'rt-1' },
+      ],
+      ctx,
+    );
+    expect(tasks).toHaveLength(3);
+    for (const t of tasks) await t();
+    expect(calls).toEqual([
+      'tap:ai_on:m1:req-7',
+      'ai:c1:m1:req-7',
+      'tap:how_to:m2:req-7',
+      'welcome:c2:rt-1:req-7',
+    ]);
   });
 
   it('schedules nothing for an empty list', () => {

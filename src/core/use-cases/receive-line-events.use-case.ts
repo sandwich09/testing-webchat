@@ -6,16 +6,35 @@ import type {
   LineAccessToken,
   LineEvent,
   LineUserId,
+  MediaFailure,
   MessageId,
+  RichMenuAction,
 } from '@/core/domain';
-import { err, ok, previewOf, replyTokenExpiry } from '@/core/domain';
+import {
+  RICH_MENU_LABELS,
+  err,
+  ok,
+  parsePostbackData,
+  previewOf,
+  replyTokenExpiry,
+} from '@/core/domain';
 import type { NewMessage } from '@/core/ports';
+import { makeHitRateLimit } from './shared/hit-rate-limit';
 import { makeLoadLineAccess } from './shared/load-line-access';
 import type { AllPorts, RequestContext, UseCase, UseCaseConfig } from './types';
 
 export type FollowUpJob =
   | { kind: 'store_media'; messageId: MessageId }
-  | { kind: 'ai_reply'; contactId: ContactId; triggerMessageId: MessageId };
+  | { kind: 'ai_reply'; contactId: ContactId; triggerMessageId: MessageId }
+  /** A rich menu or welcome card tap, stored as `tapMessageId` (HandleRichMenuAction). */
+  | {
+      kind: 'rich_menu_action';
+      contactId: ContactId;
+      action: RichMenuAction;
+      tapMessageId: MessageId;
+    }
+  /** A follow event with a reply token: the welcome card (SendWelcome), reply only. */
+  | { kind: 'welcome'; contactId: ContactId; replyToken: string };
 
 export type ReceiveLineEventsInput = { rawBody: string; signature: string | null };
 
@@ -32,9 +51,18 @@ export type ReceiveLineEventsDeps = Pick<
   | 'ids'
   | 'clock'
   | 'logger'
+  | 'rateLimits'
+  | 'hasher'
 >;
 
-type ContactEvent = Extract<LineEvent, { kind: 'message' | 'follow' | 'unfollow' }>;
+type ContactEvent = Extract<LineEvent, { kind: 'message' | 'follow' | 'unfollow' | 'postback' }>;
+type PostbackEvent = Extract<LineEvent, { kind: 'postback' }>;
+
+const TAP_EVENT_CODES: Record<RichMenuAction, EventCode> = {
+  ai_on: 'customer.tapped_ai_on',
+  admin: 'customer.tapped_admin',
+  how_to: 'customer.tapped_how_to',
+};
 type MessageEvent = Extract<LineEvent, { kind: 'message' }>;
 
 const errorNameOf = (e: unknown): string => (e instanceof Error ? e.name : 'UnknownError');
@@ -51,8 +79,15 @@ const typedFields = (
 ): Pick<
   NewMessage,
   'type' | 'text' | 'mediaStatus' | 'stickerPackageId' | 'stickerId' | 'otherKind'
-> => {
-  const none = { text: null, mediaStatus: null, stickerPackageId: null, stickerId: null };
+> & { mediaDurationMs: number | null; mediaFailure: MediaFailure | null } => {
+  const none = {
+    text: null,
+    mediaStatus: null,
+    mediaFailure: null,
+    stickerPackageId: null,
+    stickerId: null,
+    mediaDurationMs: null,
+  };
   switch (m.type) {
     case 'text':
       return { ...none, type: 'text', text: m.text, otherKind: null };
@@ -63,6 +98,17 @@ const typedFields = (
         ...none,
         type: m.type,
         mediaStatus: m.hostedByLine ? 'pending' : 'failed',
+        mediaFailure: m.hostedByLine ? null : 'external_source',
+        otherKind: null,
+      };
+    case 'audio':
+      // Same rule as images: audio hosted elsewhere is never fetched.
+      return {
+        ...none,
+        type: 'audio',
+        mediaStatus: m.hostedByLine ? 'pending' : 'failed',
+        mediaFailure: m.hostedByLine ? null : 'external_source',
+        mediaDurationMs: m.durationMs,
         otherKind: null,
       };
     case 'sticker':
@@ -88,9 +134,10 @@ export const makeReceiveLineEvents: (
   | 'line.credentials_unreadable'
   | 'webhook.signature_invalid'
   | 'db.unavailable'
-> = (deps) => {
+> = (deps, config) => {
   const { settings, gateway, webhookEvents, contacts, messages, ids, clock, logger } = deps;
   const loadLineAccess = makeLoadLineAccess(deps);
+  const hitRateLimit = makeHitRateLimit(deps, config);
 
   /**
    * Tells an outage from per-event failures once every event of a batch has failed. A repository
@@ -115,6 +162,7 @@ export const makeReceiveLineEvents: (
     previewUrl: null,
     eventCode: null,
     lineMessageId: event.message.lineMessageId,
+    quotedLineMessageId: event.message.type === 'text' ? event.message.quotedLineMessageId : null,
     deliveryStatus: null,
     deliveryError: null,
     retryKey: null,
@@ -148,6 +196,19 @@ export const makeReceiveLineEvents: (
       createdAt: at,
       sentAt: null,
     });
+  };
+
+  /**
+   * A message or tap from a contact stored as `unfollowed` proves the customer is a friend again
+   * (an unfollow, or a follow that never arrived, was lost or out of order): the status goes back
+   * to following with the event's time and the same event line as a follow. setFollowStatus
+   * compares event times, so a message older than the unfollow changes nothing.
+   */
+  const refollowOnActivity = async (contact: Contact, at: Date): Promise<void> => {
+    if (contact.followStatus !== 'unfollowed') return;
+    if (await contacts.setFollowStatus(contact.id, 'following', at)) {
+      await insertContactEvent(contact.id, 'contact.followed', at);
+    }
   };
 
   /**
@@ -213,13 +274,14 @@ export const makeReceiveLineEvents: (
     // the first delivery may have failed before returning the job. StoreInboundMedia finishes a
     // message once, so a second job is harmless.
     if (
-      (message.type === 'image' || message.type === 'video') &&
+      (message.type === 'image' || message.type === 'video' || message.type === 'audio') &&
       message.mediaStatus === 'pending'
     ) {
       followUps.push({ kind: 'store_media', messageId: message.id });
     }
     // Same lineMessageId already stored (redelivery after a crash): no second unread or ai_reply.
     if (!inserted) return;
+    await refollowOnActivity(contact, event.timestamp);
 
     const expiry = replyTokenExpiry(event.timestamp, event.isRedelivery);
     await contacts.recordInbound(contact.id, {
@@ -229,10 +291,95 @@ export const makeReceiveLineEvents: (
       replyTokenExpiresAt: expiry && event.replyToken !== null ? expiry : null,
     });
     // The kill switch and the message type are checked by GenerateAiReply after debouncing,
-    // which also raises the non-text handoff.
-    if (contact.aiEnabled) {
+    // which also raises the non-text handoff. The switch is read again after the insert: a
+    // "คุยกับ AI" tap job turns it on and then reads the latest message, so either this read
+    // sees it on (this message gets its own job) or that job's read finds this message.
+    const fresh = await contacts.findById(contact.id);
+    if (fresh?.aiEnabled === true) {
       followUps.push({ kind: 'ai_reply', contactId: contact.id, triggerMessageId: message.id });
     }
+  };
+
+  /**
+   * A tap on a button of the rich menu or the welcome card. The tap is kept as the inbound text
+   * LINE shows in the chat (the button title, `displayText`) with the event code of the button,
+   * so the inbox shows an event line and the AI history a marker. The reply is a job.
+   */
+  const handlePostback = async (
+    event: PostbackEvent,
+    token: LineAccessToken,
+    ctx: RequestContext,
+    batch: Batch,
+  ): Promise<void> => {
+    const action = parsePostbackData(event.data);
+    if (action === null) {
+      // Data this app did not make (another menu, an older version): ignored, never echoed.
+      logger.log('info', 'line.postback.ignored', { requestId: ctx.requestId });
+      return;
+    }
+    const { contact } = await ensureContact(event, token, ctx, true);
+    const limit = await hitRateLimit('rich_menu_tap', contact.id, clock.now());
+    if (limit.limited) {
+      logger.log('info', 'line.postback.rate_limited', {
+        requestId: ctx.requestId,
+        contactId: contact.id,
+        reason: action,
+      });
+      return;
+    }
+    // Keyed on the webhook event: a redelivery that raced past webhookEvents.has stores nothing
+    // and starts no second reply.
+    const { inserted, message } = await messages.insertInboundIfAbsent({
+      id: ids.messageId(),
+      webhookEventId: event.webhookEventId,
+      contactId: contact.id,
+      direction: 'inbound',
+      author: 'customer',
+      type: 'text',
+      text: RICH_MENU_LABELS[action].title,
+      mediaUrl: null,
+      previewUrl: null,
+      mediaStatus: null,
+      stickerPackageId: null,
+      stickerId: null,
+      otherKind: null,
+      eventCode: TAP_EVENT_CODES[action],
+      lineMessageId: null,
+      quotedLineMessageId: null,
+      deliveryStatus: null,
+      deliveryError: null,
+      retryKey: null,
+      createdAt: event.timestamp,
+      sentAt: null,
+      mediaDurationMs: null,
+    });
+    batch.stored = true;
+    if (!inserted) {
+      logger.log('info', 'line.webhook.event_duplicate', {
+        requestId: ctx.requestId,
+        lineEventType: event.kind,
+      });
+      return;
+    }
+    await refollowOnActivity(contact, event.timestamp);
+    const expiry = replyTokenExpiry(event.timestamp, event.isRedelivery);
+    await contacts.recordInbound(contact.id, {
+      at: event.timestamp,
+      preview: previewOf(message),
+      replyToken: expiry ? event.replyToken : null,
+      replyTokenExpiresAt: expiry && event.replyToken !== null ? expiry : null,
+    });
+    logger.log('info', 'line.postback.received', {
+      requestId: ctx.requestId,
+      contactId: contact.id,
+      reason: action,
+    });
+    batch.followUps.push({
+      kind: 'rich_menu_action',
+      contactId: contact.id,
+      action,
+      tapMessageId: message.id,
+    });
   };
 
   const handleEvent = async (
@@ -250,18 +397,32 @@ export const makeReceiveLineEvents: (
         return;
       case 'follow': {
         const { contact, created } = await ensureContact(event, token, ctx, true);
-        if (created || contact.followStatus === 'unfollowed') {
-          await contacts.setFollowStatus(contact.id, 'following', event.timestamp);
+        if (
+          (created || contact.followStatus === 'unfollowed') &&
+          (await contacts.setFollowStatus(contact.id, 'following', event.timestamp))
+        ) {
           batch.stored = true;
           await insertContactEvent(contact.id, 'contact.followed', event.timestamp);
+        }
+        // Every follow (a new friend or an unblock) gets the welcome card once; a redelivered
+        // follow has no reply token, and the card is never pushed.
+        if (event.replyToken !== null) {
+          batch.followUps.push({
+            kind: 'welcome',
+            contactId: contact.id,
+            replyToken: event.replyToken,
+          });
         }
         return;
       }
       case 'unfollow': {
         // LINE serves no profile of a user who has just blocked the account.
         const { contact } = await ensureContact(event, token, ctx, false);
-        if (contact.followStatus === 'following') {
-          await contacts.setFollowStatus(contact.id, 'unfollowed', event.timestamp);
+        // setFollowStatus ignores an unfollow older than the latest follow or customer message.
+        if (
+          contact.followStatus === 'following' &&
+          (await contacts.setFollowStatus(contact.id, 'unfollowed', event.timestamp))
+        ) {
           batch.stored = true;
           await insertContactEvent(contact.id, 'contact.unfollowed', event.timestamp);
         }
@@ -269,6 +430,9 @@ export const makeReceiveLineEvents: (
       }
       case 'message':
         await handleMessage(event, token, ctx, batch);
+        return;
+      case 'postback':
+        await handlePostback(event, token, ctx, batch);
         return;
     }
   };

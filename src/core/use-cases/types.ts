@@ -3,6 +3,7 @@ import type {
   AccessTokenSigner,
   ChatModel,
   Clock,
+  ContactNoteRepository,
   ContactRepository,
   ContentHasher,
   DocumentExtractor,
@@ -56,6 +57,7 @@ export interface AllPorts {
   knowledgeSource: KnowledgeSource;
   storage: FileStorage;
   contacts: ContactRepository;
+  notes: ContactNoteRepository;
   messages: MessageRepository;
   settings: SettingsRepository;
   knowledge: KnowledgeRepository;

@@ -2,6 +2,7 @@ export * from './access-token-signer.port';
 export * from './chat-model.port';
 export * from './clock.port';
 export * from './contact.repository.port';
+export * from './contact-note.repository.port';
 export * from './content-hasher.port';
 export * from './document-extractor.port';
 export * from './file-storage.port';

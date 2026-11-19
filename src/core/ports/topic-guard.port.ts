@@ -20,7 +20,7 @@ export interface TopicGuardRequest {
 }
 
 /**
- * Checks whether the latest customer message is inside the shop's topics, with a model call of its
+ * Checks whether the latest customer message is inside the admins' topics, with a model call of its
  * own (ADR 0020). Every answer from the API, refusals and truncated answers included, is `ok` with
  * usage; an error means the API gave no answer.
  */

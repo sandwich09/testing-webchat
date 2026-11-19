@@ -64,6 +64,8 @@ const ERROR_MESSAGES: Record<ErrorMessageCode, MessageEntry> = {
   'line.credentials_invalid': 'Channel access token ไม่ถูกต้อง ตรวจค่าที่คัดลอกมาอีกครั้ง',
   'line.channel_secret_invalid':
     'Channel ID กับ Channel secret ไม่ตรงกัน ตรวจว่าคัดลอกทั้งสองค่ามาจาก channel เดียวกัน',
+  'line.channel_mismatch':
+    'Channel access token เป็นของ channel อื่น ไม่ใช่ channel ของ Channel ID นี้ คัดลอกทั้งสามค่าจาก channel เดียวกันใน LINE Developers Console',
   'line.unauthorized': 'ส่งไม่สำเร็จ Channel access token ใช้ไม่ได้ ตรวจที่ ตั้งค่า › LINE Official Account',
   'line.quota_exceeded': 'ส่งไม่สำเร็จ โควตาข้อความของ LINE เต็ม',
   'line.rate_limited': 'ส่งไม่สำเร็จ LINE รับคำขอถี่เกินไป รอสักครู่แล้วกด "ส่งอีกครั้ง"',
@@ -79,6 +81,10 @@ const ERROR_MESSAGES: Record<ErrorMessageCode, MessageEntry> = {
   'line.content_unavailable': null,
   'line.content_not_ready': null,
   'line.loading_failed': null,
+  'line.rich_menu_failed':
+    'LINE ไม่รับคำขอ rich menu ตรวจว่า channel นี้ใช้ Messaging API ได้ แล้วลองอีกครั้ง',
+  'line.rich_menu_conflict':
+    'มีการ publish rich menu อีกครั้งพร้อมกัน rich menu ที่แสดงอยู่คือรายการที่ publish สำเร็จ',
   'line.send_interrupted': 'ส่งไม่สำเร็จ ระบบหยุดทำงานก่อนรู้ผลการส่ง กด "ส่งอีกครั้ง"',
 
   // Contacts and messages
@@ -90,20 +96,23 @@ const ERROR_MESSAGES: Record<ErrorMessageCode, MessageEntry> = {
     'ส่งไม่สำเร็จ ส่งอีกครั้งไม่ได้แล้วเพราะเกิน {hours} ชั่วโมงหลังส่งครั้งแรก พิมพ์ข้อความแล้วส่งใหม่',
   'message.id_conflict': 'ส่งไม่สำเร็จ คัดลอกข้อความแล้วส่งใหม่',
   'message.rate_limited': 'ส่งถี่เกินไป รอสักครู่แล้วส่งอีกครั้ง ข้อความที่พิมพ์ยังอยู่',
+  'note.not_found': 'ไม่พบโน้ตนี้ อาจถูกลบไปแล้ว',
+  'note.rate_limited': 'เพิ่มโน้ตถี่เกินไป รอสักครู่แล้วเพิ่มอีกครั้ง ข้อความที่พิมพ์ยังอยู่',
 
   // Uploads and media
   'upload.rate_limited': 'อัปโหลดถี่เกินไป รอสักครู่แล้วแนบใหม่',
-  'upload.type_not_allowed': 'ส่งไฟล์ชนิดนี้ไม่ได้ ใช้รูป JPEG หรือ PNG หรือวิดีโอ MP4',
+  'upload.type_not_allowed': 'ส่งไฟล์ชนิดนี้ไม่ได้ รองรับรูป JPEG, PNG, WebP, HEIC และวิดีโอ MP4',
   'upload.too_large':
     'ไฟล์ใหญ่เกินไป รูปต้องไม่เกิน {imageMaxMb} MB และวิดีโอไม่เกิน {videoMaxMb} MB ไฟล์นี้ {size} MB',
   'upload.not_found': 'ไฟล์ที่แนบอัปโหลดไม่ครบ แนบไฟล์ใหม่อีกครั้ง',
   'upload.content_mismatch': 'เนื้อไฟล์ไม่ตรงกับชนิดของไฟล์ แนบไฟล์อื่น',
+  'upload.incomplete': 'ไฟล์อัปโหลดไปไม่ครบ ลองแนบไฟล์อีกครั้ง',
   'upload.signature_invalid': 'อัปโหลดไม่สำเร็จ แนบไฟล์ใหม่อีกครั้ง',
   'upload.expired': 'สิทธิ์อัปโหลดหมดเวลา แนบไฟล์ใหม่อีกครั้ง',
   'media.too_large': {
     default: 'ไฟล์ใหญ่เกินกว่าที่ระบบเก็บได้',
     inbound: 'ไฟล์ใหญ่เกินกว่าที่ระบบเก็บได้',
-    outbound: 'ไฟล์ใหญ่เกินไป แนบไฟล์ที่เล็กกว่า',
+    outbound: 'ไฟล์ใหญ่เกินไป รูปต้องไม่เกิน {imageMaxMb} MB และวิดีโอไม่เกิน {videoMaxMb} MB',
   },
   'media.not_found': null,
 
@@ -173,7 +182,7 @@ export const ERROR_MESSAGE_CODES = Object.keys(ERROR_MESSAGES) as ErrorMessageCo
 const HANDOFF_REASON_TEXT: Record<HandoffReason, string> = {
   customer_sent_image: 'ลูกค้าส่งรูป AI จึงหยุดรอแอดมิน',
   customer_sent_video: 'ลูกค้าส่งวิดีโอ AI จึงหยุดรอแอดมิน',
-  customer_sent_non_text: 'ลูกค้าส่งข้อความที่ไม่ใช่ตัวอักษร AI จึงหยุดรอแอดมิน',
+  customer_sent_non_text: 'ลูกค้าส่งข้อความที่ไม่ใช่ตัวอักษร เช่น เสียงหรือสติกเกอร์ AI จึงหยุดรอแอดมิน',
   budget_reached: 'งบ AI ของวันนี้เต็ม',
   ai_not_in_knowledge: 'AI ไม่พบคำตอบในคลังความรู้ จึงหยุดรอแอดมิน',
   ai_needs_human_action: 'ลูกค้าขอเรื่องที่ต้องให้คนจัดการ AI จึงหยุดรอแอดมิน',
@@ -181,6 +190,8 @@ const HANDOFF_REASON_TEXT: Record<HandoffReason, string> = {
   ai_other: 'AI ตอบเรื่องนี้ไม่ได้ จึงหยุดรอแอดมิน',
   ai_failed: 'AI ตอบไม่สำเร็จ จึงหยุดรอแอดมิน ดูรายละเอียดที่ ตั้งค่า › สถานะระบบ',
   ai_timeout: 'AI ตอบไม่ทันเวลา จึงหยุดรอแอดมิน',
+  customer_asked_admin: 'ลูกค้ากดปุ่มคุยกับแอดมิน AI ตอบแทนจึงปิด',
+  ai_unavailable: 'ลูกค้ากดปุ่มคุยกับ AI ขณะที่ AI ปิดทั้งระบบ จึงรอแอดมิน',
 };
 
 /** Text for a handoff reason the browser does not know. */
@@ -203,6 +214,10 @@ const EVENT_TEXT: Record<
   'guard.blocked': 'นอกขอบเขตหัวข้อ AI จึงไม่ตอบ',
   'contact.followed': 'ลูกค้าเพิ่มเพื่อน',
   'contact.unfollowed': 'ลูกค้าเลิกติดตามแล้ว',
+  'customer.tapped_ai_on': 'ลูกค้ากดปุ่ม คุยกับ AI',
+  'customer.tapped_admin': 'ลูกค้ากดปุ่ม คุยกับแอดมิน',
+  'customer.tapped_how_to': 'ลูกค้ากดปุ่ม วิธีทดสอบ',
+  'welcome.sent': 'ส่งข้อความต้อนรับแล้ว',
 };
 
 /**

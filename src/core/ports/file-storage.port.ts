@@ -7,7 +7,10 @@ export type UploadTarget =
       key: StorageKey;
       contentType: string;
       maxSizeBytes: number;
-      /** Signed URL of PUT /api/local-storage/*key. */
+      /**
+       * Signed path of PUT /api/local-storage/*key, relative to the app (no origin), so the
+       * browser PUTs to the origin it is on, whichever domain that is.
+       */
       url: string;
       /** At least Content-Type. */
       headers: Record<string, string>;
@@ -31,10 +34,14 @@ export interface StoredObject {
 }
 
 export interface FileStorage {
+  /**
+   * `sizeBytes` is the exact size of the file the ticket is for (the target's maxSizeBytes). The
+   * local disk accepts a PUT of exactly that many bytes; Vercel Blob accepts at most that many.
+   */
   issueUpload(spec: {
     key: StorageKey;
     contentType: string;
-    maxSizeBytes: number;
+    sizeBytes: number;
     expiresAt: Date;
   }): Promise<Result<UploadTarget, 'storage.unavailable'>>;
 
@@ -63,7 +70,11 @@ export interface FileStorage {
     >
   >;
 
-  /** Writes a file the browser PUT. Used only by the local disk adapter. */
+  /**
+   * Writes a file the browser PUT. Used only by the local disk adapter. A body longer than the
+   * signed size is `media.too_large`; a shorter one (cut on the way) is `upload.incomplete` and
+   * is not kept.
+   */
   acceptSignedPut(
     key: StorageKey,
     query: { exp: string; sig: string },
@@ -76,6 +87,7 @@ export interface FileStorage {
       | 'upload.signature_invalid'
       | 'upload.expired'
       | 'upload.content_mismatch'
+      | 'upload.incomplete'
       | 'media.too_large'
       | 'storage.unavailable'
     >

@@ -9,9 +9,13 @@ on:
 permissions:
   contents: read
 
+# A run already in progress is never cancelled: each pushed commit that starts gets a result, so
+# a failing check stays visible on that commit. GitHub still keeps one pending run per group and
+# drops an older pending one, which is why the destructive check scans every migration file and
+# the deploy job deploys only the commit that is still the head of main.
 concurrency:
   group: ci-main
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   TZ: UTC
@@ -102,10 +106,21 @@ jobs:
       - name: Trigger Vercel Deploy Hook
         env:
           DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+          GH_TOKEN: ${{ github.token }}
+          TESTED_SHA: ${{ github.sha }}
         # Without the secret the checks above still gate main; the deploy starts once it is set.
+        # The hook builds whatever main is when it is called, so it is called only while main is
+        # still the commit these jobs tested; a newer commit's own run deploys that one.
         run: |
           if [ -z "$DEPLOY_HOOK_URL" ]; then
             echo "::notice::VERCEL_DEPLOY_HOOK_URL is not set, so the deploy is skipped."
+            exit 0
+          fi
+          MAIN_SHA=$(curl --fail --silent --show-error \
+            -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github.sha" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/commits/main")
+          if [ "$MAIN_SHA" != "$TESTED_SHA" ]; then
+            echo "::notice::main is now $MAIN_SHA, not the tested $TESTED_SHA, so the deploy is skipped."
             exit 0
           fi
           curl --fail --silent --show-error -X POST "$DEPLOY_HOOK_URL" > /dev/null

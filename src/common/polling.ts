@@ -12,7 +12,7 @@ import {
   type QueryFunctionContext,
   type QueryKey,
 } from '@tanstack/react-query';
-import { useEffect, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useSyncExternalStore } from 'react';
 
 import {
   isClientError,
@@ -27,19 +27,29 @@ import { qk, qkAll } from '@/common/query-keys';
 import type { ContactDto, ContactFilter } from '@/contracts';
 
 // ---------------------------------------------------------------------------
-// Poll controller: one failure counter for the whole page (one banner), and the reload generation
-// that tells every polled list to drop its cursor and load its first page again.
+// Poll controller: the failures of each polled query (its own back-off; the banner shows while any
+// one keeps failing), and the reload generation that tells every polled list to load its first
+// page again and merge it into what it holds.
 // ---------------------------------------------------------------------------
 
-export type PollSnapshot = { readonly failures: number; readonly generation: number };
+export type PollSnapshot = {
+  /** The most failures in a row of any one polled query: what the banner shows from. */
+  readonly failures: number;
+  readonly generation: number;
+};
 
 export type PollController = {
   getSnapshot: () => PollSnapshot;
   subscribe: (listener: () => void) => () => void;
-  /** A polled query failed (network, 5xx or an answer that broke the contract). */
-  recordFailure: () => void;
-  /** A polled query succeeded. After failures this asks every list to reload. */
-  recordSuccess: () => void;
+  /** A round of the query `keyHash` failed (network, 5xx or an answer that broke the contract). */
+  recordFailure: (keyHash: string) => void;
+  /**
+   * A round of the query `keyHash` succeeded. When that query had failed, the connection is back,
+   * so every list reloads, at most once per recovery and at most once per minimum gap.
+   */
+  recordSuccess: (keyHash: string) => void;
+  /** Failures in a row of one query, for its own back-off. */
+  failuresOf: (keyHash: string) => number;
   /** The tab became visible again: every list reloads its first page. */
   requestReload: () => void;
   /** Whether a list loaded before the latest reload request must load its first page again. */
@@ -48,25 +58,56 @@ export type PollController = {
   markLoaded: (keyHash: string, generation: number) => void;
   /** Runs on every reload request; the shell sets it to refetch the polled queries. */
   setReloadHandler: (handler: (() => void) | null) => void;
+  /** Shortest time between two reloads after a recovery: the base polling interval. */
+  setMinReloadGap: (ms: number) => void;
   /** Back to the start, for a new session after a 401 or logout. */
   reset: () => void;
 };
 
 const INITIAL_SNAPSHOT: PollSnapshot = { failures: 0, generation: 0 };
 
-export function createPollController(): PollController {
+export type PollControllerDeps = {
+  now: () => number;
+  setTimer: (run: () => void, ms: number) => unknown;
+  clearTimer: (timer: unknown) => void;
+};
+
+const browserTimers: PollControllerDeps = {
+  now: () => Date.now(),
+  setTimer: (run, ms) => setTimeout(run, ms),
+  clearTimer: (timer) => {
+    clearTimeout(timer as ReturnType<typeof setTimeout>); // only values setTimer returned
+  },
+};
+
+export function createPollController(deps: PollControllerDeps = browserTimers): PollController {
   let snapshot = INITIAL_SNAPSHOT;
   const listeners = new Set<() => void>();
   const loadedAt = new Map<string, number>();
+  const failures = new Map<string, number>();
   let reloadHandler: (() => void) | null = null;
+  let minReloadGapMs = 0;
+  let lastReloadAt = Number.NEGATIVE_INFINITY;
+  let pendingReload: unknown = null;
 
   const publish = (next: PollSnapshot): void => {
     snapshot = next;
     for (const listener of listeners) listener();
   };
-  const reload = (failures: number): void => {
-    publish({ failures, generation: snapshot.generation + 1 });
+  const worst = (): number => Math.max(0, ...failures.values());
+  const reload = (): void => {
+    if (pendingReload !== null) deps.clearTimer(pendingReload);
+    pendingReload = null;
+    lastReloadAt = deps.now();
+    publish({ failures: worst(), generation: snapshot.generation + 1 });
     reloadHandler?.();
+  };
+  /** A recovery: at once when the last reload is old enough, otherwise once when it is. */
+  const reloadAfterRecovery = (): void => {
+    if (pendingReload !== null) return;
+    const wait = lastReloadAt + minReloadGapMs - deps.now();
+    if (wait <= 0) reload();
+    else pendingReload = deps.setTimer(reload, wait);
   };
 
   return {
@@ -77,15 +118,21 @@ export function createPollController(): PollController {
         listeners.delete(listener);
       };
     },
-    recordFailure() {
-      publish({ ...snapshot, failures: snapshot.failures + 1 });
+    recordFailure(keyHash) {
+      failures.set(keyHash, (failures.get(keyHash) ?? 0) + 1);
+      publish({ ...snapshot, failures: worst() });
     },
-    recordSuccess() {
-      // Rows can be missed beyond the overlap while the connection was down: reload everything.
-      if (snapshot.failures > 0) reload(0);
+    recordSuccess(keyHash) {
+      const had = failures.get(keyHash) ?? 0;
+      if (had === 0) return;
+      failures.delete(keyHash);
+      publish({ ...snapshot, failures: worst() });
+      // Rows can be missed beyond the overlap while the connection was down.
+      reloadAfterRecovery();
     },
+    failuresOf: (keyHash) => failures.get(keyHash) ?? 0,
     requestReload() {
-      reload(snapshot.failures);
+      reload();
     },
     needsReload(keyHash) {
       return loadedAt.get(keyHash) !== snapshot.generation;
@@ -96,8 +143,15 @@ export function createPollController(): PollController {
     setReloadHandler(handler) {
       reloadHandler = handler;
     },
+    setMinReloadGap(ms) {
+      minReloadGapMs = ms;
+    },
     reset() {
+      if (pendingReload !== null) deps.clearTimer(pendingReload);
+      pendingReload = null;
+      lastReloadAt = Number.NEGATIVE_INFINITY;
       loadedAt.clear();
+      failures.clear();
       publish(INITIAL_SNAPSHOT);
     },
   };
@@ -115,20 +169,22 @@ export function countsAsPollFailure(error: unknown, signal?: AbortSignal): boole
   return !isClientError(error);
 }
 
-/** Runs one round of a polled query and keeps the shared failure counter. */
+/** Runs one round of the polled query `key` and keeps its failure count. */
 export async function trackPoll<T>(
   controller: PollController,
+  key: QueryKey,
   run: () => Promise<T>,
   signal?: AbortSignal,
 ): Promise<T> {
+  const keyHash = hashKey(key);
   let result: T;
   try {
     result = await run();
   } catch (error) {
-    if (countsAsPollFailure(error, signal)) controller.recordFailure();
+    if (countsAsPollFailure(error, signal)) controller.recordFailure(keyHash);
     throw error;
   }
-  controller.recordSuccess();
+  controller.recordSuccess(keyHash);
   return result;
 }
 
@@ -155,6 +211,7 @@ export function polledQueryFn<S>(
     const reload = client.getQueryData(key) === undefined || controller.needsReload(keyHash);
     const state = await trackPoll(
       controller,
+      key,
       () => load({ reload, getState: () => client.getQueryData<S>(key), signal }),
       signal,
     );
@@ -171,9 +228,12 @@ export function pollingIntervalOf(baseMs: number | null, failures: number): numb
 export type PollingInterval = {
   /** `client.pollIntervalMs` from GET /api/settings, `null` until it has loaded. */
   baseMs: number | null;
-  /** Value for `refetchInterval`: the base, backed off after failures, or `false`. */
-  intervalMs: number | false;
-  /** Failed rounds in a row, of any polled query. */
+  /**
+   * Value for `refetchInterval` of the polled query `key`: the base, backed off after that
+   * query's own failures, or `false` while the base is not known.
+   */
+  intervalFor: (key: QueryKey) => number | false;
+  /** The most failures in a row of any one polled query. */
   failures: number;
   /** Whether `ConnectionBanner` shows. */
   showBanner: boolean;
@@ -187,15 +247,20 @@ function usePollSnapshot(controller: PollController = pollController): PollSnaps
 
 /**
  * The polling interval of the app and its back-off (ui-screens 7.4). The base comes from the
- * settings answer, never from a `NEXT_PUBLIC_` variable.
+ * settings answer, never from a `NEXT_PUBLIC_` variable. A query that keeps failing backs off on
+ * its own; the others keep the base interval.
  */
-export function usePollingInterval(): PollingInterval {
+export function usePollingInterval(controller: PollController = pollController): PollingInterval {
   const settings = useSettings();
-  const { failures } = usePollSnapshot();
+  const { failures } = usePollSnapshot(controller);
   const baseMs = settings.data?.client.pollIntervalMs ?? null;
+  const intervalFor = useCallback(
+    (key: QueryKey) => pollingIntervalOf(baseMs, controller.failuresOf(hashKey(key))),
+    [baseMs, controller],
+  );
   return {
     baseMs,
-    intervalMs: pollingIntervalOf(baseMs, failures),
+    intervalFor,
     failures,
     showBanner: failures >= POLL_FAILURES_BEFORE_BANNER,
   };
@@ -218,6 +283,10 @@ export function reloadPolledQueries(client: QueryClient): void {
  */
 export function usePollingLifecycle(controller: PollController = pollController): void {
   const client = useQueryClient();
+  const { baseMs } = usePollingInterval(controller);
+  useEffect(() => {
+    if (baseMs !== null) controller.setMinReloadGap(baseMs);
+  }, [baseMs, controller]);
   useEffect(() => {
     controller.setReloadHandler(() => {
       reloadPolledQueries(client);
@@ -256,19 +325,34 @@ export type ContactListState = {
 
 export type ContactListParams = { filter: ContactFilter; q: string };
 
-/** State after a first-page load. The cursor never moves back, even on a reload. */
+/**
+ * State after a first-page load. On a reload (tab shown again, connection back) the fresh first
+ * page is merged into what is loaded: the rows of later pages, the next-page cursor and the
+ * reader's place stay. The cursor never moves back.
+ */
 export function contactListFromPage(
   page: ContactsPage,
   previous: ContactListState | undefined,
 ): ContactListState {
+  if (previous === undefined) {
+    return {
+      items: page.contacts,
+      counts: page.counts,
+      lineConfigured: page.lineConfigured,
+      before: page.before,
+      hasMore: page.hasMore,
+      cursor: page.highWater,
+    };
+  }
+  // More rows than one page: later pages were loaded, and their keyset cursor still holds.
+  const pagedFurther = previous.items.length > page.contacts.length;
   return {
-    items: page.contacts,
+    items: mergeById(previous.items, page.contacts),
     counts: page.counts,
     lineConfigured: page.lineConfigured,
-    before: page.before,
-    hasMore: page.hasMore,
-    cursor:
-      previous === undefined ? page.highWater : advanceCursor(previous.cursor, page.highWater),
+    before: pagedFurther ? previous.before : page.before,
+    hasMore: pagedFurther ? previous.hasMore : page.hasMore,
+    cursor: advanceCursor(previous.cursor, page.highWater),
   };
 }
 
@@ -340,7 +424,7 @@ export function useContactListQuery(
   params: ContactListParams,
   options: { enabled?: boolean } = {},
 ) {
-  const { intervalMs } = usePollingInterval();
+  const { intervalFor } = usePollingInterval();
   const key = qk.contacts(params);
   return useQuery({
     queryKey: key,
@@ -350,7 +434,7 @@ export function useContactListQuery(
     enabled: options.enabled ?? true,
     staleTime: 0,
     retry: 0,
-    refetchInterval: intervalMs,
+    refetchInterval: (query) => intervalFor(query.queryKey),
     refetchIntervalInBackground: false,
   });
 }
@@ -373,6 +457,32 @@ export function latestContactCounts(client: QueryClient): ContactListState['coun
     }
   }
   return latest?.counts;
+}
+
+/**
+ * `lineConfigured` of the contact list updated most recently, whatever its filter; `true` until a
+ * list has loaded. Reads the cache only, so the open chat does not poll a list of its own.
+ */
+export function latestLineConfigured(client: QueryClient): boolean {
+  let latest: { at: number; value: boolean } | undefined;
+  for (const query of client.getQueryCache().findAll({ queryKey: qkAll.contacts })) {
+    const data = query.state.data as ContactListState | undefined; // every qk.contacts value is a ContactListState
+    if (data === undefined) continue;
+    if (latest === undefined || query.state.dataUpdatedAt > latest.at) {
+      latest = { at: query.state.dataUpdatedAt, value: data.lineConfigured };
+    }
+  }
+  return latest?.value ?? true;
+}
+
+/** Whether LINE is set up, from whichever contact list is current; no request of its own. */
+export function useLineConfigured(): boolean {
+  const client = useQueryClient();
+  return useSyncExternalStore(
+    (onChange) => client.getQueryCache().subscribe(onChange),
+    () => latestLineConfigured(client),
+    () => true,
+  );
 }
 
 /** Unread chats for the rail: from whichever contact list is current (ui-screens 3.1, 7.2). */

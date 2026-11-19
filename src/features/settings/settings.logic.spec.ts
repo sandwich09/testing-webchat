@@ -1,12 +1,24 @@
 import { describe, expect, it } from 'vitest';
 
 import { LINE_CHANNEL_ID_MAX_CHARS } from '@/contracts';
-import { AI_DAILY_BUDGET_MAX_USD, AI_INSTRUCTIONS_MAX_CHARS, PDF_MAX_BYTES } from '@/contracts';
 import {
+  AI_DAILY_BUDGET_MAX_USD,
+  AI_INSTRUCTIONS_MAX_CHARS,
+  AI_NAME_MAX_CHARS,
+  PDF_MAX_BYTES,
+  PDF_MAX_PAGES,
+} from '@/contracts';
+import {
+  defaultBackedDirty,
+  defaultBackedPatch,
+  defaultBackedValue,
   kbUsage,
   monthOptions,
   parseBudgetInput,
+  pdfUploadHintText,
+  textCounter,
   usageTokenTotal,
+  validateAiName,
   validateInstructions,
   validateLineCredentials,
   validatePdfFile,
@@ -88,6 +100,18 @@ describe('validateInstructions', () => {
       code: 'instructions_too_long',
     });
     expect(validateInstructions('')).toEqual({ ok: true });
+  });
+});
+
+describe('validateAiName', () => {
+  it('trims, allows blank, and limits the trimmed length', () => {
+    expect(validateAiName('  มินนี่ ')).toEqual({ ok: true, value: 'มินนี่' });
+    expect(validateAiName('   ')).toEqual({ ok: true, value: '' });
+    expect(validateAiName(` ${'ก'.repeat(AI_NAME_MAX_CHARS)} `).ok).toBe(true);
+    expect(validateAiName('ก'.repeat(AI_NAME_MAX_CHARS + 1))).toEqual({
+      ok: false,
+      code: 'ai_name_too_long',
+    });
   });
 });
 
@@ -176,5 +200,43 @@ describe('usageTokenTotal', () => {
       guard: { totalTokens: 7 } as never,
     };
     expect(usageTokenTotal(report)).toBe(7);
+  });
+});
+
+describe('default-backed texts', () => {
+  const DEFAULT = 'ข้อความเริ่มต้น';
+
+  it('shows what was typed, else the saved text, else the default', () => {
+    expect(defaultBackedValue('พิมพ์อยู่', 'บันทึกไว้', DEFAULT)).toBe('พิมพ์อยู่');
+    expect(defaultBackedValue(null, 'บันทึกไว้', DEFAULT)).toBe('บันทึกไว้');
+    expect(defaultBackedValue(null, '', DEFAULT)).toBe(DEFAULT);
+    expect(defaultBackedValue('', '', DEFAULT)).toBe('');
+  });
+
+  it('saves the default as empty, so it keeps following the particle, and trims', () => {
+    expect(defaultBackedPatch(`  ${DEFAULT} `, DEFAULT)).toBe('');
+    expect(defaultBackedPatch(' ใหม่ ', DEFAULT)).toBe('ใหม่');
+  });
+
+  it('is dirty only when the value to save differs from the saved one', () => {
+    expect(defaultBackedDirty(null, '', DEFAULT)).toBe(false);
+    expect(defaultBackedDirty(DEFAULT, '', DEFAULT)).toBe(false);
+    expect(defaultBackedDirty('ใหม่', '', DEFAULT)).toBe(true);
+    expect(defaultBackedDirty('ใหม่ ', 'ใหม่', DEFAULT)).toBe(false);
+    expect(defaultBackedDirty(DEFAULT, 'ใหม่', DEFAULT)).toBe(true);
+  });
+
+  it('counts as n/max', () => {
+    expect(textCounter(12, 300)).toBe('12/300');
+  });
+});
+
+describe('pdfUploadHintText', () => {
+  it('names the size and page limits of a PDF from the constants', () => {
+    const hint = pdfUploadHintText();
+    expect(hint).toContain('PDF');
+    expect(hint).toContain(`${String(PDF_MAX_BYTES / 1024 / 1024)} MB`);
+    expect(hint).toContain(`${String(PDF_MAX_PAGES)} หน้า`);
+    expect(hint).not.toMatch(/\{\w+\}/);
   });
 });

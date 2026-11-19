@@ -137,6 +137,54 @@ export const describeContactRepositorySuite = (
       });
     });
 
+    describe('setFollowStatus by event time', () => {
+      const status = async () => (await get(contactId(1))).followStatus;
+
+      it('ignores an unfollow older than the latest follow, and reports it', async () => {
+        await create(1);
+        expect(
+          await repo.setFollowStatus(contactId(1), 'following', at('2026-11-18T05:00:00.000Z')),
+        ).toBe(true);
+        expect(
+          await repo.setFollowStatus(contactId(1), 'unfollowed', at('2026-11-18T04:59:00.000Z')),
+        ).toBe(false);
+        expect(await status()).toBe('following');
+        expect(
+          await repo.setFollowStatus(contactId(1), 'unfollowed', at('2026-11-18T05:01:00.000Z')),
+        ).toBe(true);
+        expect(await status()).toBe('unfollowed');
+      });
+
+      it('ignores a follow or a customer message older than the unfollow', async () => {
+        await create(1);
+        await repo.setFollowStatus(contactId(1), 'unfollowed', at('2026-11-18T05:00:00.000Z'));
+        expect(
+          await repo.setFollowStatus(contactId(1), 'following', at('2026-11-18T04:00:00.000Z')),
+        ).toBe(false);
+        expect(await status()).toBe('unfollowed');
+        expect(
+          await repo.setFollowStatus(contactId(1), 'following', at('2026-11-18T05:30:00.000Z')),
+        ).toBe(true);
+        expect(await get(contactId(1))).toMatchObject({
+          followStatus: 'following',
+          followedAt: at('2026-11-18T05:30:00.000Z'),
+        });
+      });
+
+      it('changes nothing when the status is already the one asked for', async () => {
+        await create(1);
+        await repo.setFollowStatus(contactId(1), 'following', at('2026-11-18T05:00:00.000Z'));
+        expect(
+          await repo.setFollowStatus(contactId(1), 'following', at('2026-11-18T06:00:00.000Z')),
+        ).toBe(false);
+        expect((await get(contactId(1))).followedAt).toEqual(at('2026-11-18T05:00:00.000Z'));
+        await repo.setFollowStatus(contactId(1), 'unfollowed', at('2026-11-18T07:00:00.000Z'));
+        expect(
+          await repo.setFollowStatus(contactId(1), 'unfollowed', at('2026-11-18T08:00:00.000Z')),
+        ).toBe(false);
+      });
+    });
+
     describe('recordInbound', () => {
       it('adds one unread, sets the last message and the reply token', async () => {
         await create(1);

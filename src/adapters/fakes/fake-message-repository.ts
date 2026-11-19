@@ -1,4 +1,5 @@
 import type { ContactId, EventCode, Message, MessageId, Seq } from '@/core/domain';
+import { isNoAiTap } from '@/core/domain';
 import type { MessageRepository, NewMessage } from '@/core/ports';
 import { FakeChangeSequence, type FakeContactRepository } from './fake-contact-repository';
 
@@ -18,6 +19,8 @@ export class FakeMessageRepository implements MessageRepository {
   private readonly rows = new Map<MessageId, Message>();
   /** Message.deliveryAttemptAt, a column the domain Message does not carry. */
   private readonly attemptAt = new Map<MessageId, Date>();
+  /** Message.webhookEventId (unique), a column the domain Message does not carry. */
+  private readonly byWebhookEvent = new Map<string, MessageId>();
 
   constructor(options: { contacts?: FakeContactRepository; sequence?: FakeChangeSequence } = {}) {
     this.contacts = options.contacts ?? null;
@@ -28,10 +31,12 @@ export class FakeMessageRepository implements MessageRepository {
     return [...this.rows.values()].filter((m) => m.contactId === contactId).sort(bySeq);
   }
 
-  /** The row that blocks an insert: same primary key, or same non-null lineMessageId. */
+  /** The row that blocks an insert: same primary key, or same non-null lineMessageId or webhookEventId. */
   private conflicting(m: NewMessage): Message | undefined {
     const byId = this.rows.get(m.id);
     if (byId) return byId;
+    const byEvent = m.webhookEventId ? this.byWebhookEvent.get(m.webhookEventId) : undefined;
+    if (byEvent !== undefined) return this.rows.get(byEvent);
     if (m.lineMessageId === null) return undefined;
     return [...this.rows.values()].find((r) => r.lineMessageId === m.lineMessageId);
   }
@@ -45,7 +50,18 @@ export class FakeMessageRepository implements MessageRepository {
       throw new Error('FakeMessageRepository: duplicate id or lineMessageId (unique)');
     }
     const seq = this.sequence.next();
-    const row: Message = { ...structuredClone(m), seq, updatedSeq: seq, firstPushAt: null };
+    const { webhookEventId, ...fields } = m;
+    if (webhookEventId) this.byWebhookEvent.set(webhookEventId, m.id);
+    const row: Message = {
+      ...structuredClone(fields),
+      quotedLineMessageId: m.quotedLineMessageId ?? null,
+      mediaDurationMs: m.mediaDurationMs ?? null,
+      mediaFailure: m.mediaFailure ?? null,
+      lineSentIds: [],
+      seq,
+      updatedSeq: seq,
+      firstPushAt: null,
+    };
     this.rows.set(row.id, row);
     if (m.deliveryStatus === 'pending') this.attemptAt.set(row.id, m.createdAt);
     return row;
@@ -84,11 +100,13 @@ export class FakeMessageRepository implements MessageRepository {
   };
 
   readonly insertInboundIfAbsent: MessageRepository['insertInboundIfAbsent'] = (m) =>
-    this.insertIfAbsent(m, () =>
-      m.lineMessageId === null
-        ? this.rows.get(m.id)
-        : [...this.rows.values()].find((r) => r.lineMessageId === m.lineMessageId),
-    );
+    this.insertIfAbsent(m, () => {
+      if (m.lineMessageId !== null) {
+        return [...this.rows.values()].find((r) => r.lineMessageId === m.lineMessageId);
+      }
+      const byEvent = m.webhookEventId ? this.byWebhookEvent.get(m.webhookEventId) : undefined;
+      return this.rows.get(byEvent ?? m.id);
+    });
 
   readonly insertOutboundIfAbsent: MessageRepository['insertOutboundIfAbsent'] = (m) =>
     this.insertIfAbsent(m, () => this.rows.get(m.id));
@@ -101,11 +119,12 @@ export class FakeMessageRepository implements MessageRepository {
     }
   };
 
-  readonly markSent: MessageRepository['markSent'] = (id, at) => {
+  readonly markSent: MessageRepository['markSent'] = (id, at, lineSentIds) => {
     const row = this.update(id, (m) => {
       m.deliveryStatus = 'sent';
       m.deliveryError = null;
       m.sentAt = at;
+      m.lineSentIds = [...lineSentIds];
     });
     return row
       ? Promise.resolve(copy(row))
@@ -149,6 +168,7 @@ export class FakeMessageRepository implements MessageRepository {
     for (const m of stuck) {
       this.update(m.id, (row) => {
         row.mediaStatus = 'failed';
+        row.mediaFailure = 'interrupted';
       });
     }
     return Promise.resolve(stuck.map((m) => m.id));
@@ -182,17 +202,18 @@ export class FakeMessageRepository implements MessageRepository {
     return Promise.resolve(true);
   };
 
-  readonly setMediaStatus: MessageRepository['setMediaStatus'] = (id, status) => {
+  readonly setMediaStatus: MessageRepository['setMediaStatus'] = (id, status, failure) => {
     if (this.rows.get(id)?.mediaStatus !== 'pending') return Promise.resolve(false);
     this.update(id, (m) => {
       m.mediaStatus = status;
+      m.mediaFailure = status === 'failed' ? (failure ?? 'download_failed') : null;
     });
     return Promise.resolve(true);
   };
 
   readonly latestInbound: MessageRepository['latestInbound'] = (contactId) => {
     const row = this.forContact(contactId)
-      .filter((m) => m.direction === 'inbound')
+      .filter((m) => m.direction === 'inbound' && !isNoAiTap(m))
       .at(-1);
     return Promise.resolve(row ? copy(row) : null);
   };
@@ -228,6 +249,19 @@ export class FakeMessageRepository implements MessageRepository {
     let max = 0n;
     for (const m of this.forContact(contactId)) if (m.updatedSeq > max) max = m.updatedSeq;
     return Promise.resolve(max as Seq); // brand: max of Seq values, or 0n when there is none
+  };
+
+  readonly findByLineIds: MessageRepository['findByLineIds'] = (contactId, lineIds) => {
+    const wanted = new Set<string>(lineIds);
+    return Promise.resolve(
+      this.forContact(contactId)
+        .filter(
+          (m) =>
+            (m.lineMessageId !== null && wanted.has(m.lineMessageId)) ||
+            m.lineSentIds.some((id) => wanted.has(id)),
+        )
+        .map(copy),
+    );
   };
 
   readonly countEventsByCode: MessageRepository['countEventsByCode'] = (range) => {

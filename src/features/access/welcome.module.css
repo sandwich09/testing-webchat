@@ -204,11 +204,12 @@
 
 .error {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   gap: 6px;
-  /* Fixed height so the button does not jump when the message appears. */
-  height: 22px;
+  /* One line is reserved so a one-line message does not move the button; a longer message
+     grows the row and pushes the button down instead of running over it. */
+  min-height: 22px;
   margin-top: 6px;
   color: var(--color-danger);
   font-size: 14px;
@@ -216,6 +217,12 @@
 }
 .error > svg {
   flex: none;
+  /* Centred on the first line of the text: (line height - icon size) / 2. */
+  margin-top: calc((1lh - 16px) / 2);
+}
+.error > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .submit {

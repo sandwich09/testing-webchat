@@ -1,7 +1,13 @@
 // Pure logic of the thread components (ui-screens 5.3, 5.4, 6.2). No clock, no browser.
 import { ERROR_MESSAGE_CODES, errorMessage, type ErrorMessageCode } from '@/common/error-messages';
 
-import { LINE_RETRY_KEY_WINDOW_MS } from '@/contracts';
+import {
+  AUDIO_MAX_BYTES,
+  IMAGE_MAX_BYTES,
+  LINE_RETRY_KEY_WINDOW_MS,
+  VIDEO_MAX_BYTES,
+  type MediaFailure,
+} from '@/contracts';
 import { copy, LOAD_OLDER_THRESHOLD_PX } from '../inbox.constants';
 import type { ThreadMessage } from '../inbox.logic';
 
@@ -87,9 +93,50 @@ export type MediaView =
       src: string | null;
       /** The picture can open the lightbox (the file is ready and has a URL). */
       openable: boolean;
+      /** Why `failed` media cannot be shown, when the server recorded it. */
+      failure: MediaFailure | null;
+    }
+  | {
+      kind: 'audio';
+      /** `ready`: the player over `src`; `pending`, `failed` and `too_large` as for pictures. */
+      state: 'ready' | 'pending' | 'failed' | 'too_large';
+      src: string | null;
+      /** From the LINE event; the player shows the file's own length once it has loaded. */
+      durationMs: number | null;
+      failure: MediaFailure | null;
     }
   | { kind: 'sticker'; src: string | null }
   | { kind: 'other'; label: string };
+
+const MB = 1024 * 1024;
+const INBOUND_MAX_BYTES: Record<'image' | 'video' | 'audio', number> = {
+  image: IMAGE_MAX_BYTES,
+  video: VIDEO_MAX_BYTES,
+  audio: AUDIO_MAX_BYTES,
+};
+
+/**
+ * Why media cannot be shown, for the text box of `failed` and `too_large` (ui-copy
+ * `inbox.media.problem.*`). `failure` is the reason the server recorded; null for a row stored
+ * before reasons were kept, which gets the plain text of its kind.
+ */
+export function mediaProblemText(
+  kind: 'image' | 'video' | 'audio',
+  state: 'failed' | 'too_large',
+  failure: MediaFailure | null,
+): string {
+  if (state === 'too_large') {
+    return fillCopy(copy.media.problem.too_large, {
+      maxMb: String(Math.round((INBOUND_MAX_BYTES[kind] / MB) * 10) / 10),
+    });
+  }
+  if (failure !== null) return copy.media.problem[failure];
+  return kind === 'image'
+    ? copy.media.imageFailed
+    : kind === 'video'
+      ? copy.media.videoFailed
+      : copy.media.audioFailed;
+}
 
 /** Decides what `MediaContent` shows for a message of type image, video, sticker or other. */
 export function resolveMedia(message: ThreadMessage): MediaView | null {
@@ -97,6 +144,8 @@ export function resolveMedia(message: ThreadMessage): MediaView | null {
     case 'image':
     case 'video':
       return resolvePicture(message, message.type);
+    case 'audio':
+      return resolveAudio(message);
     case 'sticker':
       return { kind: 'sticker', src: message.sticker?.imageUrl ?? null };
     case 'other':
@@ -107,26 +156,60 @@ export function resolveMedia(message: ThreadMessage): MediaView | null {
   }
 }
 
+function resolveAudio(message: ThreadMessage): MediaView {
+  const media = message.media;
+  const durationMs = media?.durationMs ?? null;
+  const failure = media?.failure ?? null;
+  if (media === null) return { kind: 'audio', state: 'failed', src: null, durationMs, failure };
+  if (media.status === 'ready') {
+    return media.url === null
+      ? { kind: 'audio', state: 'failed', src: null, durationMs, failure }
+      : { kind: 'audio', state: 'ready', src: media.url, durationMs, failure: null };
+  }
+  return {
+    kind: 'audio',
+    state: media.status,
+    src: null,
+    durationMs,
+    failure: media.status === 'failed' ? failure : null,
+  };
+}
+
+/** "0:07" or "12:05": minutes and two-digit seconds of a length in seconds (rounded down). */
+export function formatAudioTime(seconds: number): string {
+  const s = Number.isFinite(seconds) && seconds > 0 ? Math.floor(seconds) : 0;
+  return `${String(Math.floor(s / 60))}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/** Played share of the audio, 0 to 1, for the progress bar. */
+export function audioProgress(currentSeconds: number, totalSeconds: number | null): number {
+  if (totalSeconds === null || !Number.isFinite(totalSeconds) || totalSeconds <= 0) return 0;
+  return Math.min(1, Math.max(0, currentSeconds / totalSeconds));
+}
+
 function resolvePicture(message: ThreadMessage, kind: 'image' | 'video'): MediaView {
   const media = message.media;
-  const failed: MediaView = { kind, state: 'failed', src: null, openable: false };
+  const failure = media?.failure ?? null;
+  const failed: MediaView = { kind, state: 'failed', src: null, openable: false, failure };
   if (media === null) return failed;
   switch (media.status) {
     case 'ready': {
       const src = media.previewUrl ?? media.url;
-      return src === null ? failed : { kind, state: 'picture', src, openable: media.url !== null };
+      return src === null
+        ? failed
+        : { kind, state: 'picture', src, openable: media.url !== null, failure: null };
     }
     case 'pending': {
       // The local preview of a file the admin is sending shows until the server has a real one.
       const src = media.previewUrl ?? message.localPreviewUrl ?? null;
       return src === null
-        ? { kind, state: 'pending', src: null, openable: false }
-        : { kind, state: 'picture', src, openable: false };
+        ? { kind, state: 'pending', src: null, openable: false, failure: null }
+        : { kind, state: 'picture', src, openable: false, failure: null };
     }
     case 'failed':
       return failed;
     case 'too_large':
-      return { kind, state: 'too_large', src: null, openable: false };
+      return { kind, state: 'too_large', src: null, openable: false, failure: null };
   }
 }
 
@@ -142,6 +225,58 @@ export function otherLabel(kind: string | null): string {
     (kind !== null && Object.hasOwn(OTHER_LABELS, kind) ? OTHER_LABELS[kind] : undefined) ??
     copy.media.other.unknown
   );
+}
+
+// ---------------------------------------------------------------------------
+// Quote (ui-screens 5.3 row "ข้อความที่ตอบกลับ")
+// ---------------------------------------------------------------------------
+
+export type QuoteView =
+  | { available: false; text: string; ariaLabel: string }
+  | {
+      available: true;
+      /** Message to scroll to; null when it cannot be found in the thread. */
+      messageId: string | null;
+      author: string;
+      text: string;
+      ariaLabel: string;
+    };
+
+/** One line of a quoted message: its text, or the label of its kind. */
+function quotedText(q: NonNullable<ThreadMessage['quote']>): string {
+  if (q.textPreview !== null && q.textPreview !== '') return q.textPreview;
+  const kind = q.mediaKind;
+  if (kind === null) return '';
+  if (kind === 'image') return copy.media.image;
+  if (kind === 'video') return copy.media.video;
+  if (kind === 'sticker') return copy.media.sticker;
+  return otherLabel(kind);
+}
+
+/** What the quoted block of a bubble shows; null for a message that quotes nothing. */
+export function quoteView(quote: ThreadMessage['quote'], customerName: string): QuoteView | null {
+  if (quote === null) return null;
+  if (!quote.available) {
+    return {
+      available: false,
+      text: copy.quote.unavailable,
+      ariaLabel: copy.quote.labelUnavailable,
+    };
+  }
+  const author =
+    quote.author === 'ai'
+      ? copy.message.senderAi
+      : quote.author === 'admin'
+        ? copy.message.senderYou
+        : customerName;
+  const text = quotedText(quote);
+  return {
+    available: true,
+    messageId: quote.messageId,
+    author,
+    text,
+    ariaLabel: fillCopy(copy.quote.label, { name: author, text }),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -161,7 +296,12 @@ const RETRY_KEY_WINDOW_HOURS = LINE_RETRY_KEY_WINDOW_MS / 3_600_000;
  */
 export function deliveryReason(code: string | null): string | null {
   if (code === null || !isKnownCode(code)) return null;
-  const text = errorMessage(code, { variant: 'outbound', hours: RETRY_KEY_WINDOW_HOURS });
+  const text = errorMessage(code, {
+    variant: 'outbound',
+    hours: RETRY_KEY_WINDOW_HOURS,
+    imageMaxMb: Math.round((IMAGE_MAX_BYTES / MB) * 10) / 10,
+    videoMaxMb: Math.round((VIDEO_MAX_BYTES / MB) * 10) / 10,
+  });
   if (text === null) return null;
   const stripped = text.startsWith(copy.message.failed)
     ? text.slice(copy.message.failed.length).trim()

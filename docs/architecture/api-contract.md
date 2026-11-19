@@ -13,9 +13,10 @@
 | ขนาด body | JSON ไม่เกิน `JSON_MAX_BODY_BYTES`, webhook ไม่เกิน `WEBHOOK_MAX_BODY_BYTES`, PDF ไม่เกินที่ระบุใน endpoint เกินตอบ 413 `request.too_large` |
 | Cookie | ชื่อ `twa_access` แบบ `HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=<ACCESS_COOKIE_TTL_MS เป็นวินาที>` ค่าคือ token จาก `AccessTokenSigner` |
 | การเข้าระบบ | ทุก endpoint เรียก `VerifyAccess` ก่อน ยกเว้นที่ระบุว่า "เปิด" ไม่ผ่านตอบ 401 `access.unauthorized` |
-| ต้นทาง | ทุก method ที่ไม่ใช่ `GET` ต้องมี header `Origin` ที่ตรงกับ origin ของ `APP_BASE_URL` ยกเว้น webhook ไม่ตรงตอบ 403 `request.origin_forbidden` |
+| ต้นทาง | ทุก method ที่ไม่ใช่ `GET` หรือ `HEAD` ต้องมี header `Origin` เป็น origin แบบ http(s) ที่ตรงกับ origin ของคำขอเอง (scheme จาก `x-forwarded-proto` หรือ `request.url`, host จาก `x-forwarded-host` หรือ `Host`) หรือกับ origin ของ `APP_BASE_URL` ยกเว้น webhook ไม่มี `Origin`, `Origin: null` หรือไม่ตรงทั้งสองตอบ 403 `request.origin_forbidden` proxy.ts และตัวห่อ route ใช้ `isAllowedOrigin` ใน `src/composition/request-origin.ts` ตัวเดียวกัน ([ADR 0025](../adr/0025-same-origin-or-app-base-url.md)) |
 | Request id | ทุก response มี `x-request-id` ที่ route สร้างด้วย `IdGenerator.requestId()` |
-| การตรวจ | ตรวจ path, query และ body ด้วย zod ใน `src/contracts/` ไม่ผ่านตอบ 400 `request.invalid` field ที่ไม่รู้จักใน JSON body ถือว่าไม่ผ่าน (`strict`) |
+| การตรวจ | ตรวจ path, query และ body ด้วย zod ใน `src/contracts/` ไม่ผ่านตอบ 400 `request.invalid` field ที่ไม่รู้จักใน JSON body ถือว่าไม่ผ่าน (`strict`) ทุกสตริงของคำขอ (path, query, body รวมสตริงที่ซ้อนใน object หรือ array และชื่อไฟล์ PDF) ที่มี U+0000 ตอบ 400 `request.invalid` ตรวจที่เดียวใน `composition/http-request.ts` ด้วย `hasNulCharacter` เพราะ Postgres ไม่รับอักขระนี้ใน text |
+| Id ใน path | id ของแถว (`:id`, `:messageId`, `:noteId`) ต้องเป็น UUID ค่าที่ไม่ใช่ UUID ตอบรหัส not found ของ resource นั้น (404) เหมือน id ที่ไม่มีอยู่ ไม่ส่งต่อถึงฐานข้อมูล (`pathIdSchema`): ลูกค้า `contact.not_found`, โน้ต `note.not_found`, การส่งอีกครั้ง `message.not_found` (ทั้ง `:id` และ `:messageId`), เอกสาร `knowledge.not_found`, ค่าใช้จ่ายรายลูกค้า `contact.not_found` (id ที่ถูกรูปแบบแต่ไม่มียังได้รายการว่าง) |
 | ข้อผิดพลาดที่ไม่คาดคิด | ตอบ 500 `internal.unexpected` และ log `http.request.failed` |
 | Log ของคำขอ | ตัวห่อ route ใน `composition/` log `http.request.completed` ทุกคำขอ และ `http.origin.rejected` เมื่อต้นทางไม่ตรง route เองไม่เรียก Logger |
 | การจำกัดความถี่ | ตอบ 429 พร้อม header `Retry-After` เป็นวินาที |
@@ -39,7 +40,7 @@ Error ร่วมด้านบน (`request.invalid`, `request.too_large`, `r
 | ชนิด | รูปแบบใน JSON |
 | --- | --- |
 | เวลา | สตริง ISO-8601 UTC จาก `Date.toISOString()` เช่น `"2026-11-18T07:32:10.123Z"` |
-| `seq`, `updatedSeq`, cursor ที่เป็นเลข | สตริงตัวเลขฐานสิบ เช่น `"1048576"` เพราะเป็น bigint |
+| `seq`, `updatedSeq`, cursor ที่เป็นเลข | สตริงตัวเลขฐานสิบ เช่น `"1048576"` เพราะเป็น bigint ไม่เกิน `9223372036854775807` (ค่าสูงสุดของ bigint ใน Postgres) ค่าที่เกินใน query ตอบ 400 `request.invalid` |
 | เงิน | สตริงดอลลาร์ ใช้ `formatUsd`: ต้นทุนมีทศนิยม 6 ตำแหน่ง (`"0.012345"`), งบมี 2 ตำแหน่ง (`"5.00"`) |
 | จำนวน token, ขนาดไฟล์, จำนวนหน้า | number |
 | ค่าว่าง | `null` เสมอ ไม่ละ field |
@@ -60,10 +61,12 @@ DTO ถูกสร้างจาก entity ใน route ด้วยฟัง�
 | `pdf_ingest` | `RATE_LIMIT_PDF_INGEST` | `POST /api/knowledge/documents`, `POST /api/knowledge/documents/:id/retry` | `knowledge.rate_limited` |
 | `typing` | `RATE_LIMIT_TYPING` | `POST /api/contacts/:id/typing` | ไม่มี ตอบ `shown: false` |
 | `guard_test` | `RATE_LIMIT_GUARD_TEST` | `POST /api/settings/guard/test` | `settings.guard_rate_limited` |
+| `note_create` | `RATE_LIMIT_NOTE_CREATE` | `POST /api/contacts/:id/notes` | `note.rate_limited` |
+| `rich_menu_tap` | `RATE_LIMIT_RICH_MENU_TAP` | `POST /api/line/webhook` ต่อ postback ของลูกค้าหนึ่งคน | ไม่มี การกดนั้นถูกทิ้ง และ webhook ยังตอบ 200 |
 
 ## DTO ร่วม
 
-ทุก DTO อยู่ใน `src/contracts/dto.ts` พร้อม zod schema ที่หน้าเว็บใช้ตรวจคำตอบ
+ทุก DTO อยู่ใน `src/contracts/dto.contract.ts` พร้อม zod schema ที่หน้าเว็บใช้ตรวจคำตอบ
 
 ```ts
 type IsoDate = string;
@@ -84,7 +87,7 @@ interface ContactDto {
   lastMessage: {                      // ข้อความล่าสุดของใครก็ได้ ยกเว้น at
     at: IsoDate;                      // เวลาข้อความล่าสุดของลูกค้า (ไม่มีใช้ createdAt) คือค่าที่รายชื่อใช้เรียง
     by: "customer" | "admin" | "ai";
-    type: "text" | "image" | "video" | "sticker" | "other";
+    type: "text" | "image" | "video" | "audio" | "sticker" | "other";
     text: string | null;              // ตัดแล้วไม่เกิน PREVIEW_TEXT_MAX_CHARS
   } | null;
   createdAt: IsoDate;
@@ -102,12 +105,20 @@ interface MessageDto {
   contactId: string;
   direction: "inbound" | "outbound" | "internal";
   author: "customer" | "admin" | "ai" | "system";
-  type: "text" | "image" | "video" | "sticker" | "other" | "event";
+  type: "text" | "image" | "video" | "audio" | "sticker" | "other" | "event";
   text: string | null;
-  media: { status: MediaStatus; url: string | null; previewUrl: string | null } | null;
+  media: { status: MediaStatus; url: string | null; previewUrl: string | null; durationMs?: number | null; failure?: MediaFailure | null } | null; // รูป วิดีโอ เสียง durationMs: ความยาวของเสียงจาก LINE (ms) server ส่งเสมอ failure: เหตุผลเมื่อ status เป็น failed (unsupported_type, external_source, download_failed, interrupted) null เมื่อสถานะอื่นหรือแถวก่อนมีค่านี้ server ส่งเสมอ
   sticker: { packageId: string; stickerId: string; imageUrl: string } | null;
   otherKind: OtherKind | null;
   eventCode: EventCode | null;
+  quote: {                            // ขาเข้าที่ลูกค้าใช้ "ตอบกลับ" ของ LINE, นอกนั้น null หาใน query เดียวกับรายการข้อความ (รวม polling)
+    available: boolean;               // false: ไม่รู้จักข้อความต้นทาง field อื่นเป็น null ทั้งหมด
+    messageId: string | null;
+    author: "customer" | "admin" | "ai" | null;
+    type: "text" | "image" | "video" | "sticker" | "other" | null;
+    textPreview: string | null;       // ข้อความตัดแบบเดียวกับรายชื่อ (PREVIEW_TEXT_MAX_CHARS)
+    mediaKind: "image" | "video" | "sticker" | OtherKind | null;
+  } | null;
   delivery: {
     status: DeliveryStatus;
     errorCode: ErrorCode | null;
@@ -125,7 +136,9 @@ interface SettingsDto {
     dailyBudgetUsd: UsdString;        // 2 ตำแหน่ง
     todayCostUsd: UsdString;          // 6 ตำแหน่ง ยอดของวันนี้ตามเวลาไทย
     politeParticle: "ค่ะ" | "ครับ";
-    instructions: string;
+    instructions: string;             // คำแนะนำสำหรับ AI ว่างเมื่อไม่มี
+    name: string | null;              // ชื่อ AI null เมื่อไม่ตั้ง
+    answerMode: "knowledge_only" | "general"; // ขอบเขตคำตอบ
   };
   guard: {
     enabled: boolean;                 // ขอบเขตหัวข้อ
@@ -141,6 +154,19 @@ interface SettingsDto {
     secretStatus: "verified" | "unchecked" | "no_channel_id"; // lineSecretStatus: LINE ยืนยันคู่แล้ว, มี Channel ID แต่ยังไม่ได้ยืนยัน, ไม่มี Channel ID
     webhookUrl: string;
     lastWebhookAt: IsoDate | null;
+  };
+  richMenu: {
+    published: boolean;               // เมนูของแอปเป็นเมนูเริ่มต้นที่ LINE (ไม่ส่ง id ของเมนู)
+    publishedAt: IsoDate | null;
+    lastError: { code: ErrorCode; at: IsoDate } | null; // การ publish หรือนำออกที่ล้มล่าสุด
+    howToText: string;                // ข้อความของปุ่ม "วิธีทดสอบ" ที่บันทึก '' คือใช้ howToDefault
+    howToDefault: string;             // ข้อความเริ่มต้นตามคำลงท้ายปัจจุบัน
+  };
+  welcome: {
+    enabled: boolean;                 // ส่งการ์ดต้อนรับเมื่อเพิ่มเพื่อน
+    text: string;                     // '' คือใช้ defaultText
+    defaultText: string;
+    accountName: string;              // ชื่อบนการ์ด: ชื่อ LINE OA หรือ "Test webchat"
   };
   client: {
     pollIntervalMs: number;           // POLL_INTERVAL_MS
@@ -233,7 +259,7 @@ interface UploadTicketDto {
 
 | `strategy` | สิ่งที่หน้าเว็บทำ |
 | --- | --- |
-| `http_put` | `PUT target.url` ด้วย `target.headers` และ body เป็นไฟล์ ใช้ `XMLHttpRequest` เพื่อให้ได้ความคืบหน้า สำเร็จเมื่อได้ 200 |
+| `http_put` | `PUT target.url` ด้วย `target.headers` และ body เป็นไฟล์ ใช้ `XMLHttpRequest` เพื่อให้ได้ความคืบหน้า สำเร็จเมื่อได้ 200 `target.url` เป็น path ไม่มี origin (`/api/local-storage/...?exp=...&sig=...`) browser จึง PUT ไปที่ origin ที่เปิดอยู่ ไม่ใช่ `APP_BASE_URL` ซึ่งใช้เฉพาะ URL สาธารณะที่ส่งให้ LINE |
 | `vercel_blob_client` | เรียกฟังก์ชันอัปโหลดฝั่ง client ของ `@vercel/blob` ด้วย `target.pathname`, `target.clientToken`, `access: "public"` และ `contentType` (ต้องยืนยันชื่อฟังก์ชัน ตัวเลือกความคืบหน้า และการยกเลิกกับเอกสารของ Vercel Blob) |
 
 ทั้งสองแบบไม่คืน URL ให้หน้าเว็บใช้ต่อ หน้าเว็บส่ง `uploadId` กลับมาตอนส่งข้อความ และ server หา URL สาธารณะเอง เพื่อไม่ส่ง URL ที่มาจาก browser ให้ LINE
@@ -262,7 +288,7 @@ cursor = max(cursor, response.highWater)
 - รายการที่ได้ซ้ำถูกรวมด้วย id โดยเก็บตัวที่ `updatedSeq` สูงกว่า
 - ถ้า `hasMore` เป็น true หน้าเว็บขอรอบถัดไปทันทีด้วย cursor ใหม่ ไม่รอ `POLL_INTERVAL_MS`
 - เมื่อแท็บกลับมาแสดง หรือหลังการเชื่อมต่อมีปัญหาแล้วกลับมาได้ หน้าเว็บโหลดหน้าแรกใหม่ทั้งหมดแทนรอบ polling เพราะอาจพลาดแถวที่เกินระยะย้อนหลัง
-- ข้อจำกัดที่รู้: ถ้ามีการแก้มากกว่า `POLL_OVERLAP_SEQ` ครั้งระหว่างที่ transaction หนึ่งยังไม่ commit แถวนั้นจะไม่ขึ้นจนกว่าจะโหลดใหม่ ซึ่งไม่น่าเกิดกับปริมาณของร้านเดียว
+- ข้อจำกัดที่รู้: ถ้ามีการแก้มากกว่า `POLL_OVERLAP_SEQ` ครั้งระหว่างที่ transaction หนึ่งยังไม่ commit แถวนั้นจะไม่ขึ้นจนกว่าจะโหลดใหม่ ซึ่งไม่น่าเกิดกับปริมาณของบัญชีเดียว
 
 ### การลบ
 
@@ -294,7 +320,7 @@ cursor = max(cursor, response.highWater)
 
 | | |
 | --- | --- |
-| Use case | `ReceiveLineEvents` แล้วงานหลังตอบ `StoreInboundMedia`, `GenerateAiReply` |
+| Use case | `ReceiveLineEvents` แล้วงานหลังตอบ `StoreInboundMedia`, `GenerateAiReply`, `HandleRichMenuAction`, `SendWelcome` |
 | การเข้าระบบ | เปิด ตรวจ signature |
 | การจำกัดความถี่ | ไม่มี |
 | `maxDuration` | `WEBHOOK_MAX_DURATION_S` |
@@ -306,19 +332,21 @@ Field ของ LINE ที่ adapter อ่าน (field อื่นปล่
 | Field | ใช้ทำอะไร | หมายเหตุ |
 | --- | --- | --- |
 | `events[]` | รายการ event | |
-| `events[].type` | `message`, `follow`, `unfollow` นอกนั้นเป็น unsupported | |
+| `events[].type` | `message`, `follow`, `unfollow`, `postback` นอกนั้นเป็น unsupported | |
+| `events[].postback.data` | ปุ่มของ rich menu หรือการ์ดต้อนรับ (`tw1:{action}`) string ไม่เกิน `POSTBACK_DATA_MAX_CHARS` | ไม่มีหรือยาวเกินเป็น unsupported |
 | `events[].webhookEventId` | กัน event ซ้ำ | |
 | `events[].deliveryContext.isRedelivery` | ไม่เก็บ reply token ของการส่งซ้ำ | |
 | `events[].timestamp` | เวลาของ event หน่วยมิลลิวินาที | |
 | `events[].source.type`, `events[].source.userId` | รับเฉพาะ `user` | |
 | `events[].replyToken` | reply token | |
-| `events[].mode` | ถ้าเป็น `standby` ไม่เก็บ reply token | ต้องยืนยันกับเอกสาร LINE |
+| `events[].mode` | อ่านแบบผ่อนปรน ระบบยังไม่ใช้ค่านี้ (event แบบ `standby` ถูกประมวลผลเหมือน `active`) | ต้องยืนยันกับเอกสาร LINE |
 | `events[].message.id`, `events[].message.type` | id และชนิด: `text`, `image`, `video`, `sticker`, `audio`, `file`, `location` | |
+| `events[].message.duration` | ความยาวของเสียงเป็นมิลลิวินาที (เฉพาะ `audio`) อ่านแบบผ่อนปรน ค่าที่ไม่ใช่จำนวนเต็มไม่ติดลบถือว่าไม่รู้ | |
 | `events[].message.text` | ข้อความ | |
 | `events[].message.packageId`, `events[].message.stickerId` | สติกเกอร์ | |
 | `events[].message.contentProvider.type` | `line` คือไฟล์อยู่บน LINE, `external` คือ URL ภายนอก | ต้องยืนยันกับเอกสาร LINE |
 
-ชนิด `audio`, `file`, `location` แปลงเป็น `other` พร้อม `otherKind` และชนิดข้อความอื่นที่ไม่รู้จักเป็น `other` แบบ `unknown`
+ชนิด `audio` เป็นชนิด `audio` ของตัวเองพร้อม `durationMs` และดาวน์โหลดไฟล์เหมือนรูปและวิดีโอ ([line-messaging](../specs/line-messaging.md#ชนิดของ-event)) ชนิด `file`, `location` แปลงเป็น `other` พร้อม `otherKind` และชนิดข้อความอื่นที่ไม่รู้จักเป็น `other` แบบ `unknown` (`otherKind: audio` เหลือเฉพาะข้อความเสียงที่รับก่อน migration ที่เก้า)
 
 Response:
 
@@ -415,6 +443,31 @@ Response 200 `ContactDto` Error: 404 `contact.not_found`, 409 `ai.disabled_globa
 | Use case | `MarkContactRead` |
 
 Body ว่าง Response 200 `ContactDto` Error: 404 `contact.not_found`
+
+### GET /api/contacts/:id/notes
+
+| | |
+| --- | --- |
+| Use case | `ListContactNotes` |
+
+Response 200 `{ "notes": ContactNoteDto[] }` ใหม่ไปเก่า ไม่เกิน `CONTACT_NOTE_LIST_LIMIT` โดย `ContactNoteDto = { id: string; contactId: string; text: string; createdAt: IsoDate }` Error: 404 `contact.not_found`
+
+### POST /api/contacts/:id/notes
+
+| | |
+| --- | --- |
+| Use case | `AddContactNote` |
+| การจำกัดความถี่ | `note_create` ตาม `RATE_LIMIT_NOTE_CREATE` ต่อ IP |
+
+Body `{ "text": string }` ตัดช่องว่างหัวท้ายแล้ว 1 ถึง `CONTACT_NOTE_MAX_CHARS` ตัว Response 201 `ContactNoteDto` Error: 400 `request.invalid`, 404 `contact.not_found`, 429 `note.rate_limited`
+
+### DELETE /api/contacts/:id/notes/:noteId
+
+| | |
+| --- | --- |
+| Use case | `DeleteContactNote` |
+
+`noteId` เป็น UUID Response 200 `{ "deleted": true }` Error: 404 `note.not_found` (ไม่มี หรือเป็นของลูกค้าคนอื่น)
 
 ### GET /api/contacts/:id/messages
 
@@ -521,11 +574,11 @@ Path: `uploadId` 22 ตัว `[A-Za-z0-9_-]` Response 204 Error: 503 `storage.u
 | การเข้าระบบ | ต้องมีทั้ง cookie และลายเซ็นใน query: `proxy.ts` ตรวจ cookie และต้นทางเหมือน endpoint อื่นที่ไม่ใช่ `GET` (ข้อยกเว้นของ cookie มีเฉพาะ `GET`/`HEAD`) ส่วน route ตรวจลายเซ็น ผู้อัปโหลดคือหน้าเว็บที่เข้าระบบแล้วเสมอ |
 | มีเมื่อ | `FILE_STORAGE=local` ไม่เช่นนั้นตอบ 404 |
 
-Query: `exp` (เวลาหมดอายุ epoch วินาที), `sig` (`<maxSizeBytes>.<base64url(contentType)>.<base64url(HMAC)>` ตาม [backend](backend.md#api)) Header: `Content-Type` Body: ไฟล์ดิบ ไม่เกิน `maxSizeBytes` ที่เซ็นไว้
+Query: `exp` (เวลาหมดอายุ epoch วินาที), `sig` (`<sizeBytes>.<base64url(contentType)>.<base64url(HMAC)>` ตาม [backend](backend.md#api)) Header: `Content-Type` Body: ไฟล์ดิบ ยาวเท่า `sizeBytes` ที่เซ็นไว้พอดี (ขนาดที่ `POST /api/uploads` ขอ) Next.js เก็บ body ไว้ให้ proxy.ts ได้ไม่เกิน `PROXY_BODY_MAX_BYTES` (`experimental.proxyClientMaxBodySize`) body ที่ยาวกว่าถึง route แบบถูกตัด จึงถูกปฏิเสธด้วย `upload.incomplete` แทนการเก็บไฟล์ที่เสีย
 
 Response 200 `{}`
 
-Error: 403 `upload.signature_invalid`, 403 `upload.expired`, 413 `media.too_large`, 422 `upload.content_mismatch`, 503 `storage.unavailable`
+Error: 403 `upload.signature_invalid`, 403 `upload.expired`, 413 `media.too_large`, 422 `upload.content_mismatch`, 422 `upload.incomplete`, 503 `storage.unavailable`
 
 ### GET /api/local-storage/*key
 
@@ -560,7 +613,12 @@ Body ต้องมีอย่างน้อยหนึ่ง field:
 | `aiDailyBudgetUsd` | string | `^\d{1,4}(\.\d{1,2})?$` และไม่เกิน `AI_DAILY_BUDGET_MAX_USD` |
 | `aiPoliteParticle` | `ค่ะ` \| `ครับ` | |
 | `aiInstructions` | string | 0 ถึง `AI_INSTRUCTIONS_MAX_CHARS` ตัว |
+| `aiName` | string | ตัดช่องว่างหัวท้ายแล้ว 0 ถึง `AI_NAME_MAX_CHARS` ตัว ไม่มีอักขระควบคุม (รวมการขึ้นบรรทัดและ tab) สตริงว่างล้างชื่อ (`UpdateSettings` เก็บเป็น null ด้วย `normalizeAiName`) |
+| `aiAnswerMode` | `knowledge_only` \| `general` | |
 | `guardEnabled` | boolean | เปิดได้เมื่อมีหัวข้ออย่างน้อยหนึ่งหัวข้อ (ที่ส่งมาพร้อมกันหรือที่บันทึกไว้) |
+| `howToText` | string | ตัดช่องว่างหัวท้ายแล้ว 0 ถึง `HOW_TO_TEXT_MAX_CHARS` ตัว สตริงว่างกลับไปใช้ข้อความเริ่มต้น |
+| `welcomeEnabled` | boolean | |
+| `welcomeText` | string | ตัดช่องว่างหัวท้ายแล้ว 0 ถึง `WELCOME_TEXT_MAX_CHARS` ตัว สตริงว่างกลับไปใช้ข้อความเริ่มต้น |
 | `guardTopics` | string[] | 0 ถึง `GUARD_MAX_TOPICS` รายการ แต่ละรายการ 1 ถึง `GUARD_TOPIC_MAX_CHARS` ตัวหลังตัดช่องว่างหัวท้าย ห้ามซ้ำกัน ตรวจด้วย `normalizeGuardTopics` (`issue` ไม่เป็น null หรือมีรายการว่างไม่ผ่าน) |
 
 field อื่น รวม `guardRefusalText` ที่เคยมี ไม่ผ่าน: ข้อความปฏิเสธคงที่ใน `guardRefusalText(particle)` ([topic-guard](../specs/topic-guard.md))
@@ -575,6 +633,7 @@ Error: 409 `settings.guard_topics_required` (ผลรวมหลังแก�
 | --- | --- |
 | Use case | `TestTopicGuard` |
 | การจำกัดความถี่ | `guard_test` ตาม `RATE_LIMIT_GUARD_TEST` |
+| เวลารอของหน้าเว็บ | `CLIENT_TIMEOUT_GUARD_TEST_MS` (การคัดกรองหนึ่งครั้งพร้อม retry นานกว่า `CLIENT_REQUEST_TIMEOUT_MS`) |
 
 | Body field | ชนิด | บังคับ | ข้อกำหนด |
 | --- | --- | --- | --- |
@@ -602,7 +661,7 @@ Error: 409 `ai.disabled_globally`, 409 `settings.guard_topics_required`, 409 `ai
 | `channelSecret` | string | ใช่ | 1 ถึง 200 ตัว ไม่มีช่องว่าง |
 | `channelAccessToken` | string | ใช่ | 1 ถึง 1000 ตัว ไม่มีช่องว่าง |
 
-Response 200 `{ "botName": string, "basicId": string, "secretStatus": "verified" | "unchecked" }` (`unchecked`: LINE ตรวจ Channel secret ไม่ได้ตอนนี้ ค่าถูกบันทึกแล้ว) หน้าเว็บโหลด `GET /api/settings` ใหม่หลังสำเร็จ Error: 422 `line.credentials_invalid`, 422 `line.channel_secret_invalid` (Channel ID กับ Channel secret ไม่ใช่คู่กัน ไม่บันทึก), 503 `line.unavailable` (ตรวจ access token ไม่ได้)
+Response 200 `{ "botName": string, "basicId": string, "secretStatus": "verified" | "unchecked" }` (`unchecked`: LINE ตรวจ Channel secret ไม่ได้ตอนนี้ ค่าถูกบันทึกแล้ว) หน้าเว็บโหลด `GET /api/settings` ใหม่หลังสำเร็จ Error: 422 `line.credentials_invalid`, 422 `line.channel_secret_invalid` (Channel ID กับ Channel secret ไม่ใช่คู่กัน ไม่บันทึก), 422 `line.channel_mismatch` (Channel access token เป็นของ channel อื่น ไม่บันทึก), 503 `line.unavailable` (ตรวจ access token ไม่ได้) หน้าเว็บรอคำตอบ `CLIENT_TIMEOUT_LINE_CHECK_MS`
 
 ### POST /api/settings/line/test
 
@@ -612,7 +671,18 @@ Response 200 `{ "botName": string, "basicId": string, "secretStatus": "verified"
 
 Body ว่าง Response 200 `{ "botName": string, "basicId": string, "secretStatus": "verified" | "unchecked" | "no_channel_id" }` ผลการตรวจ Channel secret ของการทดสอบครั้งนี้
 
-Error: 409 `line.not_configured`, 409 `line.credentials_unreadable`, 422 `line.credentials_invalid`, 422 `line.channel_secret_invalid`, 503 `line.unavailable`
+Error: 409 `line.not_configured`, 409 `line.credentials_unreadable`, 422 `line.credentials_invalid`, 422 `line.channel_secret_invalid`, 422 `line.channel_mismatch`, 503 `line.unavailable`
+
+### POST /api/settings/rich-menu และ DELETE /api/settings/rich-menu
+
+| | |
+| --- | --- |
+| Use case | `PublishRichMenu` (POST), `RemoveRichMenu` (DELETE) |
+| `maxDuration` | ค่าเริ่มต้น การ publish เรียก LINE ไม่เกินห้าครั้งตามลำดับ หน้าเว็บรอ `CLIENT_TIMEOUT_RICH_MENU_PUBLISH_MS` (publish) และ `CLIENT_TIMEOUT_RICH_MENU_REMOVE_MS` (นำออก) |
+
+Body ว่าง Response 200 `SettingsDto` ที่อ่านใหม่ (`richMenu.published`, `publishedAt`, `lastError`) ขั้นตอนอยู่ใน [line-messaging](../specs/line-messaging.md#publish-และนำออก)
+
+Error: 409 `line.not_configured`, 409 `line.credentials_unreadable`, 422 `line.credentials_invalid` (LINE ตอบ 401), 502 `line.rich_menu_failed` (LINE ปฏิเสธคำขอของ rich menu), 409 `line.rich_menu_conflict` (การ publish อีกครั้งที่ทำพร้อมกันบันทึกเมนูของมันก่อน เมนูที่แสดงคือเมนูนั้น), 503 `line.unavailable` (LINE ไม่ตอบ, 5xx หรือ 429) ทุก error ของ LINE ถูกเก็บใน `richMenu.lastError` ด้วยรหัสเดิมของ LINE หน้าเว็บจึงโหลด `GET /api/settings` ใหม่หลังล้ม
 
 ### GET /api/knowledge/documents
 
@@ -632,7 +702,7 @@ Response 200 `{ documents: DocumentDto[]; usedTokens: number; capacityTokens: nu
 | การจำกัดความถี่ | `pdf_ingest` ตาม `RATE_LIMIT_PDF_INGEST` |
 | `maxDuration` | `KNOWLEDGE_MAX_DURATION_S` |
 
-Request: `multipart/form-data` มี part เดียวชื่อ `file` ชื่อไฟล์ 1 ถึง 200 ตัว (ตัด path ออก) body ทั้งหมดไม่เกิน `PDF_MAX_BYTES` + `JSON_MAX_BODY_BYTES` ถ้า `Content-Length` เกินตอบ `knowledge.file_too_large` โดยไม่อ่าน body (ต้องยืนยันเพดานขนาด request ของ Vercel ซึ่งอาจต่ำกว่านี้)
+Request: `multipart/form-data` มี part เดียวชื่อ `file` ชื่อไฟล์ 1 ถึง 200 ตัว (ตัด path ออก) body ทั้งหมดไม่เกิน `PDF_MAX_BYTES` + `JSON_MAX_BODY_BYTES` ถ้า `Content-Length` เกินตอบ `knowledge.file_too_large` โดยไม่อ่าน body (ต้องยืนยันเพดานขนาด request ของ Vercel ซึ่งอาจต่ำกว่านี้) หน้าเว็บรอคำตอบ `CLIENT_REQUEST_TIMEOUT_MS` บวกเวลาที่ไฟล์ใช้ที่ `CLIENT_UPLOAD_MIN_BYTES_PER_SECOND` (`uploadTimeoutMs`)
 
 Response 202 `DocumentDto` สถานะ `processing`
 
@@ -738,10 +808,15 @@ Response 200 `GuardrailStatsDto` ตัวเลขของวันนี้�
 | `DELETE /api/uploads/:uploadId` | `DiscardUpload` |
 | `PUT /api/local-storage/*key` | `WriteLocalUpload` |
 | `GET /api/local-storage/*key` | `ServeLocalMedia` |
+| `GET /api/contacts/:id/notes` | `ListContactNotes` |
+| `POST /api/contacts/:id/notes` | `AddContactNote` |
+| `DELETE /api/contacts/:id/notes/:noteId` | `DeleteContactNote` |
 | `GET /api/settings` | `GetSettings` |
 | `PATCH /api/settings` | `UpdateSettings` |
 | `PUT /api/settings/line-credentials` | `SetLineCredentials` |
 | `POST /api/settings/line/test` | `TestLineConnection` |
+| `POST /api/settings/rich-menu` | `PublishRichMenu` |
+| `DELETE /api/settings/rich-menu` | `RemoveRichMenu` |
 | `POST /api/settings/guard/test` | `TestTopicGuard` |
 | `GET /api/knowledge/documents` | `ListDocuments` |
 | `POST /api/knowledge/documents` | `IngestDocument` |

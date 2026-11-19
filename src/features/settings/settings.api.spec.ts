@@ -11,6 +11,8 @@ import {
   listKbDocuments,
   retryKbDocument,
   saveLineCredentials,
+  publishRichMenu,
+  removeRichMenu,
   testLineConnection,
   updateSettings,
   uploadKbDocument,
@@ -46,6 +48,8 @@ const settings = {
     todayCostUsd: '0.012345',
     politeParticle: 'ครับ',
     instructions: 'สุภาพ',
+    name: null,
+    answerMode: 'general',
   },
   guard: { enabled: false, topics: [], blockedToday: 0 },
   line: {
@@ -58,6 +62,14 @@ const settings = {
     webhookUrl: 'https://example.test/api/line/webhook',
     lastWebhookAt: null,
   },
+  richMenu: {
+    published: false,
+    publishedAt: null,
+    lastError: null,
+    howToText: '',
+    howToDefault: 'ลองได้ตามนี้เลยค่ะ',
+  },
+  welcome: { enabled: true, text: '', defaultText: 'ขอบคุณที่เพิ่มเพื่อน', accountName: 'Test webchat' },
   client: { pollIntervalMs: 500 },
 };
 const doc = (id: string, status: DocumentDto['status']): DocumentDto => ({
@@ -150,6 +162,15 @@ describe('AI and LINE', () => {
     await expect(
       saveLineCredentials({ channelId: '1234567890', channelSecret: 's', channelAccessToken: 't' }),
     ).rejects.toMatchObject({ code: 'line.credentials_invalid', status: 422 });
+  });
+
+  it('publishes and removes the rich menu at /api/settings/rich-menu and parses SettingsDto', async () => {
+    fetchMock.mockResolvedValue(json(settings));
+    expect(await publishRichMenu()).toEqual(settings);
+    expect(call()).toMatchObject({ url: '/api/settings/rich-menu', method: 'POST' });
+    fetchMock.mockResolvedValue(json(settings));
+    await removeRichMenu();
+    expect(call(1)).toMatchObject({ url: '/api/settings/rich-menu', method: 'DELETE' });
   });
 
   it('testLineConnection posts to /api/settings/line/test', async () => {

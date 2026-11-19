@@ -1,7 +1,7 @@
 // Attachment of the composer (ui-screens 7.6), side effects: read, convert, preview, ticket, PUT
 // and discard, with injected browser and API functions so the whole flow is tested without a
 // browser. The states it dispatches are those of `attachmentReducer`.
-import { errorCodeOf } from '@/common/common.api';
+import { ApiError, errorCodeOf } from '@/common/common.api';
 import type { IssueUploadBody, UploadTargetDto, UploadTicketDto } from '@/contracts';
 
 import type { UploadOptions } from '../inbox.api';
@@ -12,6 +12,7 @@ import {
   type AttachmentEvent,
   type MainContentType,
   type Prepared,
+  mbText,
 } from './inbox.attachment.logic';
 
 export type AttachmentDeps = {
@@ -189,7 +190,7 @@ export function createAttachmentController(
         preview: { contentType: 'image/jpeg', sizeBytes: preview.size },
       });
     } catch (error) {
-      fail({ kind: 'request', code: errorCodeOf(error) });
+      fail({ kind: 'request', code: errorCodeOf(error), sizeMb: mbText(main.size) });
       return;
     }
     job.uploadId = ticket.uploadId;
@@ -209,10 +210,14 @@ export function createAttachmentController(
           emit(job, { type: 'progress', attempt, pct });
         },
       });
-    } catch {
+    } catch (error) {
       if (!live(job)) return; // aborted: `release` already discarded it
       discard(job);
-      fail({ kind: 'upload' });
+      fail({
+        kind: 'upload',
+        ...(error instanceof ApiError && error.status > 0 ? { code: error.code } : {}),
+        sizeMb: mbText(main.size),
+      });
       return;
     }
     if (!live(job)) return;

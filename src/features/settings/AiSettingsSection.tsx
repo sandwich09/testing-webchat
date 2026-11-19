@@ -2,13 +2,12 @@
 
 // AI section of the settings page (ui-screens 9.3). Every control saves through its own
 // `useUpdateSettings` instance, so pending, success and error belong to that control only.
-import { Check, Loader2 } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { useId, useRef, useState, type SyntheticEvent, type KeyboardEvent } from 'react';
 
 import { errorCodeOf } from '@/common/common.api';
 import { copy as commonCopy } from '@/common/common.constants';
 import { cn, formatUsdForScreen } from '@/common/common.logic';
-import { errorMessage } from '@/common/error-messages';
 import { ErrorState } from '@/common/ErrorState';
 import { testIds } from '@/common/test-ids';
 import { showToast } from '@/common/toast';
@@ -29,24 +28,17 @@ import {
   type SettingsDto,
 } from '@/contracts';
 
+import { AiAnswerModeRow, AiNameRow } from './AiPersonaRows';
 import { parseBudgetInput, validateInstructions } from './settings.logic';
 import { copy } from './settings.constants';
 import { useUpdateSettings } from './settings.hooks';
+import { FieldError, nextRadioIndex, SaveButton, saveFailureText } from './SettingsFormParts';
 import { SettingsRow } from './SettingsRow';
 import { SettingsSection } from './SettingsSection';
 
 // ---------------------------------------------------------------------------
 // Pure helpers (unit tested in AiSettingsSection.spec.ts)
 // ---------------------------------------------------------------------------
-
-/** Thai text of a failed save: the catalog text of the code, else the generic form text. */
-export function saveFailureText(error: unknown): string {
-  return (
-    errorMessage(errorCodeOf(error), { variant: 'form' }) ??
-    errorMessage('internal.unexpected', { variant: 'form' }) ??
-    commonCopy.error.network
-  );
-}
 
 /** Text under the budget field for a result code of `parseBudgetInput`. */
 export function budgetErrorText(code: 'budget_invalid' | 'budget_out_of_range'): string {
@@ -91,16 +83,6 @@ export function instructionsDirty(draft: string | null, saved: string): boolean 
   return draft !== null && draft !== saved;
 }
 
-/** Option of a radio group that an arrow key moves to, wrapping at both ends. `null` for other keys. */
-export function nextRadioIndex(key: string, current: number, count: number): number | null {
-  if (count <= 0) return null;
-  if (key === 'ArrowRight' || key === 'ArrowDown') return (current + 1) % count;
-  if (key === 'ArrowLeft' || key === 'ArrowUp') return (current - 1 + count) % count;
-  if (key === 'Home') return 0;
-  if (key === 'End') return count - 1;
-  return null;
-}
-
 /** `copy.ai.particleOption` key of a particle value. */
 export function particleLabel(particle: PoliteParticle): string {
   return particle === 'ค่ะ' ? copy.ai.particleOption.ka : copy.ai.particleOption.krub;
@@ -109,36 +91,6 @@ export function particleLabel(particle: PoliteParticle): string {
 // ---------------------------------------------------------------------------
 // Pieces
 // ---------------------------------------------------------------------------
-
-function SaveButton({ pending, testId }: { pending: boolean; testId: string }) {
-  return (
-    <Button
-      type="submit"
-      aria-busy={pending || undefined}
-      aria-disabled={pending || undefined}
-      data-testid={testId}
-      className="relative min-w-20"
-      onClick={(event) => {
-        // aria-disabled keeps focus on the button while saving; a second click does nothing.
-        if (pending) event.preventDefault();
-      }}
-    >
-      <span className={pending ? 'invisible' : undefined}>{commonCopy.action.save}</span>
-      {pending ? (
-        <Loader2 aria-hidden="true" className="absolute size-[18px] animate-spin" />
-      ) : null}
-    </Button>
-  );
-}
-
-function FieldError({ id, message }: { id: string; message: string | null }) {
-  if (message === null) return null;
-  return (
-    <p id={id} role="alert" className="text-sub text-danger">
-      {message}
-    </p>
-  );
-}
 
 const modelOptions = AI_MODEL_IDS.map((id) => ({ value: id, label: copy.ai.modelOption[id] }));
 
@@ -471,7 +423,7 @@ function AiSkeleton() {
       <span className="sr-only" role="status">
         {commonCopy.loading}
       </span>
-      {[0, 1, 2, 3, 4].map((row) => (
+      {[0, 1, 2, 3, 4, 5, 6].map((row) => (
         <div key={row} className="flex min-h-16 items-center gap-6 py-3">
           <div className="flex-1 space-y-2">
             <Skeleton className="h-4 w-40" />
@@ -484,7 +436,10 @@ function AiSkeleton() {
   );
 }
 
-/** AI settings (ui-screens 9.3): kill switch, model, daily budget, particle and instructions. */
+/**
+ * AI settings (ui-screens 9.3): kill switch, model, daily budget, particle, AI name, answer scope
+ * and custom instructions.
+ */
 export function AiSettingsSection() {
   const query = useSettings();
   const settings = query.data;
@@ -504,6 +459,8 @@ export function AiSettingsSection() {
           <ModelRow settings={settings} />
           <BudgetRow settings={settings} />
           <ParticleRow settings={settings} />
+          <AiNameRow settings={settings} />
+          <AiAnswerModeRow settings={settings} />
           <InstructionsRow settings={settings} />
         </div>
       ) : query.isError ? (

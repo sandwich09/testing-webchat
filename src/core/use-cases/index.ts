@@ -1,4 +1,7 @@
+export * from './add-contact-note.use-case';
 export * from './check-health.use-case';
+export * from './delete-contact-note.use-case';
+export * from './list-contact-notes.use-case';
 export * from './delete-document.use-case';
 export * from './discard-upload.use-case';
 export * from './generate-ai-reply.use-case';
@@ -30,3 +33,6 @@ export * from './update-settings.use-case';
 export * from './verify-access.use-case';
 export * from './write-local-upload.use-case';
 export type { AllPorts, RequestContext, UseCase, UseCaseConfig } from './types';
+export * from './handle-rich-menu-action.use-case';
+export * from './publish-rich-menu.use-case';
+export * from './send-welcome.use-case';

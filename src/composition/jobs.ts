@@ -6,6 +6,10 @@ import type {
   UseCase,
   GenerateAiReplyInput,
   GenerateAiReplyOutput,
+  HandleRichMenuActionInput,
+  HandleRichMenuActionOutput,
+  SendWelcomeInput,
+  SendWelcomeOutput,
   StoreInboundMediaInput,
   StoreInboundMediaOutput,
 } from '@/core/use-cases';
@@ -15,6 +19,8 @@ export interface JobDeps {
   runJob: RunJob;
   storeInboundMedia: UseCase<StoreInboundMediaInput, StoreInboundMediaOutput>;
   generateAiReply: UseCase<GenerateAiReplyInput, GenerateAiReplyOutput>;
+  handleRichMenuAction: UseCase<HandleRichMenuActionInput, HandleRichMenuActionOutput>;
+  sendWelcome: UseCase<SendWelcomeInput, SendWelcomeOutput>;
   extractDocument: ExtractDocument;
 }
 
@@ -22,7 +28,9 @@ export interface JobDeps {
 export const makeJobs = (deps: () => JobDeps) => ({
   /**
    * POST /api/line/webhook: every follow-up of ReceiveLineEvents runs after the 200, each in
-   * its own job: `store_media` → StoreInboundMedia, `ai_reply` → GenerateAiReply.
+   * its own job: `store_media` → StoreInboundMedia, `ai_reply` → GenerateAiReply,
+   * `rich_menu_action` → HandleRichMenuAction (then GenerateAiReply in the same job when it starts
+   * the AI), `welcome` → SendWelcome.
    */
   scheduleLineFollowUps: (
     followUps: readonly FollowUpJob[],
@@ -52,6 +60,39 @@ export const makeJobs = (deps: () => JobDeps) => ({
               contactId: followUp.contactId,
               messageId: followUp.triggerMessageId,
             },
+          );
+          break;
+        case 'rich_menu_action':
+          d.runJob(
+            async () => {
+              const handled = await d.handleRichMenuAction(
+                {
+                  contactId: followUp.contactId,
+                  action: followUp.action,
+                  tapMessageId: followUp.tapMessageId,
+                },
+                ctx,
+              );
+              if (handled.ok && handled.value.aiReply !== null) {
+                await d.generateAiReply(handled.value.aiReply, ctx);
+              }
+            },
+            {
+              requestId: ctx.requestId,
+              route,
+              contactId: followUp.contactId,
+              messageId: followUp.tapMessageId,
+            },
+          );
+          break;
+        case 'welcome':
+          d.runJob(
+            () =>
+              d.sendWelcome(
+                { contactId: followUp.contactId, replyToken: followUp.replyToken },
+                ctx,
+              ),
+            { requestId: ctx.requestId, route, contactId: followUp.contactId },
           );
           break;
       }

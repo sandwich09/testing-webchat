@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { CONTACT_SEARCH_MAX_CHARS } from './limits.contract';
+import { CONTACT_NOTE_MAX_CHARS, CONTACT_SEARCH_MAX_CHARS } from './limits.contract';
 import {
+  addContactNoteBodySchema,
+  contactNoteParamsSchema,
+  listContactNotesResponseSchema,
   listContactsQuerySchema,
   listContactsResponseSchema,
   setContactAiBodySchema,
@@ -54,5 +57,30 @@ describe('contact bodies and responses', () => {
     };
     expect(listContactsResponseSchema.safeParse(body).success).toBe(true);
     expect(listContactsResponseSchema.safeParse({ ...body, extra: 1 }).success).toBe(false);
+  });
+});
+
+describe('contact notes', () => {
+  it('trims the text and takes 1 to CONTACT_NOTE_MAX_CHARS characters', () => {
+    const parsed = addContactNoteBodySchema.safeParse({ text: '  แพ้ถั่ว\nโทรหลังห้าโมง  ' });
+    expect(parsed.success && parsed.data.text).toBe('แพ้ถั่ว\nโทรหลังห้าโมง');
+    expect(
+      addContactNoteBodySchema.safeParse({ text: 'ก'.repeat(CONTACT_NOTE_MAX_CHARS) }).success,
+    ).toBe(true);
+    for (const text of ['', '   ', 'ก'.repeat(CONTACT_NOTE_MAX_CHARS + 1)]) {
+      expect(addContactNoteBodySchema.safeParse({ text }).success).toBe(false);
+    }
+    expect(addContactNoteBodySchema.safeParse({ text: 'x', extra: 1 }).success).toBe(false);
+  });
+
+  it('takes both ids in the delete path and checks the list response', () => {
+    const id = '0193a0b1-0000-7000-8000-000000000001';
+    expect(contactNoteParamsSchema.safeParse({ id, noteId: id }).success).toBe(true);
+    expect(contactNoteParamsSchema.safeParse({ id, noteId: 'x' }).success).toBe(false);
+    expect(
+      listContactNotesResponseSchema.safeParse({
+        notes: [{ id, contactId: id, text: 'a', createdAt: '2026-11-18T03:00:00.000Z' }],
+      }).success,
+    ).toBe(true);
   });
 });

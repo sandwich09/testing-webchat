@@ -12,7 +12,13 @@ import {
   lock,
   setUnauthorizedHandler,
   shouldRetryQuery,
+  uploadTimeoutMs,
 } from './common.api';
+import { CLIENT_REQUEST_TIMEOUT_MS } from './common.constants';
+import {
+  CLIENT_TIMEOUT_RICH_MENU_PUBLISH_MS,
+  CLIENT_UPLOAD_MIN_BYTES_PER_SECOND,
+} from '@/contracts';
 
 const fetchMock = vi.fn<typeof fetch>();
 
@@ -48,6 +54,8 @@ const settings = {
     todayCostUsd: '0.000000',
     politeParticle: 'ค่ะ',
     instructions: '',
+    name: null,
+    answerMode: 'general',
   },
   guard: { enabled: false, topics: [], blockedToday: 0 },
   line: {
@@ -60,6 +68,14 @@ const settings = {
     webhookUrl: 'https://example.test/api/line/webhook',
     lastWebhookAt: null,
   },
+  richMenu: {
+    published: false,
+    publishedAt: null,
+    lastError: null,
+    howToText: '',
+    howToDefault: 'ลองได้ตามนี้เลยค่ะ',
+  },
+  welcome: { enabled: true, text: '', defaultText: 'ขอบคุณที่เพิ่มเพื่อน', accountName: 'Test webchat' },
   client: { pollIntervalMs: 2000 },
 };
 
@@ -174,6 +190,27 @@ describe('apiFetch answers', () => {
     const pending = apiFetch('/api/x', { schema: okSchema });
     timeout.abort();
     await expect(pending).rejects.toMatchObject({ code: 'client.network' });
+  });
+
+  it('waits CLIENT_REQUEST_TIMEOUT_MS by default, the given time per call, and without limit on null', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    fetchMock.mockImplementation(() => Promise.resolve(json({ ok: true })));
+
+    await apiFetch('/api/x', { schema: okSchema });
+    await apiFetch('/api/x', { schema: okSchema, timeoutMs: CLIENT_TIMEOUT_RICH_MENU_PUBLISH_MS });
+    await apiFetch('/api/x', { schema: okSchema, timeoutMs: null });
+
+    expect(timeout.mock.calls).toEqual([
+      [CLIENT_REQUEST_TIMEOUT_MS],
+      [CLIENT_TIMEOUT_RICH_MENU_PUBLISH_MS],
+    ]);
+  });
+
+  it('gives an upload the default plus the file at the slowest expected rate', () => {
+    expect(uploadTimeoutMs(0)).toBe(CLIENT_REQUEST_TIMEOUT_MS);
+    expect(uploadTimeoutMs(CLIENT_UPLOAD_MIN_BYTES_PER_SECOND * 10)).toBe(
+      CLIENT_REQUEST_TIMEOUT_MS + 10_000,
+    );
   });
 
   it('rethrows the abort reason when the caller cancels, so it is not counted as a failure', async () => {

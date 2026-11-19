@@ -1,6 +1,6 @@
 # Test webchat application
 
-A web inbox for a shop's admins to answer customers who message the shop's LINE Official Account. Customers chat in the LINE app; admins see who wrote, pick a customer and reply from the browser. An optional AI assistant (Claude) can answer per customer from the chat history and a knowledge base built from the shop's PDFs, inside a topic boundary the shop sets.
+A web inbox for the admins of a LINE Official Account, built as a neutral tool for trying out a LINE OA for free. People chat in the LINE app; admins see who wrote, pick a chat and reply from the browser. An optional AI assistant (Claude) can answer per chat from the chat history and a knowledge base built from uploaded PDFs, with a name, an answer scope and instructions the admins set, inside an optional topic boundary.
 
 Built for the Robolingo webchat assignment. The screens are in Thai; the design docs in [`docs/`](docs/README.md) are in Thai with English technical terms and are the source of truth for behaviour.
 
@@ -22,19 +22,22 @@ The access code of the production webchat is not in this repository; it is sent 
 | R2 Send messages from the webchat to LINE | Reply token first, push as fallback, with a retry key ([line-messaging](docs/specs/line-messaging.md)) | E2E journey 2 against the LINE stub |
 | R3 Receive messages sent to the LINE OA | Signed webhook, de-duplicated events ([line-messaging](docs/specs/line-messaging.md)) | E2E journey 1 |
 | R4 Public GitHub repository | This repository | Deliverables table |
-| R5 Hosted on Vercel | [deploy runbook](docs/runbooks/deploy.md), `vercel.json` | Not deployed yet (see "Verified and not verified") |
+| R5 Hosted on Vercel | [deploy runbook](docs/runbooks/deploy.md), `vercel.json` | First production test done; what it confirmed is listed in "Verified and not verified" |
 | R6 See who wrote and pick who to answer | Contact list with LINE name and picture, one chat per customer ([webchat-inbox](docs/specs/webchat-inbox.md)) | E2E journeys 1 and 2 |
 
 The full requirement list, including the extras below, is in [requirements](docs/product/requirements.md).
 
 ## Features
 
-- Access gate: a shared access code, a signed `HttpOnly` cookie, rate-limited attempts ([access-gate](docs/specs/access-gate.md)).
-- Inbox: contact list ordered by each customer's latest message, loaded page by page as it scrolls, with unread and "needs admin" tabs and search, chat with day chips and grouping, polling instead of WebSockets ([ADR 0005](docs/adr/0005-polling-instead-of-realtime.md)).
-- Messages in both directions: text, images and video; stickers and other types are shown as labels. Images (JPEG, PNG, WebP, HEIC) are converted and get a preview in the browser before upload.
+- Access gate: a shared access code, a signed `HttpOnly` cookie, rate-limited attempts; every request that changes data must come from the same origin or `APP_BASE_URL` ([access-gate](docs/specs/access-gate.md), [ADR 0025](docs/adr/0025-same-origin-or-app-base-url.md)).
+- Inbox: contact list ordered by each customer's latest message, loaded page by page as it scrolls, with unread and "needs admin" tabs and search, chat with day chips and grouping, polling instead of WebSockets with back-off counted per query ([webchat-inbox](docs/specs/webchat-inbox.md), [ADR 0005](docs/adr/0005-polling-instead-of-realtime.md), [ADR 0028](docs/adr/0028-review-fixes-concurrency-polling-and-ci.md)).
+- Messages in both directions: text, images and video; inbound voice messages are stored and play in the chat; stickers and other types are shown as labels. A LINE reply that quotes an earlier message shows the quoted block. Images (JPEG, PNG, WebP, HEIC) are converted and get a preview in the browser before upload; a failed upload or media download shows its reason ([line-messaging](docs/specs/line-messaging.md)).
 - Delivery state (sending, sent, failed) with retry under the same LINE retry key; LINE's typing indicator while the admin types.
-- AI reply per customer: Claude answers from the chat history and the knowledge base, hands over to an admin when it cannot answer, and turns itself off when an admin replies ([ai-reply](docs/specs/ai-reply.md), [ai-prompt](docs/specs/ai-prompt.md)).
-- Admin back office: LINE credentials (encrypted at rest), global AI kill switch, model choice, daily budget, PDF knowledge base, token and cost report per customer, system status ([admin-backoffice](docs/specs/admin-backoffice.md), [usage-cost](docs/specs/usage-cost.md)).
+- Admin notes per customer in the info panel; they stay in the webchat and are never sent to LINE or to the AI ([webchat-inbox](docs/specs/webchat-inbox.md#โน้ตของแอดมิน)).
+- AI reply per customer: Claude (default model `claude-sonnet-5-5`) answers from the chat history and the knowledge base, hands over to an admin when it cannot answer, and turns itself off for that customer when an admin replies. A neutral core prompt is combined with the admins' settings: AI name, answer scope (`general` or `knowledge_only`), polite particle and custom instructions ([ai-reply](docs/specs/ai-reply.md), [ai-prompt](docs/specs/ai-prompt.md), [ADR 0026](docs/adr/0026-neutral-core-prompt-and-layered-settings.md)).
+- LINE rich menu (three buttons in one row: talk to the AI, talk to an admin, how to test) published from the settings page and answered with postbacks, and a Flex welcome card sent when someone adds the OA as a friend; the how-to and welcome texts are editable ([line-messaging](docs/specs/line-messaging.md#rich-menu), [ADR 0027](docs/adr/0027-rich-menu-and-welcome-card.md)).
+- Admin back office: LINE credentials (encrypted at rest, checked to belong to one channel), global AI kill switch, AI settings, daily budget, PDF knowledge base, rich menu and welcome card, token and cost report per customer, system status ([admin-backoffice](docs/specs/admin-backoffice.md), [usage-cost](docs/specs/usage-cost.md)).
+- App icon and LINE OA profile picture rendered from checked-in sources ([frontend](docs/architecture/frontend.md#brand-assets)).
 - Guardrail showcase: a topic boundary checked by a separate, cheaper model call before the reply model sees the message; out-of-topic messages get a fixed refusal (its polite ending follows the chosen particle) and never reach the reply model ([topic-guard](docs/specs/topic-guard.md), [ADR 0020](docs/adr/0020-topic-guardrail-as-separate-check.md), [ADR 0024](docs/adr/0024-scope-reductions.md)). `GET /api/system/guardrails` returns today's checks per layer (input, output, action, human, control); no screen shows them. [ai-guardrails](docs/security/ai-guardrails.md) maps each common guardrail practice to the code and the test that covers it. A manual evaluation script (`pnpm ai:eval`) computes attack success, false-positive, task success and unauthorized-action rates; it calls the real API and only runs when the owner asks.
 
 ## Architecture
@@ -68,8 +71,8 @@ What starts:
 | --- | --- | --- |
 | `app` | 3000 | The built app (Next.js standalone); runs migrations at start |
 | `db` | 15432 | PostgreSQL 17 |
-| `stub` | 4010 | Stands in for the LINE Messaging API and the Claude API (records requests, returns canned answers) |
-| `seed` | | Loads sample contacts, messages and a knowledge-base document once the app is healthy, then exits; safe to run again with `docker compose run --rm seed`. Local Docker only: production never runs it and starts with an empty database |
+| `stub` | 4010 | Stands in for the LINE Messaging API and the Claude API (records requests, returns fixed or queued answers) |
+| `seed` | | Loads sample data (a fictional café: contacts, messages, AI settings and a knowledge-base document) once the app is healthy, then exits; safe to run again with `docker compose run --rm seed`. Local Docker only: production never runs it and starts with an empty database |
 
 Behind a proxy that re-signs HTTPS, pass its CA to the image build: `EXTRA_CA_FILE=/path/to/ca.pem docker compose up --build` ([project-setup 7.1](docs/architecture/project-setup.md#71-dockerfile)).
 
@@ -96,14 +99,16 @@ The customer shows up at the top of the chat list within a second. Replies from 
 
 ## Tests
 
-Install once with `pnpm install` (Node 24, pnpm version from `packageManager`).
+Install once with `pnpm install` (Node 24 as in `.nvmrc`, pnpm version from `packageManager`).
 
 | Suite | Command | Needs |
 | --- | --- | --- |
 | Format, lint, types | `pnpm format:check && pnpm lint && pnpm typecheck` | nothing |
 | Unit (core, use cases with fakes, screen logic) with coverage | `pnpm test:coverage` (90% gate on `src/core/**`) | nothing |
 | Adapters against Postgres and the stub | `docker compose up -d --wait db stub` then `pnpm test:adapters` | Docker |
-| E2E, 9 journeys at 1280 px and 390 px | `docker compose up -d --build --wait db stub app`, `docker compose run --rm seed`, then `pnpm exec playwright install chromium` (first time) and `pnpm test:e2e` | Docker |
+| E2E, 15 journeys at 1280 px and 390 px | `docker compose up -d --build --wait db stub app`, `docker compose run --rm seed`, then `pnpm exec playwright install chromium` (first time) and `pnpm test:e2e` | Docker |
+| Docs links, constants and the CI block | `pnpm docs:check` | nothing |
+| Migration checks | `pnpm migrations:immutable && pnpm migrations:destructive` (CI); `pnpm migrations:applied` against the production database before a deploy ([deploy](docs/runbooks/deploy.md)) | git history; the last one needs `DIRECT_URL` |
 | Production build | `pnpm build` | nothing |
 
 E2E checks accessibility with axe on the welcome, chat and settings pages and fails on any console error or CSP violation. The strategy is in [test-strategy](docs/qa/test-strategy.md); the manual script for real LINE and Claude is [manual-test-script](docs/qa/manual-test-script.md).
@@ -116,6 +121,8 @@ Production environment variables (names only; meanings in [infrastructure](docs/
 
 `DATABASE_URL`, `DIRECT_URL`, `ACCESS_CODE`, `SESSION_SECRET`, `CREDENTIALS_ENCRYPTION_KEY`, `ANTHROPIC_API_KEY`, `FILE_STORAGE` (`blob`), `BLOB_READ_WRITE_TOKEN`, `APP_BASE_URL`. Optional: `POLL_INTERVAL_MS`, `AI_DEBOUNCE_MS`. Never set in production: `LINE_API_BASE_URL`, `LINE_DATA_API_BASE_URL`, `ANTHROPIC_BASE_URL`, `RATE_LIMIT_SCALE`.
 
+The LINE OA profile picture is `public/brand/line-profile-1024.png` (the same icon as the browser tab, rendered by `scripts/render-brand-assets.ts`); upload it in LINE Official Account Manager as described in [line-oa-setup](docs/runbooks/line-oa-setup.md#7-รูปโปรไฟล์ของ-line-oa).
+
 The LINE channel secret and access token are not environment variables: they are entered in the settings page and stored encrypted.
 
 ## Verified and not verified
@@ -123,18 +130,20 @@ The LINE channel secret and access token are not environment variables: they are
 Verified locally with the stubs (Chromium only):
 
 - Lint, typecheck, unit tests with the core coverage gate, adapter tests against Postgres 17 and the stub, production build.
-- All 9 E2E journeys at 1280 px and 390 px, including HEIC conversion in the browser under the app's CSP and axe with no violations.
+- All 15 E2E journeys at 1280 px and 390 px (receive, admin reply, AI reply, kill switch, pictures and videos, knowledge base, failed send, access code, topic guard, quoted replies, admin notes, rail, inbound audio, rich menu, welcome card), including HEIC conversion in the browser under the app's CSP and axe with no violations.
 - Layout of the chat page, info panel and settings at 390, 720, 768, 900, 1039 and 1280 px.
+
+Verified in the first production test with a real LINE OA and the real Claude API (reported by the owner): text in and out, an inbound sticker, an outbound image and an AI reply.
 
 Not verified (needs real credentials or accounts):
 
-- Real LINE: reply token lifetime, retry key behaviour, loading indicator, profiles, stickers and media URLs ([work-breakdown 5.2](docs/plans/work-breakdown.md#52-ตรวจไม่ได้หากไม่มี-credential-จริง-เจ้าของงานทำ)).
-- Real Claude: answer quality, real cost, prompt caching, model fallback, PDF extraction, topic-guard accuracy and latency; the evaluation script has never run against the API.
-- Vercel Blob uploads and public URLs; deployment on Vercel (function limits, region, Deploy Hook, CSP in production). The CI workflow has not run on GitHub yet.
+- Real LINE, not yet confirmed: quoted replies, inbound audio, outbound video, the rich menu and its postback taps, the Flex welcome card, the retry key (a second push with the same key), the same-channel check of the credentials (`GET /v2/bot/info` with a short-lived token), webhook redelivery, the reply token lifetime and the loading indicator ([work-breakdown 5.2](docs/plans/work-breakdown.md#52-ตรวจไม่ได้หากไม่มี-credential-จริง-เจ้าของงานทำ)).
+- Real Claude, beyond the AI reply of the first production test: answer quality, real cost, prompt caching, model fallback, PDF extraction, topic-guard accuracy and latency; the evaluation script has never run against the API.
+- Vercel Blob beyond the one outbound image of the first production test (video, files near the size limits); on Vercel: function limits, region, the Deploy Hook from CI and the CSP of every page. The CI workflow has not run on GitHub yet.
 - Firefox and Safari; HEIC photos from a real iPhone (the test file is synthetic).
 - `docker compose up` on a machine with no existing images and volumes (checked only on a machine that already had them).
 
-Known limits: one shop and one LINE OA, one shared access code without user accounts, polling rather than push updates, the AI does not read images, and the knowledge base is passed in the prompt rather than searched with embeddings ([ADR 0008](docs/adr/0008-knowledge-base-without-embeddings.md)). The open questions about external services are listed in the [implementation plan](docs/plans/implementation-plan.md#สิ่งที่ต้องยืนยันก่อนหรือระหว่างสร้าง).
+Known limits: one LINE OA per deployment, one shared access code without user accounts, polling rather than push updates, the AI does not read images or listen to voice messages, and the knowledge base is passed in the prompt rather than searched with embeddings ([ADR 0008](docs/adr/0008-knowledge-base-without-embeddings.md)). The open questions about external services are listed in the [implementation plan](docs/plans/implementation-plan.md#สิ่งที่ต้องยืนยันก่อนหรือระหว่างสร้าง).
 
 ## License
 

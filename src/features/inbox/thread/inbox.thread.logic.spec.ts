@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { AUDIO_MAX_BYTES, IMAGE_MAX_BYTES, VIDEO_MAX_BYTES } from '@/contracts';
+
 import { copy } from '../inbox.constants';
 import type { ThreadMessage } from '../inbox.logic';
 import {
@@ -9,9 +11,13 @@ import {
   newMessages,
   otherLabel,
   planTailScroll,
+  quoteView,
+  audioProgress,
+  formatAudioTime,
   resolveMedia,
   restoredScrollTop,
   shouldLoadOlder,
+  mediaProblemText,
 } from './inbox.thread.logic';
 
 function message(overrides: Partial<ThreadMessage> = {}): ThreadMessage {
@@ -28,6 +34,7 @@ function message(overrides: Partial<ThreadMessage> = {}): ThreadMessage {
     sticker: null,
     otherKind: null,
     eventCode: null,
+    quote: null,
     delivery: null,
     createdAt: '2026-11-18T07:00:00.000Z',
     sentAt: null,
@@ -153,12 +160,13 @@ describe('resolveMedia', () => {
       state: 'picture',
       src: 'https://x/p.jpg',
       openable: true,
+      failure: null,
     });
   });
 
   it('falls back to the original when a ready file has no preview', () => {
     expect(resolveMedia(message({ type: 'video', media: { ...ready, previewUrl: null } }))).toEqual(
-      { kind: 'video', state: 'picture', src: 'https://x/full.jpg', openable: true },
+      { kind: 'video', state: 'picture', src: 'https://x/full.jpg', openable: true, failure: null },
     );
   });
 
@@ -175,7 +183,7 @@ describe('resolveMedia', () => {
       resolveMedia(
         message({ type: 'image', media: { status: 'pending', url: null, previewUrl: null } }),
       ),
-    ).toEqual({ kind: 'image', state: 'pending', src: null, openable: false });
+    ).toEqual({ kind: 'image', state: 'pending', src: null, openable: false, failure: null });
   });
 
   it('shows the local preview of a file being sent, without the lightbox', () => {
@@ -188,7 +196,13 @@ describe('resolveMedia', () => {
           localPreviewUrl: 'blob:local',
         }),
       ),
-    ).toEqual({ kind: 'image', state: 'picture', src: 'blob:local', openable: false });
+    ).toEqual({
+      kind: 'image',
+      state: 'picture',
+      src: 'blob:local',
+      openable: false,
+      failure: null,
+    });
   });
 
   it('maps failed and too_large', () => {
@@ -199,6 +213,37 @@ describe('resolveMedia', () => {
     expect(
       resolveMedia(message({ type: 'image', media: { status: 'too_large', ...base } })),
     ).toMatchObject({ kind: 'image', state: 'too_large' });
+  });
+
+  it('carries the recorded reason of failed media, and names it in the text box', () => {
+    const base = { url: null, previewUrl: null };
+    for (const failure of [
+      'unsupported_type',
+      'external_source',
+      'download_failed',
+      'interrupted',
+    ] as const) {
+      const view = resolveMedia(
+        message({ type: 'image', media: { status: 'failed', ...base, failure } }),
+      );
+      expect(view).toMatchObject({ state: 'failed', failure });
+      expect(mediaProblemText('image', 'failed', failure)).toBe(copy.media.problem[failure]);
+    }
+    // A row stored before reasons were kept: the plain text of its kind.
+    expect(mediaProblemText('video', 'failed', null)).toBe(copy.media.videoFailed);
+    expect(mediaProblemText('audio', 'failed', null)).toBe(copy.media.audioFailed);
+  });
+
+  it('names the size limit of each kind for too large media, from the constants', () => {
+    expect(mediaProblemText('image', 'too_large', null)).toContain(
+      `${String(IMAGE_MAX_BYTES / 1024 / 1024)} MB`,
+    );
+    expect(mediaProblemText('video', 'too_large', null)).toContain(
+      `${String(VIDEO_MAX_BYTES / 1024 / 1024)} MB`,
+    );
+    expect(mediaProblemText('audio', 'too_large', null)).toContain(
+      `${String(AUDIO_MAX_BYTES / 1024 / 1024)} MB`,
+    );
   });
 
   it('treats an image row without media as failed', () => {
@@ -245,7 +290,9 @@ describe('deliveryReason and failedLineText', () => {
 
   it('keeps a reason that does not start with it', () => {
     expect(deliveryReason('client.network')).toBe('เชื่อมต่อระบบไม่ได้ ตรวจอินเทอร์เน็ตแล้วลองอีกครั้ง');
-    expect(deliveryReason('media.too_large')).toBe('ไฟล์ใหญ่เกินไป แนบไฟล์ที่เล็กกว่า');
+    expect(deliveryReason('media.too_large')).toBe(
+      `ไฟล์ใหญ่เกินไป รูปต้องไม่เกิน ${String(IMAGE_MAX_BYTES / 1024 / 1024)} MB และวิดีโอไม่เกิน ${String(VIDEO_MAX_BYTES / 1024 / 1024)} MB`,
+    );
     // The hours come from LINE_RETRY_KEY_WINDOW_MS, and the line asks to type the message again.
     expect(failedLineText('message.retry_expired')).toBe(
       'ส่งไม่สำเร็จ · ส่งอีกครั้งไม่ได้แล้วเพราะเกิน 24 ชั่วโมงหลังส่งครั้งแรก พิมพ์ข้อความแล้วส่งใหม่',
@@ -264,5 +311,99 @@ describe('fillCopy', () => {
   it('replaces known placeholders and keeps unknown ones', () => {
     expect(fillCopy(copy.info.timesValue, { n: 1234 })).toBe('1234 ครั้ง');
     expect(fillCopy('{a} {b}', { a: 'x' })).toBe('x {b}');
+  });
+});
+
+describe('quoteView', () => {
+  const base = {
+    available: true,
+    messageId: 'm-1',
+    author: 'ai' as const,
+    type: 'text' as const,
+    textPreview: 'ราคา 80 บาท',
+    mediaKind: null,
+  };
+
+  it('shows the author label and the one-line text, with ตอบกลับ in the accessible name', () => {
+    expect(quoteView(base, 'มะลิ')).toEqual({
+      available: true,
+      messageId: 'm-1',
+      author: 'AI',
+      text: 'ราคา 80 บาท',
+      ariaLabel: 'ตอบกลับ AI: ราคา 80 บาท',
+    });
+    expect(quoteView({ ...base, author: 'admin' }, 'มะลิ')?.ariaLabel).toBe(
+      'ตอบกลับ คุณ: ราคา 80 บาท',
+    );
+    expect(quoteView({ ...base, author: 'customer' }, 'มะลิ')?.ariaLabel).toBe(
+      'ตอบกลับ มะลิ: ราคา 80 บาท',
+    );
+  });
+
+  it('labels media and other kinds instead of text', () => {
+    const media = (mediaKind: 'image' | 'audio') =>
+      quoteView({ ...base, type: 'image', textPreview: null, mediaKind }, 'x');
+    expect(media('image')?.text).toBe('รูปภาพ');
+    expect(media('audio')?.text).toBe('[เสียง]');
+  });
+
+  it('shows the unavailable text for an unknown quote, and nothing without a quote', () => {
+    expect(
+      quoteView(
+        {
+          available: false,
+          messageId: null,
+          author: null,
+          type: null,
+          textPreview: null,
+          mediaKind: null,
+        },
+        'x',
+      ),
+    ).toEqual({
+      available: false,
+      text: 'ข้อความต้นทางไม่พร้อมแสดง',
+      ariaLabel: 'ตอบกลับข้อความที่ไม่พร้อมแสดง',
+    });
+    expect(quoteView(null, 'x')).toBeNull();
+  });
+});
+
+describe('audio', () => {
+  const audio = (media: ThreadMessage['media']) =>
+    resolveMedia(message({ type: 'audio', text: null, media }));
+
+  it('plays a stored file, and shows pending, failed and too large like pictures', () => {
+    expect(
+      audio({ status: 'ready', url: 'https://x/a.m4a', previewUrl: null, durationMs: 4000 }),
+    ).toEqual({
+      kind: 'audio',
+      state: 'ready',
+      src: 'https://x/a.m4a',
+      durationMs: 4000,
+      failure: null,
+    });
+    expect(audio({ status: 'ready', url: null, previewUrl: null, durationMs: null })).toMatchObject(
+      {
+        state: 'failed',
+      },
+    );
+    for (const status of ['pending', 'failed', 'too_large'] as const) {
+      expect(audio({ status, url: null, previewUrl: null, durationMs: null })).toMatchObject({
+        kind: 'audio',
+        state: status,
+        src: null,
+      });
+    }
+  });
+
+  it('formats times and the played share', () => {
+    expect(formatAudioTime(0)).toBe('0:00');
+    expect(formatAudioTime(7.9)).toBe('0:07');
+    expect(formatAudioTime(725)).toBe('12:05');
+    expect(formatAudioTime(Number.NaN)).toBe('0:00');
+    expect(audioProgress(1, 4)).toBe(0.25);
+    expect(audioProgress(5, 4)).toBe(1);
+    expect(audioProgress(1, null)).toBe(0);
   });
 });

@@ -25,6 +25,7 @@ export const makeWriteLocalUpload: (
   | 'upload.signature_invalid'
   | 'upload.expired'
   | 'upload.content_mismatch'
+  | 'upload.incomplete'
   | 'media.too_large'
   | 'storage.unavailable'
 > =

@@ -1,9 +1,13 @@
 import { z } from 'zod';
 import {
+  AI_ANSWER_MODES,
   AI_DAILY_BUDGET_MAX_USD,
   AI_INSTRUCTIONS_MAX_CHARS,
   AI_MODEL_IDS,
+  AI_NAME_MAX_CHARS,
   GUARD_TEST_MAX_CHARS,
+  HOW_TO_TEXT_MAX_CHARS,
+  WELCOME_TEXT_MAX_CHARS,
   LINE_CHANNEL_ID_MAX_CHARS,
   LINE_SECRET_STATUSES,
   POLITE_PARTICLES,
@@ -38,6 +42,17 @@ const guardTopicsInputSchema = z
     message: 'Too many, too long or duplicate topics',
   });
 
+/**
+ * The AI name as sent: one line without control characters, at most AI_NAME_MAX_CHARS after
+ * trimming. '' clears the name.
+ */
+const aiNameInputSchema = z
+  .string()
+  .trim()
+  .max(AI_NAME_MAX_CHARS)
+  // eslint-disable-next-line no-control-regex -- control characters are what is rejected
+  .regex(/^[^\u0000-\u001f\u007f]*$/);
+
 /** GET /api/settings. Never carries the channel secret or access token. */
 export const getSettingsResponseSchema = settingsDtoSchema;
 
@@ -49,14 +64,23 @@ export const updateSettingsBodySchema = z
     aiDailyBudgetUsd: budgetInputSchema.optional(),
     aiPoliteParticle: z.enum(POLITE_PARTICLES).optional(),
     aiInstructions: z.string().max(AI_INSTRUCTIONS_MAX_CHARS).optional(),
+    aiName: aiNameInputSchema.optional(),
+    aiAnswerMode: z.enum(AI_ANSWER_MODES).optional(),
     guardEnabled: z.boolean().optional(),
     guardTopics: guardTopicsInputSchema.optional(),
+    /** '' (or only spaces) goes back to the default text. */
+    howToText: z.string().trim().max(HOW_TO_TEXT_MAX_CHARS).optional(),
+    welcomeEnabled: z.boolean().optional(),
+    welcomeText: z.string().trim().max(WELCOME_TEXT_MAX_CHARS).optional(),
   })
   .refine((body) => Object.keys(body).length > 0, {
     message: 'At least one field is required',
   });
 export type UpdateSettingsBody = z.infer<typeof updateSettingsBodySchema>;
 export const updateSettingsResponseSchema = settingsDtoSchema;
+
+/** POST /api/settings/rich-menu (publish) and DELETE (remove): no body. Response 200 SettingsDto. */
+export const richMenuResponseSchema = settingsDtoSchema;
 
 /** POST /api/settings/guard/test. Uses the saved topics; the body has none. */
 export const testTopicGuardBodySchema = z.strictObject({

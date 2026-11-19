@@ -25,6 +25,7 @@ const CATALOG_CODES = [
   'line.credentials_unreadable',
   'line.credentials_invalid',
   'line.channel_secret_invalid',
+  'line.channel_mismatch',
   'line.unauthorized',
   'line.quota_exceeded',
   'line.rate_limited',
@@ -37,6 +38,8 @@ const CATALOG_CODES = [
   'line.content_not_ready',
   'line.loading_failed',
   'line.send_interrupted',
+  'line.rich_menu_failed',
+  'line.rich_menu_conflict',
   'contact.not_found',
   'contact.unfollowed',
   'message.not_found',
@@ -44,11 +47,14 @@ const CATALOG_CODES = [
   'message.retry_expired',
   'message.id_conflict',
   'message.rate_limited',
+  'note.not_found',
+  'note.rate_limited',
   'upload.rate_limited',
   'upload.type_not_allowed',
   'upload.too_large',
   'upload.not_found',
   'upload.content_mismatch',
+  'upload.incomplete',
   'upload.signature_invalid',
   'upload.expired',
   'media.too_large',
@@ -108,6 +114,8 @@ const CATALOG_HANDOFF_REASONS = [
   'ai_other',
   'ai_failed',
   'ai_timeout',
+  'customer_asked_admin',
+  'ai_unavailable',
 ];
 
 describe('errorMessage', () => {
@@ -168,9 +176,9 @@ describe('errorMessage', () => {
     );
     expect(errorMessage('line.unavailable')).toBe('ส่งไม่สำเร็จ ติดต่อ LINE ไม่ได้ กด "ส่งอีกครั้ง"');
     expect(errorMessage('media.too_large', { variant: 'inbound' })).toBe('ไฟล์ใหญ่เกินกว่าที่ระบบเก็บได้');
-    expect(errorMessage('media.too_large', { variant: 'outbound' })).toBe(
-      'ไฟล์ใหญ่เกินไป แนบไฟล์ที่เล็กกว่า',
-    );
+    expect(
+      errorMessage('media.too_large', { variant: 'outbound', imageMaxMb: 10, videoMaxMb: 50 }),
+    ).toBe('ไฟล์ใหญ่เกินไป รูปต้องไม่เกิน 10 MB และวิดีโอไม่เกิน 50 MB');
   });
 
   it('has the topic guard texts and the budget text of the catalog', () => {

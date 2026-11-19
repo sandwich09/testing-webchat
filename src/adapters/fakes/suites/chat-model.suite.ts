@@ -29,7 +29,7 @@ export interface ChatModelHarness {
 
 const request = (): ChatModelRequest => ({
   model: 'claude-opus-5-5',
-  systemInstructions: 'You are the assistant of a shop.',
+  systemInstructions: 'You are a helpful assistant.',
   knowledgeText: '<knowledge>\n</knowledge>',
   history: [{ role: 'customer', text: 'เปิดกี่โมงคะ' }],
   now: new Date('2026-11-18T03:00:00Z'),

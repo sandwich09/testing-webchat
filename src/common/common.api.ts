@@ -5,6 +5,7 @@ import type { z } from 'zod';
 import { CLIENT_REQUEST_TIMEOUT_MS } from '@/common/common.constants';
 import type { ErrorMessageCode } from '@/common/error-messages';
 import {
+  CLIENT_UPLOAD_MIN_BYTES_PER_SECOND,
   errorResponseSchema,
   getSettingsResponseSchema,
   listContactsResponseSchema,
@@ -83,6 +84,11 @@ export type ApiFetchOptions = {
   body?: unknown;
   /** Cancels the request (TanStack Query passes one). Cancelling rethrows the abort reason. */
   signal?: AbortSignal;
+  /**
+   * Time to wait for the answer, CLIENT_REQUEST_TIMEOUT_MS when left out. Calls whose server work
+   * takes longer pass a constant of timeouts.contract.ts; `null` waits without a total limit.
+   */
+  timeoutMs?: number | null;
 };
 
 function buildUrl(path: string, query: Record<string, QueryValue> | undefined): string {
@@ -128,7 +134,8 @@ async function send<T>(
   schema: z.ZodType<T> | null,
 ): Promise<T | undefined> {
   const callerSignal = options.signal;
-  const signals = [AbortSignal.timeout(CLIENT_REQUEST_TIMEOUT_MS)];
+  const timeoutMs = options.timeoutMs === undefined ? CLIENT_REQUEST_TIMEOUT_MS : options.timeoutMs;
+  const signals: AbortSignal[] = timeoutMs === null ? [] : [AbortSignal.timeout(timeoutMs)];
   if (callerSignal !== undefined) signals.push(callerSignal);
   const signal = AbortSignal.any(signals);
 
@@ -172,6 +179,13 @@ async function send<T>(
   // An answer that is not the contract is an error state of the caller, never a crash.
   if (!parsed.success) throw new ApiError('internal.unexpected', response.status, requestId);
   return parsed.data;
+}
+
+/** Timeout of a multipart upload of `sizeBytes`: the default plus the file at the slowest rate. */
+export function uploadTimeoutMs(sizeBytes: number): number {
+  return (
+    CLIENT_REQUEST_TIMEOUT_MS + Math.ceil((sizeBytes / CLIENT_UPLOAD_MIN_BYTES_PER_SECOND) * 1000)
+  );
 }
 
 /**

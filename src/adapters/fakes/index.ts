@@ -24,6 +24,8 @@ export * from './fake-logger';
 export * from './suites/logger.suite';
 export * from './fake-contact-repository';
 export * from './suites/contact-repository.suite';
+export * from './fake-contact-note-repository';
+export * from './suites/contact-note-repository.suite';
 export * from './fake-message-repository';
 export * from './suites/message-repository.suite';
 export * from './fake-settings-repository';

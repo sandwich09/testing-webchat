@@ -120,8 +120,8 @@ export function AppRail({ unreadCount, collapsed, onToggleCollapsed, onLogout }:
       <div
         data-testid={testIds.railBrand}
         className={cn(
-          'flex min-w-0 items-center gap-2.5 medium:mb-2 medium:h-10',
-          collapsed && 'medium:justify-center',
+          'flex min-w-0 items-center gap-2.5 medium:mb-2 medium:min-h-11',
+          collapsed && 'medium:flex-col medium:gap-1',
         )}
       >
         <span
@@ -139,6 +139,32 @@ export function AppRail({ unreadCount, collapsed, onToggleCollapsed, onLogout }:
         >
           {copy.appName}
         </span>
+        {/* Icon-only collapse control at the top of the rail (ui-screens 3.2): right of the
+            name when expanded, under the logo tile when collapsed. Wide screens only. */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label={collapsed ? copy.nav.expand : copy.nav.collapse}
+              aria-expanded={!collapsed}
+              onClick={onToggleCollapsed}
+              data-testid={testIds.railCollapse}
+              className={cn(
+                'hidden size-11 shrink-0 items-center justify-center rounded-full text-muted hover:bg-selected hover:text-fg medium:flex',
+                collapsed ? '' : '-mr-1.5 ml-auto',
+              )}
+            >
+              {collapsed ? (
+                <PanelLeftOpen aria-hidden="true" className="size-5" />
+              ) : (
+                <PanelLeftClose aria-hidden="true" className="size-5" />
+              )}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side={collapsed ? 'right' : 'bottom'}>
+            {collapsed ? copy.nav.expand : copy.nav.collapse}
+          </TooltipContent>
+        </Tooltip>
       </div>
 
       <div className="ml-auto flex items-center gap-1 medium:ml-0 medium:flex-col medium:items-stretch">
@@ -189,24 +215,6 @@ export function AppRail({ unreadCount, collapsed, onToggleCollapsed, onLogout }:
             {content}
           </button>
         ))}
-        <div className="hidden medium:contents">
-          {item(
-            'collapse',
-            collapsed ? copy.nav.expand : copy.nav.collapse,
-            collapsed ? PanelLeftOpen : PanelLeftClose,
-            (className, content) => (
-              <button
-                type="button"
-                className={className}
-                aria-expanded={!collapsed}
-                onClick={onToggleCollapsed}
-                data-testid={testIds.railCollapse}
-              >
-                {content}
-              </button>
-            ),
-          )}
-        </div>
       </div>
     </nav>
   );

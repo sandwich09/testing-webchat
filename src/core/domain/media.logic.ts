@@ -1,4 +1,4 @@
-import { IMAGE_MAX_BYTES, VIDEO_MAX_BYTES } from './constants';
+import { AUDIO_MAX_BYTES, IMAGE_MAX_BYTES, VIDEO_MAX_BYTES } from './constants';
 import type { StorageKey, UploadId } from './ids';
 import type { SniffedType } from './media.model';
 
@@ -16,7 +16,20 @@ export const sniffContentType: (leadingBytes: Uint8Array) => SniffedType | null 
   }
   if (startsWith(bytes, 4, ascii('ftyp')) && bytes.length >= 12) {
     // QuickTime (.mov) files share the box layout but are not accepted as mp4.
-    return startsWith(bytes, 8, ascii('qt  ')) ? null : 'video/mp4';
+    if (startsWith(bytes, 8, ascii('qt  '))) return null;
+    // M4A/M4B: an MPEG-4 file of audio only, the container of LINE voice messages.
+    if (startsWith(bytes, 8, ascii('M4A ')) || startsWith(bytes, 8, ascii('M4B '))) {
+      return 'audio/mp4';
+    }
+    return 'video/mp4';
+  }
+  if (startsWith(bytes, 0, ascii('ID3'))) return 'audio/mpeg';
+  if (bytes.length >= 2 && bytes[0] === 0xff) {
+    const b1 = bytes[1] ?? 0;
+    // AAC in ADTS frames: 12 sync bits, MPEG version bit, layer 00.
+    if ((b1 & 0xf6) === 0xf0) return 'audio/aac';
+    // MPEG audio (MP3): 11 sync bits and a layer other than the reserved 00.
+    if ((b1 & 0xe0) === 0xe0 && (b1 & 0x06) !== 0) return 'audio/mpeg';
   }
   if (startsWith(bytes, 0, ascii('%PDF-'))) return 'application/pdf';
   return null;
@@ -30,14 +43,32 @@ export const outboundMediaRule: (kind: 'image' | 'video') => {
     ? { contentTypes: ['image/jpeg', 'image/png'], maxBytes: IMAGE_MAX_BYTES }
     : { contentTypes: ['video/mp4'], maxBytes: VIDEO_MAX_BYTES };
 
-export const inboundMediaMaxBytes: (type: 'image' | 'video') => number = (type) =>
-  type === 'image' ? IMAGE_MAX_BYTES : VIDEO_MAX_BYTES;
+export type InboundMediaType = 'image' | 'video' | 'audio';
+
+export const inboundMediaMaxBytes: (type: InboundMediaType) => number = (type) =>
+  type === 'image' ? IMAGE_MAX_BYTES : type === 'video' ? VIDEO_MAX_BYTES : AUDIO_MAX_BYTES;
+
+/** Audio containers accepted from LINE, with the extension and Content-Type they are stored with. */
+const AUDIO_FORMATS: Partial<Record<SniffedType, { ext: string; contentType: string }>> = {
+  'audio/mp4': { ext: 'm4a', contentType: 'audio/mp4' },
+  // An ftyp file without the M4A brand: still played as MPEG-4 audio when LINE says it is audio.
+  'video/mp4': { ext: 'm4a', contentType: 'audio/mp4' },
+  'audio/mpeg': { ext: 'mp3', contentType: 'audio/mpeg' },
+  'audio/aac': { ext: 'aac', contentType: 'audio/aac' },
+};
+
+/** How an inbound audio file is stored, from its first bytes; null when it is not accepted. */
+export const inboundAudioFormat: (
+  sniffed: SniffedType | null,
+) => { ext: string; contentType: string } | null = (sniffed) =>
+  sniffed === null ? null : (AUDIO_FORMATS[sniffed] ?? null);
 
 export const isAllowedInboundType: (
-  type: 'image' | 'video',
+  type: InboundMediaType,
   sniffed: SniffedType | null,
 ) => boolean = (type, sniffed) => {
   if (sniffed === null) return false;
+  if (type === 'audio') return inboundAudioFormat(sniffed) !== null;
   if (type === 'video') return sniffed === 'video/mp4';
   return (
     sniffed === 'image/jpeg' ||

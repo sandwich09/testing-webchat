@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import {
-  idSchema,
+  pathIdSchema,
   usageRecordDtoSchema,
   usageRowDtoSchema,
   usdCostStringSchema,
@@ -44,7 +44,8 @@ export const usageReportResponseSchema = z.strictObject({
 });
 export type UsageReportResponse = z.infer<typeof usageReportResponseSchema>;
 
-export const contactUsageParamsSchema = z.strictObject({ id: idSchema });
+/** A well-formed unknown id gives an empty list; a malformed one is answered contact.not_found. */
+export const contactUsageParamsSchema = z.strictObject({ id: pathIdSchema('contact.not_found') });
 export type ContactUsageParams = z.infer<typeof contactUsageParamsSchema>;
 
 export const contactUsageResponseSchema = z.strictObject({

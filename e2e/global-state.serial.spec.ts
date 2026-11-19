@@ -1,7 +1,11 @@
 import { fileURLToPath } from 'node:url';
 import type { APIRequestContext, Page } from '@playwright/test';
 import {
+  AI_START_MARKER,
   GUARD_MAX_TOPICS,
+  RICH_MENU_LABELS,
+  adminRequestedText,
+  defaultHowToText,
   GUARD_MODEL,
   guardRefusalText,
   LINE_CHANNEL_ID_MAX_CHARS,
@@ -31,12 +35,13 @@ import {
   toastWith,
   uniqueSuffix,
 } from './helpers/inbox';
-import { postLineWebhook, type FixtureVars } from './helpers/line-webhook';
+import { newFixtureVars, postLineWebhook, type FixtureVars } from './helpers/line-webhook';
 import {
   deleteKbDocument,
   getSettings,
   listKbDocuments,
   patchSettings,
+  removeRichMenu,
   type SettingsSnapshot,
 } from './helpers/settings';
 import {
@@ -44,6 +49,7 @@ import {
   stubClaudeDelayNext,
   stubClaudeNextReply,
   stubClaudeRequests,
+  stubLineProfile,
   stubLineRequests,
   type RecordedRequest,
 } from './helpers/stub';
@@ -51,14 +57,19 @@ import { testIds } from './helpers/test-ids';
 import { expect, failedResourceLine, test } from './helpers/test';
 import { waitAiIdle } from './helpers/wait';
 
-// Journeys 3, 4, 6 and 9 change global state (kill switch, knowledge base, topic guard), so they
+// Journeys 3, 4, 6, 9, 14 and 15 change global state (kill switch, knowledge base, topic guard,
+// rich menu, welcome card), so they
 // run one at a time in this one file (stubs-and-fixtures 6.1), in `serial-desktop` and then
 // `serial-mobile`. Each test puts back what it changed; `afterEach` restores the snapshot taken
 // before the file started, even when a test failed half way.
 test.describe.configure({ mode: 'serial' });
 
-/** Reply cost of the default `reply` usage of the stub on Opus 5.5 (stubs-and-fixtures 5.3). */
-const OPUS_REPLY_COST_USD = 0.0064;
+/** Reply cost of the default `reply` usage of the stub per model (stubs-and-fixtures 5.3). */
+const REPLY_COST_USD: Record<string, number> = {
+  'claude-opus-5-5': 0.0064,
+  'claude-sonnet-5-5': 0.0032,
+  'claude-haiku-5-5': 0.00016,
+};
 
 let initial: SettingsSnapshot;
 let initialDocumentIds: Set<string>;
@@ -74,6 +85,7 @@ test.beforeAll(async ({ playwright, baseURL }) => {
   // Every journey here needs AI on for the whole system at the start.
   expect(initial.ai.enabled).toBe(true);
   expect(initial.guard.enabled).toBe(false);
+  expect(initial.richMenu.published).toBe(false);
 });
 
 test.afterEach(async ({ request }) => {
@@ -86,6 +98,18 @@ test.afterEach(async ({ request }) => {
     });
   }
   if (!sameTopics) await patchSettings(request, { guardTopics: initial.guard.topics });
+  if (now.richMenu.published) await removeRichMenu(request);
+  if (
+    now.richMenu.howToText !== initial.richMenu.howToText ||
+    now.welcome.text !== initial.welcome.text ||
+    now.welcome.enabled !== initial.welcome.enabled
+  ) {
+    await patchSettings(request, {
+      howToText: initial.richMenu.howToText,
+      welcomeText: initial.welcome.text,
+      welcomeEnabled: initial.welcome.enabled,
+    });
+  }
   for (const doc of await listKbDocuments(request)) {
     if (!initialDocumentIds.has(doc.id)) await deleteKbDocument(request, doc.id);
   }
@@ -271,7 +295,7 @@ test.describe('journey 3: AI replies for the customer', () => {
     await expect(systemLine(page, 'handoff.customer_sent_image')).toBeVisible();
 
     // 3.12: three model calls (3.4, 3.7, 3.8) at the stub's default usage.
-    const expectedCost = 3 * OPUS_REPLY_COST_USD;
+    const expectedCost = 3 * (REPLY_COST_USD[initial.ai.model] ?? Number.NaN);
     const usage = (await (await request.get('/api/usage')).json()) as {
       contacts: Array<{ contactId: string | null; costUsd: string; replyCount: number }>;
     };
@@ -661,15 +685,48 @@ test.describe('journey 9: topic guard', () => {
         'aria-checked',
         'true',
       );
+      // 9.6a: a greeting passes the guard (allowed, no topic) and reaches the chat model.
+      const hello = `สวัสดีค่ะ ${suffix}`;
+      const intro = `สวัสดีค่ะ ผู้ช่วยแนะนำตัว ${suffix}`;
+      await stubClaudeNextReply({
+        match: hello,
+        kind: 'guard',
+        json: { allowed: true, matchedTopic: null },
+      });
+      await stubClaudeNextReply({
+        match: hello,
+        kind: 'reply',
+        json: { reply: intro, needsAdmin: false, handoffReason: null },
+      });
+      await customerSays(request, v, hello);
+      await expect(bubbles(page, { author: 'ai', text: intro })).toHaveCount(1);
+      expect(await stubClaudeRequests({ match: hello, purpose: 'guard' })).toHaveLength(1);
+      const helloReplies = await stubClaudeRequests({ match: hello, purpose: 'reply' });
+      expect(helloReplies).toHaveLength(1);
+      expect(claudeBody(helloReplies[0]).system?.[0]?.text).toContain(
+        'คำทักทาย ขอบคุณ และบอกลาสั้น ๆ ที่ไม่มีคำขออื่น',
+      );
+
+      // 9.6b: a greeting with an off-topic request is blocked; the chat model is not called.
+      const helloWeather = `สวัสดีค่ะ ขอพยากรณ์อากาศ ${suffix}`;
+      await stubClaudeNextReply({
+        match: helloWeather,
+        json: { allowed: false, matchedTopic: null },
+      });
+      await customerSays(request, v, helloWeather);
+      await expect(bubbles(page, { author: 'ai', text: before.refusal })).toHaveCount(2);
+      await waitAiIdle(request, contactId);
+      expect(await stubClaudeRequests({ match: helloWeather, purpose: 'reply' })).toEqual([]);
+
       await backToList(page, isMobile);
       await expect(row(page, name)).toHaveAttribute('data-needs-admin', 'false');
 
       // 9.7
       await page.goto('/settings');
       await expect(page.getByTestId(testIds.guardBlockedToday)).toHaveText(
-        // The counter is per Bangkok day: past midnight it starts again from this one message.
+        // The counter is per Bangkok day: past midnight it starts again from these two messages.
         uiCopy('settings.guard.blockedToday', {
-          n: bangkokDay() === before.day ? before.blocked + 1 : 1,
+          n: bangkokDay() === before.day ? before.blocked + 2 : 2,
         }),
       );
     } finally {
@@ -683,5 +740,235 @@ test.describe('journey 9: topic guard', () => {
       expect(after.guard.enabled).toBe(false);
       expect(after.guard.topics).toEqual(initial.guard.topics);
     }
+  });
+});
+
+/** Sends one tap of a rich menu or welcome card button from the customer. */
+async function customerTaps(
+  request: APIRequestContext,
+  v: FixtureVars,
+  action: 'ai_on' | 'admin' | 'how_to',
+): Promise<FixtureVars> {
+  const vars = nextEventVars(v, { postbackData: `tw1:${action}` });
+  const response = await postLineWebhook(request, 'postback', vars);
+  expect(response.status()).toBe(200);
+  return vars;
+}
+
+/** The text messages LINE got in the reply that used `replyToken`. */
+async function replyTexts(replyToken: string): Promise<string[]> {
+  const replies = await stubLineRequests({ endpoint: 'reply' });
+  return replies
+    .map((r) => (r.body ?? {}) as LineBody)
+    .filter((b) => b.replyToken === replyToken)
+    .flatMap((b) => (b.messages ?? []).map((m) => m.text ?? ''));
+}
+
+test.describe('journey 14: rich menu', () => {
+  test('publish, the three buttons in a chat, and remove', async ({ page, request }) => {
+    const suffix = uniqueSuffix();
+    const particle = initial.ai.politeParticle as PoliteParticle;
+    const section = page.getByTestId(testIds.settingsSectionRichMenu);
+
+    // 14.1 Publish from the settings page: create, upload on the data host, set as default.
+    const since = Math.max(0, ...(await stubLineRequests()).map((r) => r.seq));
+    await page.goto('/settings');
+    await expect(section.getByTestId(testIds.richMenuStatus)).toHaveAttribute(
+      'data-status',
+      'not_published',
+    );
+    await section.getByTestId(testIds.richMenuPublish).click();
+    await expect(
+      toastWith(page, uiCopy('settings.richMenu.publishedToast'), 'success'),
+    ).toBeVisible();
+    await expect(section.getByTestId(testIds.richMenuStatus)).toHaveAttribute(
+      'data-status',
+      'published',
+    );
+    const calls = await stubLineRequests({ since });
+    expect(calls.map((r) => [r.endpoint, r.status])).toEqual([
+      ['richmenu-create', 200],
+      ['richmenu-upload', 200],
+      ['richmenu-default', 200],
+    ]);
+    expect(calls[1]?.service).toBe('line-data');
+    expect(calls[1]?.headers.contentType).toBe('image/png');
+    expect(calls[0]?.body).toMatchObject({
+      size: { width: 2500, height: 843 },
+      areas: [
+        {
+          action: {
+            type: 'postback',
+            data: 'tw1:ai_on',
+            displayText: RICH_MENU_LABELS.ai_on.title,
+          },
+        },
+        {
+          action: {
+            type: 'postback',
+            data: 'tw1:admin',
+            displayText: RICH_MENU_LABELS.admin.title,
+          },
+        },
+        {
+          action: {
+            type: 'postback',
+            data: 'tw1:how_to',
+            displayText: RICH_MENU_LABELS.how_to.title,
+          },
+        },
+      ],
+    });
+
+    // 14.2 The how-to text, edited and saved.
+    const howTo = `ลองตามนี้ ${suffix}`;
+    const howToField = section.getByTestId(testIds.settingsHowTo);
+    await expect(howToField).toHaveValue(defaultHowToText(particle));
+    await howToField.fill(howTo);
+    await section.getByTestId(testIds.settingsHowToSave).click();
+    await expect(toastWith(page, uiCopy('common.toast.saved'), 'success')).toBeVisible();
+
+    // 14.3 A customer taps "วิธีทดสอบ": an event line and the saved text by reply.
+    const name = `ลูกค้าเมนู ${suffix}`;
+    const v = await createContactWithMessage(request, { displayName: name, text: `ทัก ${suffix}` });
+    const contactId = await openChat(page, name);
+    const howToTap = await customerTaps(request, v, 'how_to');
+    await expect(systemLine(page, 'customer.tapped_how_to')).toHaveText('ลูกค้ากดปุ่ม วิธีทดสอบ');
+    await expect(bubbles(page, { author: 'ai', text: howTo })).toHaveCount(1);
+    expect(await replyTexts(howToTap.replyToken)).toEqual([howTo]);
+
+    // 14.4 "คุยกับแอดมิน": AI off, waiting for an admin, the fixed reply.
+    const adminTap = await customerTaps(request, v, 'admin');
+    await expect(systemLine(page, 'customer.tapped_admin')).toBeVisible();
+    await expect(systemLine(page, 'handoff.customer_asked_admin')).toBeVisible();
+    await expect(bubbles(page, { author: 'ai', text: adminRequestedText(particle) })).toHaveCount(
+      1,
+    );
+    expect(await replyTexts(adminTap.replyToken)).toEqual([adminRequestedText(particle)]);
+    await expect(page.getByTestId(testIds.threadAiSwitch)).toHaveAttribute('aria-checked', 'false');
+
+    // 14.5 "คุยกับ AI": AI on, and the AI greets through the normal path.
+    const greeting = `สวัสดี ผู้ช่วยมาแล้ว ${suffix}`;
+    await stubClaudeNextReply({
+      match: 'เพื่อเริ่มคุย',
+      json: { reply: greeting, needsAdmin: false, handoffReason: null },
+    });
+    await customerTaps(request, v, 'ai_on');
+    await expect(systemLine(page, 'customer.tapped_ai_on')).toBeVisible();
+    await expect(bubbles(page, { author: 'ai', text: greeting })).toHaveCount(1);
+    await expect(page.getByTestId(testIds.threadAiSwitch)).toHaveAttribute('aria-checked', 'true');
+    const [claude] = await stubClaudeRequests({ match: 'เพื่อเริ่มคุย', purpose: 'reply' });
+    expect(lastUserText(claudeBody(claude))).toContain(AI_START_MARKER);
+    // The button title never reaches the model as the customer's text.
+    expect(lastUserText(claudeBody(claude))).not.toMatch(/^คุยกับ AI$/m);
+    await waitAiIdle(request, contactId);
+
+    // 14.6 Remove, and the how-to text back to the default.
+    const beforeRemove = Math.max(0, ...(await stubLineRequests()).map((r) => r.seq));
+    await page.goto('/settings');
+    await section.getByTestId(testIds.richMenuRemove).click();
+    await expect(
+      toastWith(page, uiCopy('settings.richMenu.removedToast'), 'success'),
+    ).toBeVisible();
+    await expect(section.getByTestId(testIds.richMenuStatus)).toHaveAttribute(
+      'data-status',
+      'not_published',
+    );
+    expect((await stubLineRequests({ since: beforeRemove })).map((r) => r.endpoint)).toEqual([
+      'richmenu-default-clear',
+      'richmenu-delete',
+    ]);
+    await section.getByTestId(testIds.settingsHowToReset).click();
+    await expect(toastWith(page, uiCopy('settings.richMenu.resetToast'), 'success')).toBeVisible();
+    await expect(howToField).toHaveValue(defaultHowToText(particle));
+  });
+});
+
+test.describe('journey 15: welcome card', () => {
+  type FlexBody = {
+    replyToken?: string;
+    messages?: Array<{
+      type?: string;
+      contents?: { footer?: { contents?: Array<{ action?: { type?: string; data?: string } }> } };
+    }>;
+  };
+
+  async function follow(request: APIRequestContext, displayName: string): Promise<FixtureVars> {
+    const vars = newFixtureVars();
+    await stubLineProfile({ userId: vars.userId, displayName });
+    const response = await postLineWebhook(request, 'follow', vars);
+    expect(response.status()).toBe(200);
+    return vars;
+  }
+
+  test('a follow gets the edited card once, shown in the chat; off sends nothing', async ({
+    page,
+    request,
+  }) => {
+    const suffix = uniqueSuffix();
+    const section = page.getByTestId(testIds.settingsSectionRichMenu);
+
+    // 15.1 The switch is on; the welcome text is edited and shows in the preview.
+    const text = `ยินดีต้อนรับสู่การทดสอบ ${suffix}`;
+    await page.goto('/settings');
+    await expect(section.getByTestId(testIds.settingsWelcomeSwitch)).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    await section.getByTestId(testIds.settingsWelcomeText).fill(text);
+    await section.getByTestId(testIds.settingsWelcomeTextSave).click();
+    await expect(toastWith(page, uiCopy('common.toast.saved'), 'success')).toBeVisible();
+    await expect(section.getByTestId(testIds.welcomePreview)).toContainText(text);
+
+    // 15.2 A new friend: one reply with a Flex bubble that has the text and the three postbacks.
+    const name = `เพื่อนใหม่ ${suffix}`;
+    const v = await follow(request, name);
+    await expect
+      .poll(async () =>
+        (await stubLineRequests({ endpoint: 'reply' })).filter(
+          (r) => (r.body as FlexBody | null)?.replyToken === v.replyToken,
+        ),
+      )
+      .toHaveLength(1);
+    const [reply] = (await stubLineRequests({ endpoint: 'reply' })).filter(
+      (r) => (r.body as FlexBody | null)?.replyToken === v.replyToken,
+    );
+    const message = (reply?.body as FlexBody).messages?.[0];
+    expect(message?.type).toBe('flex');
+    expect(JSON.stringify(message)).toContain(text);
+    expect(message?.contents?.footer?.contents?.map((b) => b.action)).toEqual([
+      expect.objectContaining({ type: 'postback', data: 'tw1:ai_on' }),
+      expect.objectContaining({ type: 'postback', data: 'tw1:admin' }),
+      expect.objectContaining({ type: 'postback', data: 'tw1:how_to' }),
+    ]);
+
+    // 15.3 The chat shows the card as a welcome bubble with its three buttons as chips.
+    await openChat(page, name);
+    const card = page.getByTestId(testIds.welcomeBubble);
+    await expect(card).toHaveCount(1);
+    await expect(card).toContainText(uiCopy('inbox.welcome.label'));
+    await expect(card).toContainText(text);
+    for (const action of ['ai_on', 'admin', 'how_to'] as const) {
+      await expect(card).toContainText(RICH_MENU_LABELS[action].title);
+    }
+
+    // 15.4 A button of the card works like the rich menu.
+    await customerTaps(request, v, 'how_to');
+    await expect(systemLine(page, 'customer.tapped_how_to')).toBeVisible();
+
+    // 15.5 The switch off: a new friend gets no reply.
+    await page.goto('/settings');
+    await section.getByTestId(testIds.settingsWelcomeSwitch).click();
+    await expect(
+      toastWith(page, uiCopy('settings.richMenu.welcomeOffToast'), 'success'),
+    ).toBeVisible();
+    const quiet = await follow(request, `เพื่อนเงียบ ${suffix}`);
+    await page.goto('/chats');
+    await expect(row(page, `เพื่อนเงียบ ${suffix}`)).toBeVisible();
+    expect(
+      (await stubLineRequests({ endpoint: 'reply' })).filter(
+        (r) => (r.body as FlexBody | null)?.replyToken === quiet.replyToken,
+      ),
+    ).toEqual([]);
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AI_INSTRUCTIONS_MAX_CHARS,
+  AI_NAME_MAX_CHARS,
   GUARD_MAX_TOPICS,
   GUARD_TEST_MAX_CHARS,
   GUARD_TOPIC_MAX_CHARS,
@@ -12,7 +13,11 @@ import {
   testTopicGuardResponseSchema,
   updateSettingsBodySchema,
 } from './settings.contract';
-import { LINE_CHANNEL_ID_MAX_CHARS } from './limits.contract';
+import {
+  HOW_TO_TEXT_MAX_CHARS,
+  LINE_CHANNEL_ID_MAX_CHARS,
+  WELCOME_TEXT_MAX_CHARS,
+} from './limits.contract';
 
 describe('updateSettingsBodySchema', () => {
   it('accepts each field alone', () => {
@@ -22,9 +27,16 @@ describe('updateSettingsBodySchema', () => {
       { aiDailyBudgetUsd: '5.00' },
       { aiPoliteParticle: 'ครับ' },
       { aiInstructions: '' },
+      { aiName: 'มินนี่' },
+      { aiName: '' },
+      { aiAnswerMode: 'knowledge_only' },
+      { aiAnswerMode: 'general' },
       { guardEnabled: true },
       { guardTopics: [] },
       { guardTopics: ['มุกตลกไทย'] },
+      { howToText: '' },
+      { welcomeText: 'สวัสดี' },
+      { welcomeEnabled: false },
     ]) {
       expect(updateSettingsBodySchema.safeParse(body).success).toBe(true);
     }
@@ -52,6 +64,46 @@ describe('updateSettingsBodySchema', () => {
         aiInstructions: 'x'.repeat(AI_INSTRUCTIONS_MAX_CHARS + 1),
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('updateSettingsBodySchema: rich menu and welcome texts', () => {
+  it('trims and allows the limits after trimming, and rejects longer texts', () => {
+    const howTo = updateSettingsBodySchema.safeParse({
+      howToText: ` ${'ก'.repeat(HOW_TO_TEXT_MAX_CHARS)} `,
+    });
+    expect(howTo.success && howTo.data.howToText?.length).toBe(HOW_TO_TEXT_MAX_CHARS);
+    expect(
+      updateSettingsBodySchema.safeParse({ howToText: 'ก'.repeat(HOW_TO_TEXT_MAX_CHARS + 1) })
+        .success,
+    ).toBe(false);
+    expect(
+      updateSettingsBodySchema.safeParse({ welcomeText: 'ก'.repeat(WELCOME_TEXT_MAX_CHARS + 1) })
+        .success,
+    ).toBe(false);
+    expect(updateSettingsBodySchema.safeParse({ welcomeEnabled: 'yes' }).success).toBe(false);
+  });
+});
+
+describe('updateSettingsBodySchema: AI name and answer scope', () => {
+  const name = (raw: unknown) => updateSettingsBodySchema.safeParse({ aiName: raw });
+
+  it('trims the name and allows AI_NAME_MAX_CHARS after trimming', () => {
+    const parsed = name(`  ${'ก'.repeat(AI_NAME_MAX_CHARS)}  `);
+    expect(parsed.success && parsed.data.aiName).toBe('ก'.repeat(AI_NAME_MAX_CHARS));
+    expect(name('   ').success && name('   ').data?.aiName).toBe('');
+  });
+
+  it('rejects a longer name, a line break, a control character and a non-string', () => {
+    expect(name('ก'.repeat(AI_NAME_MAX_CHARS + 1)).success).toBe(false);
+    expect(name('มิน\nนี่').success).toBe(false);
+    expect(name('มิน\tนี่').success).toBe(false);
+    expect(name('มิน\u0000').success).toBe(false);
+    expect(name(null).success).toBe(false);
+  });
+
+  it('accepts the two answer scopes only', () => {
+    expect(updateSettingsBodySchema.safeParse({ aiAnswerMode: 'all' }).success).toBe(false);
   });
 });
 

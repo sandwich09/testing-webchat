@@ -4,9 +4,9 @@
 
 ## วิธีทำงาน
 
-- งานแตกเป็น ticket ใน [work-breakdown](work-breakdown.md) ซึ่งเรียงเป็นรอบ (wave) ให้ agent หลายตัวทำขนานกันได้ รายการด้านล่างบอกเฉพาะว่าแต่ละข้อของแต่ละขั้นอยู่ใน ticket ใด รายละเอียดอยู่ใน work-breakdown ที่เดียว
+- งานแตกเป็น ticket ใน [work-breakdown](work-breakdown.md) ซึ่งเรียงเป็นรอบ (wave) ให้ผู้พัฒนาหลายคนทำขนานกันได้ รายการด้านล่างบอกเฉพาะว่าแต่ละข้อของแต่ละขั้นอยู่ใน ticket ใด รายละเอียดอยู่ใน work-breakdown ที่เดียว
 - ticket ของรอบแรกสร้างโครงและ interface ของทุกขั้นพร้อมกัน (เช่น Prisma schema มีทุกตาราง) ส่วนการเปิดใช้งานและการทดสอบกับบริการจริงยังทำทีละขั้นตามลำดับด้านล่าง
-- หนึ่ง PR ต่อหนึ่งขั้น merge แบบ squash เข้า `main` ดู [ADR 0013](../adr/0013-ci-on-main-then-deploy-hook.md) lead เป็นผู้ commit
+- หนึ่ง PR ต่อหนึ่งขั้น merge แบบ squash เข้า `main` ดู [ADR 0013](../adr/0013-ci-on-main-then-deploy-hook.md) ผู้พัฒนาที่ตรวจงานเป็นผู้ commit
 - แต่ละขั้น deploy และทดสอบได้ในตัวเอง ถ้าเวลาไม่พอ หยุดหลังขั้นใดก็ได้ตั้งแต่ขั้นที่ 1 แล้วยังส่งงานได้
 - ก่อนเปิด PR ผู้ทำรัน lint, typecheck, unit test และ E2E เอง แล้วแนบผล
 
@@ -30,7 +30,7 @@
 - [x] หน้าจอ: หน้ายินดีต้อนรับ, เมนูซ้าย, หน้าแชท, ส่วน LINE Official Account ของหน้าตั้งค่า (T-0.5, T-1.7, T-1.8, T-1.9, T-2.8, T-5.1, T-5.2, T-5.3, T-5.4)
 - [ ] CI 4 งาน และ Deploy Hook (T-4.3) (ไฟล์ workflow ล็อก action ครบแล้ว แต่ยังไม่เคยรันบน GitHub และยังไม่มี Deploy Hook จริง)
 - [x] E2E เส้นที่ 1, 2, 7 และ 8 (T-1.6, T-6.1)
-- [ ] Deploy ครั้งแรก และทดสอบกับ LINE จริงตามสคริปต์ข้อ 1 ถึง 4 (เจ้าของงาน)
+- [ ] Deploy ครั้งแรก และทดสอบกับ LINE จริงตามสคริปต์ข้อ 1 ถึง 4 (เจ้าของงาน) (ทดสอบครั้งแรกบน production แล้วบางส่วนตามที่ [README](../../README.md#verified-and-not-verified) บันทึก: ข้อความเข้าออก สติกเกอร์ขาเข้า รูปขาออก และคำตอบ AI ยังไม่ได้ทำครบทุกข้อของสคริปต์)
 
 ## ขั้นที่ 2: รูป วิดีโอ สติกเกอร์ และลูกเล่นของช่องตอบ
 
@@ -82,7 +82,7 @@
 - [ ] รันสคริปต์ทดสอบด้วยมือทั้งชุดบน production (เจ้าของงาน)
 - [x] README ฉบับสมบูรณ์: URL ทั้งสาม, วิธีรัน, ข้อจำกัดที่รู้ (T-7.1) (URL ทั้งสามเป็น `TODO` ให้เจ้าของงานเติม)
 - [x] ตรวจว่าเอกสารตรงกับโค้ด และเปลี่ยนสถานะ spec เป็น "สร้างแล้ว" (T-7.1)
-- [ ] Tag `v1.0.0` (lead)
+- [ ] Tag `v1.0.0` (เจ้าของงาน)
 
 ## ปิดช่องว่างของ pitfalls: ส่วนที่ทำงานตอนรัน
 
@@ -91,10 +91,11 @@
 - [x] S1 key ของ cookie ผูกกับ `ACCESS_CODE` ([access-gate](../specs/access-gate.md#พฤติกรรม))
 - [x] S2 IP จากค่าสุดท้ายของ `x-forwarded-for` และถังของคำขอที่ไม่มี IP ([ADR 0022](../adr/0022-client-ip-from-last-forwarded-hop.md)) ยังต้องตรวจบน Vercel ตามตารางด้านล่าง
 - [x] S3 production ปฏิเสธค่าที่ใช้เฉพาะการทดสอบ ([project-setup ข้อ 6.10](../architecture/project-setup.md#610-envexample))
+- [x] S6 การตรวจต้นทางรับ same-origin หรือ `APP_BASE_URL` และ `APP_BASE_URL` ถูกแปลงเป็น origin ([ADR 0025](../adr/0025-same-origin-or-app-base-url.md)) ยังต้องตรวจบน Vercel ตามตารางด้านล่าง
 - [x] M3 คืนสภาพไฟล์ที่ค้างอ่าน สื่อขาเข้าที่ค้าง และการส่งที่ค้าง (migration `message_delivery_attempt_at`)
 - [x] A2 เวลาแย่ที่สุดของงานหลังตอบอยู่ใต้ `maxDuration` และ test ตรึงอสมการ ([project-setup ข้อ 10.4](../architecture/project-setup.md#104-adapter-และ-route))
 - [x] A3 บันทึกการเรียกที่ไม่ได้คำตอบ ([usage-cost](../specs/usage-cost.md#การเรียกที่ไม่ได้คำตอบ))
-- [x] A4 ไม่ส่งลิงก์ที่ร้านไม่ได้เขียน ([ai-prompt ข้อ 6.1](../specs/ai-prompt.md#61-ลิงก์ในคำตอบ))
+- [x] A4 ไม่ส่งลิงก์ที่แอดมินไม่ได้เขียน ([ai-prompt ข้อ 6.1](../specs/ai-prompt.md#61-ลิงก์ในคำตอบ))
 - [ ] L4 และขีดจำกัดของ LINE: ทดสอบด้วยมือตาม [line-oa-setup](../runbooks/line-oa-setup.md#ทดสอบด้วยมือเมื่อมี-line-oa-จริง) เมื่อมี LINE OA จริง (เจ้าของงาน)
 
 ## ปรับตามการทบทวนหน้าจอของเจ้าของงาน
@@ -108,6 +109,32 @@
 - [x] หัวข้อของขอบเขตหัวข้อแก้เป็นรายการทีละหัวข้อ และถ้อยคำของแอปเป็นกลาง ([ui-screens ข้อ 9.13](../specs/ui-screens.md#913-ส่วนขอบเขตหัวข้อ))
 - [x] รายชื่อเรียงตามข้อความล่าสุดของลูกค้า และโหลดเพิ่มเมื่อเลื่อน ([webchat-inbox](../specs/webchat-inbox.md#รายชื่อลูกค้า))
 - [ ] ข้อมูลตัวอย่างใน seed (ร้านสมมติ) จะคงไว้หรือเปลี่ยน รอเจ้าของงานตัดสิน
+
+## ปรับเป็นเครื่องมือทดสอบที่เป็นกลาง
+
+- [x] แกนของคำสั่งระบบที่เป็นกลาง ชื่อ AI ขอบเขตคำตอบ การทักทายผ่านขอบเขตหัวข้อ และโมเดลเริ่มต้น Sonnet 5.5 ([ADR 0026](../adr/0026-neutral-core-prompt-and-layered-settings.md)) พร้อม migration ที่หก
+- [x] ข้อความที่ลูกค้าตอบกลับ (`quotedMessageId`) และ id ของข้อความที่ส่ง ([line-messaging](../specs/line-messaging.md#ข้อความที่ตอบกลับ)) พร้อม migration ที่เจ็ด
+- [x] โน้ตของแอดมินในแผงข้อมูลลูกค้า ([webchat-inbox](../specs/webchat-inbox.md#โน้ตของแอดมิน)) พร้อม migration ที่แปด
+- [x] ไอคอนของแอปและรูปโปรไฟล์ของ LINE OA ([frontend](../architecture/frontend.md#brand-assets))
+- [x] ปุ่มพับเมนูที่มุมขวาบนของเมนูซ้าย ([ui-screens ข้อ 3.2](../specs/ui-screens.md#32-รูปลักษณ์))
+- [x] ข้อความเสียงขาเข้าเก็บและเล่นได้ ([line-messaging](../specs/line-messaging.md#สื่อขาเข้า)) พร้อม migration ที่เก้า
+- [x] Rich menu สามปุ่มที่ publish จากหน้าตั้งค่า และการ์ดต้อนรับเมื่อเพิ่มเพื่อน ([ADR 0027](../adr/0027-rich-menu-and-welcome-card.md), [line-messaging](../specs/line-messaging.md#rich-menu)) พร้อม migration ที่สิบ
+- [ ] ยืนยันกับ LINE จริงตามขั้นที่ 10 ถึง 13 ของ [line-oa-setup](../runbooks/line-oa-setup.md#ทดสอบด้วยมือเมื่อมี-line-oa-จริง) และกับ Claude จริงด้วยชุดคำถามวัดคุณภาพ (เจ้าของงานรัน `--confirm` เอง เพราะมีค่าใช้จ่าย)
+
+## แก้ตามการ review ทั้งระบบ
+
+ขอบเขตและเหตุผลอยู่ใน [ADR 0028](../adr/0028-review-fixes-concurrency-polling-and-ci.md)
+
+- [x] การลองรหัสนับก่อนเทียบรหัสและคืนการนับเมื่อรหัสถูก (`RateLimitRepository.refund` แทน `peek`) ([access-gate](../specs/access-gate.md))
+- [x] สถานะการติดตามเปลี่ยนตามเวลาของ event ด้วย compare-and-set (`Contact.followStatusAt`) และการกดปุ่มที่ LINE ส่งซ้ำไม่สร้างแถวที่สอง (`Message.webhookEventId` unique) ([line-messaging](../specs/line-messaging.md))
+- [x] Rich menu บันทึกด้วย compare-and-set และ `line.rich_menu_conflict` ([line-messaging](../specs/line-messaging.md#publish-และนำออก))
+- [x] Credential ของ LINE ต้องเป็น channel เดียวกัน (`line.channel_mismatch`) ([admin-backoffice](../specs/admin-backoffice.md))
+- [x] Polling นับความล้มเหลวต่อ query และการโหลดใหม่รวมหน้าแรกเข้ากับที่โหลดไว้ ([ui-screens ข้อ 7.4](../specs/ui-screens.md#74-รอบ-polling-ร่วม))
+- [x] ไฟล์ที่อัปโหลดต้องครบขนาดที่ขอสิทธิ์ (`upload.incomplete`), `experimental.proxyClientMaxBodySize` และเหตุผลที่โหลดสื่อขาเข้าไม่สำเร็จ (`Message.mediaFailure`)
+- [x] CI ไม่ยกเลิกรอบที่เริ่มแล้ว ตรวจ migration ที่ทำลายข้อมูลทุกไฟล์ และงาน `deploy` เรียก Deploy Hook เฉพาะเมื่อ `main` ยังเป็น commit ที่ตรวจ
+- [x] `pnpm migrations:applied` เทียบ migration ที่ apply แล้วในฐานข้อมูลกับไฟล์ ([deploy](../runbooks/deploy.md#ตรวจ-migration-ที่-apply-แล้ว))
+- [x] Migration ที่สิบเอ็ด รวมค่าเริ่มต้น `TimeZone` เป็น UTC ของ database ([data-model](../architecture/data-model.md#migration-ที่สิบเอ็ด-ผลจากการ-review))
+- [ ] ใส่ `pnpm migrations:applied` ใน `vercel-build` ก่อน `prisma migrate deploy` (รอเจ้าของงานอนุมัติ เพราะเป็นการแก้ค่า deploy)
 
 ## สิ่งที่ต้องยืนยันก่อนหรือระหว่างสร้าง
 
@@ -135,6 +162,7 @@
 | รูปแบบ URL รูปสติกเกอร์ของ LINE และ host ใน CSP (`profile.line-scdn.net`, `stickershop.line-scdn.net`) | `MessageDto.sticker.imageUrl`, CSP ใน [project-setup](../architecture/project-setup.md#62-nextconfigts), สติกเกอร์ใน seed |
 | รูปแบบของ `webhookEventId` และ field ของ fixture (`mode`, `quoteToken`, `stickerResourceType`, `keywords`, `follow.isUnblocked`) | [stubs-and-fixtures](../qa/stubs-and-fixtures.md) |
 | Vercel เขียน `x-forwarded-for` เป็น IP ที่ edge เห็น โดยแทนที่หรือต่อท้ายค่าที่ผู้เรียกส่งมา ค่าสุดท้ายจึงเป็นของ Vercel เสมอ ([ADR 0022](../adr/0022-client-ip-from-last-forwarded-hop.md)) ตรวจบน production: (1) ส่งรหัสผิดหกครั้งไปที่ `POST /api/access/unlock` แต่ละครั้งใส่ header `x-forwarded-for: 198.51.100.<n>` คนละค่า ครั้งที่หกต้องได้ 429 (2) ส่งรหัสผิดหนึ่งครั้งจากเครือข่ายอื่น (เช่นมือถือ) ทันทีหลังข้อ 1 ต้องได้ 401 ไม่ใช่ 429 (3) log ไม่มี `access.unlock.client_ip_missing` | `clientIpOf` ใน `src/composition/http-request.ts`, `RequestContext.clientIp` และการจำกัดความถี่ |
+| Vercel ส่ง `x-forwarded-host` (หรือ `Host`) เป็นโดเมนที่ browser ใช้ และ `x-forwarded-proto: https` โดยไม่รับค่าที่ผู้เรียกส่งมา ([ADR 0025](../adr/0025-same-origin-or-app-base-url.md)) ตรวจบน production: (1) เข้าระบบได้ทั้งที่โดเมน production และโดเมนอื่นของ deployment เดียวกัน (2) `curl -X POST https://<โดเมน>/api/access/lock -H 'Origin: https://evil.example' -H 'x-forwarded-host: evil.example'` ต้องได้ 403 (3) คำขอเดียวกันโดยไม่มี `Origin` ต้องได้ 403 | `requestOwnOrigin` ใน `src/composition/request-origin.ts` |
 | Production ไม่มี environment variable ที่ใช้เฉพาะการทดสอบ: deploy ครั้งแรกต้องผ่านการตรวจของ `assertEnv` เมื่อ `VERCEL_ENV=production` | [deploy](../runbooks/deploy.md#2-vercel) ขั้นที่ 3 |
 | ขนาด pool ของ connection แบบ pooled ของ Neon (สมมติ 5) | `prisma-client.ts` ใน [data-model](../architecture/data-model.md) |
 | SDK ของ Claude: `output_config.format` กับ `client.beta.messages.create` และ `parse` ของ beta | Adapter ของ Claude |
@@ -152,6 +180,8 @@
 | Vercel Blob: ชื่อฟังก์ชันอัปโหลดฝั่ง client การรายงานความคืบหน้า และการยกเลิก | `uploadToTarget` ใน [ui-screens](../specs/ui-screens.md#76-ขั้นตอนแนบไฟล์) |
 | CSP ที่ `heic-to/csp` ต้องใช้ใน Firefox (Chromium ยืนยันแล้ว ดูหัวข้อถัดไป) | CSP ใน [project-setup](../architecture/project-setup.md#62-nextconfigts), [ADR 0019](../adr/0019-heic-conversion-with-heic-to.md) |
 | `git.deploymentEnabled: false` ใน `vercel.json` ยังให้ Deploy Hook ทำงาน | [project-setup](../architecture/project-setup.md#611-ไฟล์อื่น), [deploy](../runbooks/deploy.md) |
+| รูปแบบ JSON ของ rich menu (`size`, `selected`, `areas[].bounds`, postback `displayText`), endpoint อัปโหลดรูปที่ host ของ content และการลบหรือล้างเมนูที่ไม่มี (404) เอกสารของ LINE เปิดจากเครื่องที่สร้างไม่ได้ จึงเขียนตามที่รู้ ทดสอบตามข้อ 12 ของ [line-oa-setup](../runbooks/line-oa-setup.md#ทดสอบด้วยมือเมื่อมี-line-oa-จริง) | `toLineRichMenu`, adapter ของ LINE, stub |
+| Flex bubble ของการ์ดต้อนรับ: `background.type: linearGradient`, ขนาดรูป `xxs`, ป้ายปุ่มไม่เกิน 20 ตัว, `altText` ไม่เกิน 400 ตัว และการแสดงบน iOS, Android และ desktop ทดสอบตามข้อ 13 | `toFlexWelcome` |
 | รายการเครื่องมือที่เหลือจากตอน scaffold: คำเตือนของ `next start` กับ standalone (ข้ออื่นยืนยันแล้ว) | [project-setup](../architecture/project-setup.md#11-สิ่งที่ต้องยืนยันตอน-scaffold) |
 
 ## สิ่งที่ยืนยันแล้ว

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { documentDetailDtoSchema, documentDtoSchema, idSchema } from './dto.contract';
+import { documentDetailDtoSchema, documentDtoSchema, pathIdSchema } from './dto.contract';
 
 /** Name of the single multipart part of POST /api/knowledge/documents and .../:id/retry. */
 export const KNOWLEDGE_FILE_FIELD = 'file';
@@ -27,7 +27,7 @@ export type KnowledgeFilePart = z.infer<typeof knowledgeFilePartSchema>;
 export const ingestDocumentResponseSchema = documentDtoSchema;
 
 /** GET and DELETE /api/knowledge/documents/:id, POST .../:id/retry. */
-export const documentParamsSchema = z.strictObject({ id: idSchema });
+export const documentParamsSchema = z.strictObject({ id: pathIdSchema('knowledge.not_found') });
 export type DocumentParams = z.infer<typeof documentParamsSchema>;
 
 export const getDocumentResponseSchema = documentDetailDtoSchema;

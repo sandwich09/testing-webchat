@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { LineAccessToken, LineMessageId, LineUserId, OutboundLinePart } from '@/core/domain';
+import { buildWelcomeCard, richMenuSpec } from '@/core/domain';
 import type { MessagingGateway } from '@/core/ports';
 
 /**
@@ -14,6 +15,8 @@ export interface MessagingGatewayHarness {
   validToken: LineAccessToken;
   /** A token LINE answers 401 to. */
   invalidToken: LineAccessToken;
+  /** A valid access token of another channel than `channelId` (another bot). */
+  otherChannelToken: LineAccessToken;
   /** A user whose profile exists. */
   knownUserId: LineUserId;
   /** A user whose profile LINE answers 404 to. */
@@ -45,6 +48,8 @@ export interface MessagingGatewayHarness {
   channelId: string;
   /** Makes LINE's next secret check fail with a 5xx, for this harness's Channel ID only. */
   failNextSecretCheck(): Promise<void>;
+  /** The rich menus LINE holds now, and which one is the default. */
+  richMenuState(): Promise<{ ids: string[]; defaultId: string | null }>;
 }
 
 const text = (value: string): OutboundLinePart[] => [{ type: 'text', text: value }];
@@ -172,10 +177,35 @@ export const describeMessagingGatewaySuite = (
               isRedelivery: false,
               userId: 'U1',
               replyToken: 'rt-1',
-              message: { type: 'text', lineMessageId: 'm1', text: 'สวัสดี' },
+              message: {
+                type: 'text',
+                lineMessageId: 'm1',
+                text: 'สวัสดี',
+                quotedLineMessageId: null,
+              },
             },
           ],
         });
+      });
+
+      it('reads the quoted message id of a reply, and ignores one that is not a string', async () => {
+        const h = await makeHarness();
+        const quoted = (quotedMessageId: unknown) =>
+          h.gateway.parseEvents(
+            body(
+              event({
+                type: 'message',
+                message: { id: 'm2', type: 'text', text: 'ตอบ', quotedMessageId, quoteToken: 'q' },
+              }),
+            ),
+          );
+        const read = (r: ReturnType<typeof quoted>) =>
+          r.ok && r.value[0]?.kind === 'message' && r.value[0].message.type === 'text'
+            ? r.value[0].message.quotedLineMessageId
+            : 'not a text message';
+        expect(read(quoted('468789577898262530'))).toBe('468789577898262530');
+        expect(read(quoted(42))).toBeNull();
+        expect(read(quoted(''))).toBeNull();
       });
 
       it('marks image and video as hosted by LINE only for the line content provider', async () => {
@@ -213,7 +243,7 @@ export const describeMessagingGatewaySuite = (
         const result = h.gateway.parseEvents(
           body(
             message('s1', { type: 'sticker', packageId: '11537', stickerId: '52002734' }),
-            message('a1', { type: 'audio' }),
+            message('a1', { type: 'audio', duration: 4000, contentProvider: { type: 'line' } }),
             message('f1', { type: 'file' }),
             message('l1', { type: 'location' }),
             message('u1', { type: 'somethingNew' }),
@@ -223,7 +253,7 @@ export const describeMessagingGatewaySuite = (
         if (!result.ok) return;
         expect(result.value.map((e) => (e.kind === 'message' ? e.message : null))).toEqual([
           { type: 'sticker', lineMessageId: 's1', packageId: '11537', stickerId: '52002734' },
-          { type: 'other', lineMessageId: 'a1', otherKind: 'audio' },
+          { type: 'audio', lineMessageId: 'a1', hostedByLine: true, durationMs: 4000 },
           { type: 'other', lineMessageId: 'f1', otherKind: 'file' },
           { type: 'other', lineMessageId: 'l1', otherKind: 'location' },
           { type: 'other', lineMessageId: 'u1', otherKind: 'unknown' },
@@ -307,6 +337,11 @@ export const describeMessagingGatewaySuite = (
         ];
         const result = await h.gateway.reply(h.validToken, await h.freshReplyToken(), parts);
         expect(result.ok).toBe(true);
+        // One LINE id per part, in order, all different (sentMessages of the answer).
+        const ids = result.ok ? result.value.sentIds : [];
+        expect(ids).toHaveLength(3);
+        expect(new Set(ids).size).toBe(3);
+        for (const id of ids) expect(id).toMatch(/\S/);
       });
 
       it('returns line.reply_token_invalid for a token LINE rejects', async () => {
@@ -349,7 +384,8 @@ export const describeMessagingGatewaySuite = (
           text('hi'),
           uniqueId('rk'),
         );
-        expect(result).toEqual({ ok: true, value: { alreadyAccepted: false } });
+        expect(result).toMatchObject({ ok: true, value: { alreadyAccepted: false } });
+        expect(result.ok ? result.value.sentIds : []).toHaveLength(1);
       });
 
       it('remembers the retry key: a repeat is alreadyAccepted and not delivered again', async () => {
@@ -358,8 +394,9 @@ export const describeMessagingGatewaySuite = (
         const before = await h.deliveredPushCount(h.knownUserId);
         const first = await h.gateway.push(h.validToken, h.knownUserId, text('hi'), key);
         const repeat = await h.gateway.push(h.validToken, h.knownUserId, text('hi'), key);
-        expect(first).toEqual({ ok: true, value: { alreadyAccepted: false } });
-        expect(repeat).toEqual({ ok: true, value: { alreadyAccepted: true } });
+        expect(first).toMatchObject({ ok: true, value: { alreadyAccepted: false } });
+        // The answer of the accepted request is not known on a repeat, so there are no ids.
+        expect(repeat).toEqual({ ok: true, value: { alreadyAccepted: true, sentIds: [] } });
         expect(await h.deliveredPushCount(h.knownUserId)).toBe(before + 1);
       });
 
@@ -367,7 +404,7 @@ export const describeMessagingGatewaySuite = (
         const h = await makeHarness();
         await h.gateway.push(h.validToken, h.knownUserId, text('hi'), uniqueId('rk'));
         const other = await h.gateway.push(h.validToken, h.knownUserId, text('hi'), uniqueId('rk'));
-        expect(other).toEqual({ ok: true, value: { alreadyAccepted: false } });
+        expect(other).toMatchObject({ ok: true, value: { alreadyAccepted: false } });
       });
 
       it('returns line.unauthorized for an invalid access token', async () => {
@@ -590,12 +627,22 @@ export const describeMessagingGatewaySuite = (
     });
 
     describe('verifyChannelSecret', () => {
-      it('accepts the channel secret of the Channel ID', async () => {
+      it('accepts the channel secret of the Channel ID and gives the bot of that channel', async () => {
         const h = await makeHarness();
+        const bot = await h.gateway.getBotInfo(h.validToken);
+        if (!bot.ok) throw new Error('getBotInfo failed');
         expect(await h.gateway.verifyChannelSecret(h.channelId, h.channelSecret)).toEqual({
           ok: true,
-          value: undefined,
+          value: { bot: { botUserId: bot.value.botUserId, basicId: bot.value.basicId } },
         });
+      });
+
+      it('gives a bot that differs from the bot of a token of another channel', async () => {
+        const h = await makeHarness();
+        const other = await h.gateway.getBotInfo(h.otherChannelToken);
+        const pair = await h.gateway.verifyChannelSecret(h.channelId, h.channelSecret);
+        if (!other.ok || !pair.ok) throw new Error('LINE calls failed');
+        expect(pair.value.bot?.botUserId).not.toBe(other.value.botUserId);
       });
 
       it('returns line.channel_secret_invalid for another secret or another Channel ID', async () => {
@@ -664,6 +711,113 @@ export const describeMessagingGatewaySuite = (
         const result = await h.gateway.getBotInfo(h.invalidToken);
         expect(result.ok).toBe(false);
         if (!result.ok) expect(result.error.code).toBe('line.credentials_invalid');
+      });
+    });
+
+    describe('rich menu', () => {
+      it('creates a menu, takes its picture, makes it the default, clears and deletes it', async () => {
+        const h = await makeHarness();
+        const created = await h.gateway.createRichMenu(h.validToken, richMenuSpec());
+        expect(created.ok).toBe(true);
+        if (!created.ok) return;
+        const id = created.value.richMenuId;
+        expect((await h.richMenuState()).ids).toContain(id);
+        expect((await h.gateway.uploadRichMenuImage(h.validToken, id)).ok).toBe(true);
+        expect((await h.gateway.setDefaultRichMenu(h.validToken, id)).ok).toBe(true);
+        expect((await h.richMenuState()).defaultId).toBe(id);
+        expect((await h.gateway.clearDefaultRichMenu(h.validToken)).ok).toBe(true);
+        expect((await h.richMenuState()).defaultId).toBeNull();
+        expect((await h.gateway.deleteRichMenu(h.validToken, id)).ok).toBe(true);
+        expect((await h.richMenuState()).ids).not.toContain(id);
+      });
+
+      it('counts deleting a menu LINE does not know, and clearing no default, as done', async () => {
+        const h = await makeHarness();
+        const created = await h.gateway.createRichMenu(h.validToken, richMenuSpec());
+        if (!created.ok) throw new Error('create failed');
+        expect((await h.gateway.deleteRichMenu(h.validToken, created.value.richMenuId)).ok).toBe(
+          true,
+        );
+        expect((await h.gateway.deleteRichMenu(h.validToken, created.value.richMenuId)).ok).toBe(
+          true,
+        );
+        expect((await h.gateway.clearDefaultRichMenu(h.validToken)).ok).toBe(true);
+      });
+
+      it('returns line.rich_menu_failed for a default without a picture and for a second picture', async () => {
+        const h = await makeHarness();
+        const created = await h.gateway.createRichMenu(h.validToken, richMenuSpec());
+        if (!created.ok) throw new Error('create failed');
+        const id = created.value.richMenuId;
+        const early = await h.gateway.setDefaultRichMenu(h.validToken, id);
+        expect(early.ok ? null : early.error.code).toBe('line.rich_menu_failed');
+        expect((await h.gateway.uploadRichMenuImage(h.validToken, id)).ok).toBe(true);
+        const again = await h.gateway.uploadRichMenuImage(h.validToken, id);
+        expect(again.ok ? null : again.error.code).toBe('line.rich_menu_failed');
+        await h.gateway.deleteRichMenu(h.validToken, id);
+      });
+
+      it('returns line.unauthorized for an invalid access token', async () => {
+        const h = await makeHarness();
+        const created = await h.gateway.createRichMenu(h.invalidToken, richMenuSpec());
+        expect(created.ok ? null : created.error.code).toBe('line.unauthorized');
+      });
+    });
+
+    describe('welcome card', () => {
+      it('replies with the welcome card', async () => {
+        const h = await makeHarness();
+        const card = buildWelcomeCard({
+          botName: 'บัญชีทดสอบ',
+          welcomeText: '',
+          particle: 'ค่ะ',
+          appBaseUrl: 'https://example.com',
+        });
+        const result = await h.gateway.reply(h.validToken, await h.freshReplyToken(), [
+          { type: 'card', card },
+        ]);
+        expect(result.ok).toBe(true);
+      });
+    });
+
+    describe('parseEvents: postback', () => {
+      it('translates a postback with its data and reply token', async () => {
+        const h = await makeHarness();
+        const result = h.gateway.parseEvents(
+          body(
+            event({
+              type: 'postback',
+              webhookEventId: uniqueId('pb'),
+              replyToken: 'rt-pb',
+              postback: { data: 'tw1:how_to' },
+            }),
+          ),
+        );
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.value[0]).toMatchObject({
+          kind: 'postback',
+          userId: 'U1',
+          replyToken: 'rt-pb',
+          data: 'tw1:how_to',
+        });
+      });
+
+      it('turns a postback without data, or with data over the limit, into unsupported', async () => {
+        const h = await makeHarness();
+        const result = h.gateway.parseEvents(
+          body(
+            event({ type: 'postback', webhookEventId: uniqueId('pb'), postback: {} }),
+            event({
+              type: 'postback',
+              webhookEventId: uniqueId('pb'),
+              postback: { data: 'x'.repeat(301) },
+            }),
+          ),
+        );
+        expect(result.ok).toBe(true);
+        if (result.ok)
+          expect(result.value.map((e) => e.kind)).toEqual(['unsupported', 'unsupported']);
       });
     });
   });

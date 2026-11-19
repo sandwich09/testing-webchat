@@ -13,6 +13,6 @@ afterAll(async () => {
 
 describeMessageRepositorySuite(async () => {
   // Message, Contact and AiUsage (which references both), so each test starts from empty tables.
-  await client.$executeRaw`TRUNCATE TABLE "AiUsage", "Message", "Contact"`;
+  await client.$executeRaw`TRUNCATE TABLE "AiUsage", "Message", "ContactNote", "Contact"`;
   return { messages: createMessageRepository(client), contacts: createContactRepository(client) };
 });

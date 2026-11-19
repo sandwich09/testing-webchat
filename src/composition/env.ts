@@ -11,6 +11,8 @@ const DEFAULT_LINE_API_BASE_URL = 'https://api.line.me';
 const DEFAULT_LINE_DATA_API_BASE_URL = 'https://api-data.line.me';
 const DEFAULT_POLL_INTERVAL_MS = 2000;
 export const DEFAULT_AI_DEBOUNCE_MS = 2500;
+/** The highest AI_DEBOUNCE_MS the timing budget (project-setup 10.4) is proven for. */
+export const AI_DEBOUNCE_MAX_MS = 5000;
 const DEFAULT_RATE_LIMIT_SCALE = 1;
 
 /** Base URLs that only point at the stub: production uses the official hosts, so they stay unset. */
@@ -46,22 +48,47 @@ const isHttpUrl = (value: string): boolean => {
   }
 };
 
-/** APP_BASE_URL: an http(s) URL with no trailing slash, query or fragment. */
-const appBaseUrl = required.refine(
-  (value) => isHttpUrl(value) && !value.endsWith('/') && !/[?#]/.test(value),
-);
+/**
+ * APP_BASE_URL: an absolute http(s) URL with nothing after the host but an optional single `/`
+ * (no path, query, fragment or credentials). Surrounding spaces are trimmed, and the value is
+ * normalised to its origin: lower-case host, no trailing slash, no default port.
+ */
+const appBaseUrl = z
+  .preprocess(
+    (value) => (typeof value === 'string' ? blankToUndefined(value.trim()) : value),
+    z.string(),
+  )
+  .refine((value) => {
+    if (!isHttpUrl(value) || /[?#]/.test(value)) return false;
+    const url = new URL(value);
+    return url.pathname === '/' && url.username === '' && url.password === '';
+  })
+  .transform((value) => new URL(value).origin);
 
 const optionalUrl = optional.refine((value) => value === undefined || isHttpUrl(value));
 
-const integerAtLeast = (min: number, fallback: number) =>
+const integerAtLeast = (min: number, fallback: number, max = Number.MAX_SAFE_INTEGER) =>
   optional
-    .refine((value) => value === undefined || (/^\d{1,9}$/.test(value) && Number(value) >= min))
+    .refine(
+      (value) =>
+        value === undefined ||
+        (/^\d{1,9}$/.test(value) && Number(value) >= min && Number(value) <= max),
+    )
     .transform((value) => (value === undefined ? fallback : Number(value)));
+
+/**
+ * ACCESS_CODE: surrounding spaces are trimmed, as the unlock form's input is trimmed
+ * (unlockBodySchema), so a value pasted with a trailing space or newline still matches.
+ */
+const accessCode = z.preprocess(
+  (value) => (typeof value === 'string' ? blankToUndefined(value.trim()) : value),
+  z.string(),
+);
 
 const envSchema = z
   .object({
     DATABASE_URL: required,
-    ACCESS_CODE: required,
+    ACCESS_CODE: accessCode,
     SESSION_SECRET: secret32,
     CREDENTIALS_ENCRYPTION_KEY: secret32,
     ANTHROPIC_API_KEY: required,
@@ -72,7 +99,7 @@ const envSchema = z
     LINE_DATA_API_BASE_URL: optionalUrl,
     ANTHROPIC_BASE_URL: optionalUrl,
     POLL_INTERVAL_MS: integerAtLeast(1, DEFAULT_POLL_INTERVAL_MS),
-    AI_DEBOUNCE_MS: integerAtLeast(1, DEFAULT_AI_DEBOUNCE_MS),
+    AI_DEBOUNCE_MS: integerAtLeast(1, DEFAULT_AI_DEBOUNCE_MS, AI_DEBOUNCE_MAX_MS),
     RATE_LIMIT_SCALE: integerAtLeast(1, DEFAULT_RATE_LIMIT_SCALE),
     NODE_ENV: optional,
     // Set by Vercel (production, preview, development); unset in Docker, CI and `pnpm dev`.
@@ -107,8 +134,9 @@ export interface AppEnv {
   /** Undefined means the SDK default (the public API). */
   anthropicBaseUrl: string | undefined;
   fileStorage: { kind: 'local' } | { kind: 'blob'; token: string };
+  /** APP_BASE_URL normalised to its origin (no trailing slash). */
   appBaseUrl: string;
-  /** Origin of APP_BASE_URL, compared with the Origin header of non-GET requests. */
+  /** Origin of APP_BASE_URL; with the request's own origin, the origins non-GET requests may have. */
   appOrigin: string;
   lineApiBaseUrl: string;
   lineDataApiBaseUrl: string;
@@ -144,7 +172,7 @@ export const parseEnv = (source: Record<string, string | undefined>): ParseEnvRe
             { kind: 'blob', token: e.BLOB_READ_WRITE_TOKEN ?? '' }
           : { kind: 'local' },
       appBaseUrl: e.APP_BASE_URL,
-      appOrigin: new URL(e.APP_BASE_URL).origin,
+      appOrigin: e.APP_BASE_URL,
       lineApiBaseUrl: e.LINE_API_BASE_URL ?? DEFAULT_LINE_API_BASE_URL,
       lineDataApiBaseUrl: e.LINE_DATA_API_BASE_URL ?? DEFAULT_LINE_DATA_API_BASE_URL,
       pollIntervalMs: e.POLL_INTERVAL_MS,

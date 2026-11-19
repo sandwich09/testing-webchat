@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Test webchat</title>
+  <defs>
+    <!-- The brand gradient of app/globals.css: 100deg, orange to magenta. -->
+    <linearGradient id="brand" x1="0" y1="0.41" x2="1" y2="0.59">
+      <stop offset="0" stop-color="#ff8a1f"/>
+      <stop offset="0.42" stop-color="#ff3d45"/>
+      <stop offset="0.72" stop-color="#f0055a"/>
+      <stop offset="1" stop-color="#c90b5e"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="144" fill="url(#brand)"/>
+  <!-- The bold "T" of the rail logo tile as a path, so it needs no font. -->
+  <path fill="#fff" d="M132 124h248v72h-88v196h-72V196h-88z"/>
+</svg>

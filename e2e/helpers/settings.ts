@@ -8,8 +8,10 @@ import type { APIRequestContext } from '@playwright/test';
  */
 
 export type SettingsSnapshot = {
-  ai: { enabled: boolean; politeParticle: string };
+  ai: { enabled: boolean; politeParticle: string; model: string };
   guard: { enabled: boolean; topics: string[]; blockedToday: number };
+  richMenu: { published: boolean; howToText: string };
+  welcome: { enabled: boolean; text: string };
 };
 
 export type KbDocument = { id: string; fileName: string; status: string };
@@ -29,7 +31,14 @@ export async function getSettings(request: APIRequestContext): Promise<SettingsS
 
 export async function patchSettings(
   request: APIRequestContext,
-  body: { aiEnabled?: boolean; guardEnabled?: boolean; guardTopics?: string[] },
+  body: {
+    aiEnabled?: boolean;
+    guardEnabled?: boolean;
+    guardTopics?: string[];
+    howToText?: string;
+    welcomeEnabled?: boolean;
+    welcomeText?: string;
+  },
 ): Promise<SettingsSnapshot> {
   return ok<SettingsSnapshot>(
     await request.patch('/api/settings', { headers: { Origin: ORIGIN }, data: body }),
@@ -47,5 +56,13 @@ export async function deleteKbDocument(request: APIRequestContext, id: string): 
   });
   if (!response.ok() && response.status() !== 404) {
     throw new Error(`DELETE knowledge document answered ${String(response.status())}`);
+  }
+}
+
+/** DELETE /api/settings/rich-menu: takes the rich menu down at the stub. */
+export async function removeRichMenu(request: APIRequestContext): Promise<void> {
+  const response = await request.delete('/api/settings/rich-menu', { headers: { Origin: ORIGIN } });
+  if (!response.ok()) {
+    throw new Error(`DELETE rich menu answered ${String(response.status())}`);
   }
 }

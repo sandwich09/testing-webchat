@@ -1,6 +1,10 @@
 // API functions of the topic guard section (ui-screens 1.6).
 import { apiFetch } from '@/common/common.api';
-import { testTopicGuardResponseSchema, type TestTopicGuardResponse } from '@/contracts';
+import {
+  CLIENT_TIMEOUT_GUARD_TEST_MS,
+  testTopicGuardResponseSchema,
+  type TestTopicGuardResponse,
+} from '@/contracts';
 
 export type GuardTestResult = TestTopicGuardResponse;
 
@@ -10,5 +14,6 @@ export function testTopicGuard(text: string): Promise<GuardTestResult> {
     method: 'POST',
     body: { text },
     schema: testTopicGuardResponseSchema,
+    timeoutMs: CLIENT_TIMEOUT_GUARD_TEST_MS,
   });
 }

@@ -47,6 +47,8 @@ export type RecordedRequest = {
   };
   body: unknown;
   status: number;
+  /** reply and push answered 200: the ids of `sentMessages`. */
+  sentIds?: string[];
 };
 
 /**

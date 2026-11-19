@@ -8,6 +8,7 @@ import type {
   PriceTable,
 } from '@/core/domain';
 import {
+  AUDIO_MAX_BYTES,
   IMAGE_MAX_BYTES,
   MEDIA_CONTENT_CALL_WORST_MS,
   MEDIA_JOB_BUDGET_MS,
@@ -82,7 +83,7 @@ describe('StoreInboundMedia', () => {
   let n = 0;
 
   const insertMedia = async (
-    type: 'image' | 'video' | 'text',
+    type: 'image' | 'video' | 'audio' | 'text',
     o: { mediaStatus?: Message['mediaStatus']; lineMessageId?: string | null } = {},
   ): Promise<Message> => {
     const lineMessageId = o.lineMessageId === undefined ? `lm-${String(++n)}` : o.lineMessageId;
@@ -299,6 +300,63 @@ describe('StoreInboundMedia', () => {
     expect(storage.files.get(storedKeys()[0] ?? '')?.contentType).toBe('application/octet-stream');
   });
 
+  describe('audio', () => {
+    const ascii = (t: string) => Array.from(t, (c) => c.charCodeAt(0));
+    const M4A = new Uint8Array([0, 0, 0, 0x1c, ...ascii('ftypM4A '), 0, 0, 2, 0, 1, 2, 3, 4]);
+    const MP3 = new Uint8Array([...ascii('ID3'), 4, 0, 0, 0, 0, 0, 0, 9, 9]);
+    const ADTS = new Uint8Array([0xff, 0xf1, 0x50, 0x80, 0, 0x1f, 0xfc, 5, 5]);
+
+    it.each([
+      ['M4A', M4A, 'audio/x-m4a', 'm4a', 'audio/mp4'],
+      ['MP3', MP3, 'audio/mpeg', 'mp3', 'audio/mpeg'],
+      ['AAC ADTS', ADTS, 'application/octet-stream', 'aac', 'audio/aac'],
+    ] as const)(
+      'stores %s with the extension and Content-Type read from its bytes, no preview download',
+      async (_name, bytes, lineType, ext, stored) => {
+        const m = await insertMedia('audio');
+        gateway.setContent(lineIdOf(m), { original: bytes, contentType: lineType });
+        const download = vi.spyOn(gateway, 'downloadContent');
+
+        expect(await run({ messageId: m.id }, ctx)).toEqual(ok({ status: 'ready' }));
+
+        const after = await reload(m.id);
+        const [key] = storedKeys();
+        expect(key).toMatch(new RegExp(`^inbound/[A-Za-z0-9_-]{22}/original\\.${ext}$`));
+        expect(storage.files.get(key ?? '')?.bytes).toEqual(bytes);
+        expect(storage.files.get(key ?? '')?.contentType).toBe(stored);
+        expect(after.previewUrl).toBe(after.mediaUrl);
+        expect(download).toHaveBeenCalledTimes(1);
+        expect(download).toHaveBeenCalledWith(
+          FAKE_LINE_ACCESS_TOKEN,
+          m.lineMessageId,
+          'original',
+          AUDIO_MAX_BYTES,
+        );
+      },
+    );
+
+    it('fails and stores nothing when the bytes are not an accepted audio container', async () => {
+      const m = await insertMedia('audio');
+      gateway.setContent(lineIdOf(m), { original: JPEG, contentType: 'audio/x-m4a' });
+
+      expect(await run({ messageId: m.id }, ctx)).toEqual(ok({ status: 'failed' }));
+      expect(storedKeys()).toEqual([]);
+      expect(await reload(m.id)).toMatchObject({
+        mediaStatus: 'failed',
+        mediaFailure: 'unsupported_type',
+      });
+    });
+
+    it('marks too_large when LINE reports a size over AUDIO_MAX_BYTES', async () => {
+      const m = await insertMedia('audio');
+      const big = new Uint8Array(AUDIO_MAX_BYTES + 1);
+      big.set(M4A);
+      gateway.setContent(lineIdOf(m), { original: big, contentType: 'audio/x-m4a' });
+
+      expect(await run({ messageId: m.id }, ctx)).toEqual(ok({ status: 'too_large' }));
+    });
+  });
+
   it('stores an MP4 as ready with a separate preview image', async () => {
     const m = await insertMedia('video');
     gateway.setContent(lineIdOf(m), {
@@ -490,7 +548,10 @@ describe('StoreInboundMedia', () => {
 
     expect(await run({ messageId: m.id }, ctx)).toEqual(ok({ status: 'failed' }));
 
-    expect((await reload(m.id)).mediaStatus).toBe('failed');
+    expect(await reload(m.id)).toMatchObject({
+      mediaStatus: 'failed',
+      mediaFailure: 'download_failed',
+    });
     expect(logger.entries).toContainEqual(
       expect.objectContaining({
         level: 'warn',
@@ -509,6 +570,7 @@ describe('StoreInboundMedia', () => {
 
     const after = await reload(m.id);
     expect(after.mediaStatus).toBe('failed');
+    expect(after.mediaFailure).toBe('unsupported_type');
     expect(after.mediaUrl).toBeNull();
     expect(storedKeys()).toEqual([]);
   });

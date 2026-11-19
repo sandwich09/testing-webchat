@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="utf-8" />
+    <!-- Source of public/brand/richmenu-3x1.png (2500x843), rendered by scripts/render-brand-assets.ts.
+     The owner-approved design: three buttons, brand gradient on the first icon tile. -->
+    <style>
+      @font-face {
+        font-family: Seed;
+        src: url(../../src/common/fonts/line-seed-sans-th/LINESeedSansTH_W_Bd.woff2);
+        font-weight: 700;
+      }
+      @font-face {
+        font-family: Seed;
+        src: url(../../src/common/fonts/line-seed-sans-th/LINESeedSansTH_W_Rg.woff2);
+        font-weight: 400;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+      }
+      body {
+        width: 2500px;
+        height: 843px;
+        font-family: Seed;
+        background: #fff5f8;
+        display: flex;
+      }
+      .t {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 34px;
+        border-right: 4px solid #f6d5e0;
+        padding: 0 60px;
+        text-align: center;
+      }
+      .t:last-child {
+        border-right: 0;
+      }
+      .i {
+        width: 260px;
+        height: 260px;
+        border-radius: 64px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #ff8a1f 0%, #ff3d45 45%, #f0055a 80%, #c90b5e 100%);
+      }
+      .i svg {
+        width: 140px;
+        height: 140px;
+        stroke: #fff;
+        fill: none;
+        stroke-width: 1.9;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .t.alt .i {
+        background: #fff;
+        border: 6px solid #f0055a;
+      }
+      .t.alt .i svg {
+        stroke: #d6094f;
+      }
+      h1 {
+        font-size: 104px;
+        font-weight: 700;
+        color: #1b1320;
+        line-height: 1.25;
+      }
+      p {
+        font-size: 58px;
+        color: #6b5f70;
+        line-height: 1.35;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="t">
+      <div class="i">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 8V4H8" />
+          <rect x="4" y="8" width="16" height="12" rx="2" />
+          <path d="M2 14h2M20 14h2M15 13v2M9 13v2" />
+        </svg>
+      </div>
+      <h1>คุยกับ AI</h1>
+      <p>เปิดให้ AI ตอบแชทนี้</p>
+    </div>
+    <div class="t alt">
+      <div class="i">
+        <svg viewBox="0 0 24 24">
+          <path
+            d="M3 11h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5Zm0 0a9 9 0 1 1 18 0m0 0v5a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3Z"
+          />
+          <path d="M21 16v2a4 4 0 0 1-4 4h-5" />
+        </svg>
+      </div>
+      <h1>คุยกับแอดมิน</h1>
+      <p>ปิด AI แล้วส่งต่อให้คน</p>
+    </div>
+    <div class="t alt">
+      <div class="i">
+        <svg viewBox="0 0 24 24">
+          <path d="M9 11l3 3L22 4" />
+          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+        </svg>
+      </div>
+      <h1>วิธีทดสอบ</h1>
+      <p>ดูว่าลองอะไรได้บ้าง</p>
+    </div>
+  </body>
+</html>

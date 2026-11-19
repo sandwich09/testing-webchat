@@ -40,9 +40,9 @@ describe('UnlockAccess', () => {
         keys.push(key);
         return rateLimits.hit(key, windowStart);
       },
-      peek: (key, windowStart) => {
+      refund: (key, windowStart) => {
         keys.push(key);
-        return rateLimits.peek(key, windowStart);
+        return rateLimits.refund(key, windowStart);
       },
     };
     return makeUnlockAccess(
@@ -189,5 +189,69 @@ describe('UnlockAccess', () => {
       expect(key.startsWith('unlock:')).toBe(true);
       expect(key).not.toContain(IP);
     }
+  });
+
+  describe('under concurrency', () => {
+    const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 2));
+    /** A repository whose every call yields first, so concurrent requests interleave. */
+    const delayed = (): RateLimitRepository => ({
+      hit: async (key, windowStart) => {
+        await tick();
+        return rateLimits.hit(key, windowStart);
+      },
+      refund: async (key, windowStart) => {
+        await tick();
+        return rateLimits.refund(key, windowStart);
+      },
+    });
+    const buildCounting = () => {
+      const signer = new FakeAccessTokenSigner();
+      let checks = 0;
+      const checkCode = signer.checkCode.bind(signer);
+      signer.checkCode = (c: string) => {
+        checks += 1;
+        return checkCode(c);
+      };
+      const unlock = makeUnlockAccess(
+        { rateLimits: delayed(), hasher: new FakeContentHasher(), signer, clock, logger },
+        baseConfig,
+      );
+      return { unlock, checks: () => checks };
+    };
+
+    it.each([
+      ['with an IP', IP, RATE_LIMIT_UNLOCK.limit],
+      ['without an IP', null, RATE_LIMIT_UNLOCK_NO_IP.limit],
+    ] as const)(
+      'compares at most the limit of 200 concurrent wrong codes %s',
+      async (_label, ip, limit) => {
+        const { unlock, checks } = buildCounting();
+
+        const results = await Promise.all(
+          Array.from({ length: 200 }, (_, i) => unlock({ code: `guess-${String(i)}` }, ipCtx(ip))),
+        );
+
+        expect(checks()).toBe(limit);
+        expect(results.filter((r) => code(r) === 'access.code_invalid')).toHaveLength(limit);
+        expect(results.filter((r) => code(r) === 'access.rate_limited')).toHaveLength(200 - limit);
+      },
+    );
+
+    it('does not let concurrent right codes use up the allowance', async () => {
+      const { unlock } = buildCounting();
+
+      const rights = await Promise.all(
+        Array.from({ length: RATE_LIMIT_UNLOCK.limit }, () =>
+          unlock({ code: FAKE_ACCESS_CODE }, ipCtx(IP)),
+        ),
+      );
+      expect(rights.every((r) => r.ok)).toBe(true);
+
+      const wrongs = await Promise.all(
+        Array.from({ length: RATE_LIMIT_UNLOCK.limit }, () => unlock({ code: 'wrong' }, ipCtx(IP))),
+      );
+      expect(wrongs.every((r) => code(r) === 'access.code_invalid')).toBe(true);
+      expect(code(await unlock({ code: 'wrong' }, ipCtx(IP)))).toBe('access.rate_limited');
+    });
   });
 });

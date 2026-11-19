@@ -14,14 +14,14 @@
 
 - **อาการ:** ข้อความเดียวขึ้นสองครั้งในแชท, `unreadCount` เพิ่มเกินจริง หรือ AI ตอบข้อความเดียวสองรอบ
 - **สาเหตุ:** LINE ส่ง event ซ้ำ (เมื่อเปิด "Webhook redelivery") เมื่อ webhook ไม่ได้ตอบ 2xx รวม 503 ที่ระบบตอบเองเมื่อบันทึกทั้งก้อนไม่ได้ ([L6](#l6-webhook-ตอบช้าหรือตอบไม่สำเร็จจนถูกส่งซ้ำ)) ระบบที่กันซ้ำแบบอ่านก่อนแล้วจึงเขียนจะหลุดเมื่อสองคำขอมาพร้อมกัน
-- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว ตรวจ `webhookEventId` ใน `WebhookEvent` ก่อนทำงาน, บันทึก Message ขาเข้าด้วย `insertInboundIfAbsent` บน `lineMessageId` แบบ `ON CONFLICT DO NOTHING` ([data-model กฎของ repository ข้อ 1](../architecture/data-model.md#กฎของ-repository)), event ที่ส่งซ้ำไม่เก็บ reply token (`replyTokenExpiry` ใน [`line-send.logic.ts`](../../src/core/domain/line-send.logic.ts)) และข้อความเดิมไม่สร้างงาน `ai_reply` ใหม่ ([`receive-line-events.use-case.ts`](../../src/core/use-cases/receive-line-events.use-case.ts), fixture `e2e/fixtures/line/redelivery-duplicate.json`) test "stores a batch redelivered after the 5xx exactly once" ส่งก้อนเดิมซ้ำหลัง 503 สองครั้งแล้วได้ข้อความแถวเดียว
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว ตรวจ `webhookEventId` ใน `WebhookEvent` ก่อนทำงาน, บันทึก Message ขาเข้าด้วย `insertInboundIfAbsent` บน `lineMessageId` แบบ `ON CONFLICT DO NOTHING` (การกดปุ่มซึ่งไม่มี `lineMessageId` ใช้ `Message.webhookEventId` ที่ unique แทน การส่งซ้ำที่แข่งกับครั้งแรกจึงไม่สร้างแถวหรือการทำงานที่สอง) ([data-model กฎของ repository ข้อ 1](../architecture/data-model.md#กฎของ-repository)), event ที่ส่งซ้ำไม่เก็บ reply token (`replyTokenExpiry` ใน [`line-send.logic.ts`](../../src/core/domain/line-send.logic.ts)) และข้อความเดิมไม่สร้างงาน `ai_reply` ใหม่ ([`receive-line-events.use-case.ts`](../../src/core/use-cases/receive-line-events.use-case.ts), fixture `e2e/fixtures/line/redelivery-duplicate.json`) test "stores a batch redelivered after the 5xx exactly once" ส่งก้อนเดิมซ้ำหลัง 503 สองครั้งแล้วได้ข้อความแถวเดียว และ "stores a tap once and hands on one action when a redelivery races the first delivery" ยิงการกดเดียวกันพร้อมกัน
 - **วิธีแก้เมื่อเกิด:** หา `line.webhook.event_duplicate` ใน log ถ้าไม่มีแต่ข้อความซ้ำ ให้ดูว่า `lineMessageId` ของสองแถวต่างกันหรือไม่ ถ้าต่างแปลว่าลูกค้าส่งสองครั้งจริง ถ้าเหมือนกันแปลว่า unique constraint หายจาก migration ให้ตรวจ schema ของฐานข้อมูล production
 
 ### L2. ตรวจ signature ไม่ผ่านทั้งที่ secret ถูก
 
 - **อาการ:** LINE Developers Console ตรวจ webhook ไม่ผ่าน และข้อความไม่เข้า
 - **สาเหตุ:** คำนวณ HMAC จาก body ที่ถูก parse แล้วแปลงกลับเป็น JSON ซึ่งไม่ตรงกับ byte ที่ LINE เซ็น หรือ channel secret ที่บันทึกเป็นของ channel อื่น
-- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว route อ่าน raw body เป็นข้อความก่อน parse ([infrastructure](../architecture/infrastructure.md#การรันใน-nextjs)), จำกัดขนาดด้วย `WEBHOOK_MAX_BODY_BYTES` และตรวจ signature ก่อนอ่านหรือเขียนอะไร
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว ตอนบันทึกหรือทดสอบการเชื่อมต่อ ระบบเทียบบอทของ Channel ID กับ Channel secret กับบอทของ Channel access token ถ้าต่างกันตอบ `line.channel_mismatch` และไม่บันทึก ([ADR 0028 ข้อ 5](../adr/0028-review-fixes-concurrency-polling-and-ci.md#การตัดสินใจ)), route อ่าน raw body เป็นข้อความก่อน parse ([infrastructure](../architecture/infrastructure.md#การรันใน-nextjs)), จำกัดขนาดด้วย `WEBHOOK_MAX_BODY_BYTES` และตรวจ signature ก่อนอ่านหรือเขียนอะไร
 - **วิธีแก้เมื่อเกิด:** หา `line.webhook.signature_invalid` และ `line.webhook.not_configured` แล้วทำตาม "ปัญหาที่พบบ่อย" ใน [line-oa-setup](../runbooks/line-oa-setup.md#ปัญหาที่พบบ่อย) ถ้าเพิ่งออก secret ใหม่ ให้บันทึกในหน้าตั้งค่าทันทีตาม [operations](../runbooks/operations.md#หมุน-credential)
 
 ### L3. Reply token หมดอายุหรือถูกใช้สองครั้ง
@@ -58,14 +58,14 @@
 
 - **อาการ:** ลูกค้าพิมพ์สามบรรทัดแล้วได้สามคำตอบ, คำตอบไม่เห็นข้อความล่าสุด หรือ AI ยังส่งหลังแอดมินตอบเองหรือปิด kill switch
 - **สาเหตุ:** งานหลายงานของลูกค้าคนเดียวทำพร้อมกันโดยไม่มีล็อก และเงื่อนไขถูกตรวจครั้งเดียวก่อนการเรียกโมเดลที่ใช้เวลานาน
-- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว รอ `AI_DEBOUNCE_MS`, รอบที่มีข้อความใหม่กว่าถอนตัว, ล็อกต่อลูกค้าด้วย `tryAcquireAiLock`, ผู้ถือล็อกตอบต่อได้ไม่เกิน `AI_MAX_ROUNDS_PER_RUN` และตรวจ kill switch กับสวิตช์รายลูกค้าอีกครั้งก่อนส่ง ([use-cases GenerateAiReply](../architecture/use-cases.md#generateaireply), [ai-reply](../specs/ai-reply.md#เมื่อแอดมินตอบเอง))
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว รอ `AI_DEBOUNCE_MS`, รอบที่มีข้อความใหม่กว่าถอนตัว, ล็อกต่อลูกค้าด้วย `tryAcquireAiLock`, ผู้ถือล็อกตอบต่อได้ไม่เกิน `AI_MAX_ROUNDS_PER_RUN` และตรวจ kill switch กับสวิตช์รายลูกค้าอีกครั้งก่อนส่ง การกด "คุยกับแอดมิน" หรือ "วิธีทดสอบ" ระหว่างรวมข้อความไม่แทนข้อความที่ AI ตอบ (`latestInbound` ข้ามการกดใน `NO_AI_TAP_EVENT_CODES`) การกด "คุยกับ AI" เปิดสวิตช์ก่อนอ่านข้อความล่าสุด และ webhook อ่านสวิตช์หลังบันทึกข้อความ ข้อความที่มากับการกดจึงถูกตอบครั้งเดียว ([use-cases GenerateAiReply](../architecture/use-cases.md#generateaireply), [ai-reply](../specs/ai-reply.md#เมื่อแอดมินตอบเอง))
 - **วิธีแก้เมื่อเกิด:** เรียง log `ai.reply.superseded`, `ai.reply.locked`, `ai.reply.cancelled` และ `ai.reply.sent` ของ `contactId` นั้นตามเวลา ถ้าส่งหลังปิดสวิตช์ ให้หยุด AI ตาม [operations](../runbooks/operations.md#หยุด-ai-ทันที) ก่อนแก้
 
 ### M2. สองคำขอแก้แถวเดียวกันแล้วผลหนึ่งหาย
 
 - **อาการ:** สถานะย้อนกลับ ค่าที่เพิ่งบันทึกถูกทับ หรือการลองใหม่สองครั้งพร้อมกันทำงานสองรอบ
 - **สาเหตุ:** อ่านแถวขึ้นมาตัดสินใจแล้วจึงเขียน โดยไม่มีเงื่อนไขในคำสั่งเขียน
-- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว การเปลี่ยนสถานะเป็น compare-and-set ในคำสั่งเดียว: `tryAcquireAiLock`, `consumeReplyToken`, `markPendingIfFailed`, `restartProcessing`, `setMediaStatus` บน `pending` และ `recordInbound` ที่ไม่ถอยหลังเมื่อ event มาไม่เรียง ([data-model กฎของ repository](../architecture/data-model.md#กฎของ-repository)) ชุดทดสอบของ port รันกับ Postgres จริง
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว การเปลี่ยนสถานะเป็น compare-and-set ในคำสั่งเดียว: `tryAcquireAiLock`, `consumeReplyToken`, `markPendingIfFailed`, `restartProcessing`, `setMediaStatus` บน `pending`, `recordInbound` ที่ไม่ถอยหลังเมื่อ event มาไม่เรียง, `setFollowStatus` ที่เทียบเวลาของ event (`Contact.followStatusAt`) และ `replaceRichMenu` ที่เทียบ id ของเมนูเดิม ([data-model กฎของ repository](../architecture/data-model.md#กฎของ-repository)) ชุดทดสอบของ port รันกับ Postgres จริง
 - **วิธีแก้เมื่อเกิด:** หาคำสั่งเขียนที่ `where` มีแค่ id แล้วเปลี่ยนเป็นเงื่อนไขบนสถานะเดิม เพิ่ม test ใน suite ของ port นั้นที่ยิงสองคำขอพร้อมกัน
 
 ### M3. สถานะกลางทางค้างเมื่อ function ถูกตัด
@@ -81,6 +81,20 @@
 - **สาเหตุ:** ข้อผิดพลาดถูกบันทึกแค่ใน log ที่เก็บไว้ไม่นานและไม่มีใครเปิด
 - **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว ทุกความล้มเหลวที่แอดมินต้องรู้มีสถานะในฐานข้อมูล: แชทขึ้นรอแอดมินพร้อมเหตุผลและบรรทัดเหตุการณ์, ข้อความเป็น `failed` พร้อมรหัส และ `lastLineError` กับ `lastAiError` ในส่วนสถานะระบบ ([ADR 0016](../adr/0016-logging-without-pii-and-status-in-db.md)) งานหลังตอบถูกห่อด้วย `runJob` ซึ่ง log `job.run.failed`
 - **วิธีแก้เมื่อเกิด:** เริ่มที่ส่วนสถานะระบบในหน้าตั้งค่า แล้วทำตาม [operations](../runbooks/operations.md#ai-ไม่ตอบ) งานใหม่ที่ล้มได้ต้องมีสถานะหรือเหตุผลที่หน้าจอเห็น ไม่ใช่แค่ log
+
+### M5. ความยาวของข้อความไทยนับไม่ตรงกันระหว่างสองฝั่ง
+
+- **อาการ:** รายชื่อลูกค้าทั้งหน้าโหลดไม่ขึ้น ("โหลดรายชื่อลูกค้าไม่สำเร็จ") หลังมีข้อความไทยยาวเป็นข้อความล่าสุด ทั้งที่ API ตอบ 200
+- **สาเหตุ:** ฝั่งหนึ่งนับตัวอักษรเป็น grapheme (ตัวอักษรไทยกับสระบนล่างและวรรณยุกต์เป็นหนึ่ง) อีกฝั่งนับเป็น UTF-16 (`string.length`, `z.string().max()`) ข้อความไทย 100 grapheme ยาวได้ถึงราว 300 หน่วย schema ของหน้าเว็บจึงปฏิเสธคำตอบทั้งก้อน
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้วสำหรับตัวอย่างข้อความในรายชื่อ: `previewOf` ตัดเป็น grapheme และตัดอีกครั้งที่ขอบ grapheme ไม่ให้เกิน `PREVIEW_TEXT_MAX_UNITS` หน่วย UTF-16 ส่วน `contactDtoSchema` ตรวจเพดานหน่วยเดียวกันซึ่งหลวมกว่าที่ server ตัด (ข้อความที่มีเครื่องหมายซ้อนหลายชั้นใน grapheme เดียวจึงไม่ทำให้ทั้งหน้าพัง) test ใน `dto.contract.spec.ts` ใช้ข้อความไทย เทวนาครี และเครื่องหมายซ้อน schema ของคำตอบในหน้าเว็บต้องไม่เข้มกว่าที่ server สร้าง ค่าจำกัดอื่นที่เป็น "ตัวอักษร" ต้องนับแบบเดียวกันทั้งที่ตัดและที่ตรวจ
+- **วิธีแก้เมื่อเกิด:** หา schema ที่ใช้ `.max()` กับข้อความที่ถูกตัดด้วย grapheme แล้วเปลี่ยนเป็นการนับเดียวกัน และเพิ่ม test ด้วยข้อความไทยที่มีวรรณยุกต์
+
+### M6. ข้อความของลูกค้าถูกแทนด้วยการกดปุ่ม หรือสถานะติดตามย้อนกลับ
+
+- **อาการ:** ลูกค้าพิมพ์คำถามแล้วกดปุ่มของ rich menu ทันที AI ไม่ตอบคำถาม หรือตอบสองครั้ง, ลูกค้าที่ติดตามอยู่แสดงว่าเลิกติดตาม
+- **สาเหตุ:** โค้ดเชื่อลำดับที่ event ถูกประมวลผลแทนเวลาของ event และ "ข้อความล่าสุด" นับแถวที่ไม่ใช่ข้อความที่ AI ตอบ LINE ส่ง event ของก้อนต่างกันไม่เรียง
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว ดู [M1](#m1-ai-ตอบข้อความรัวทีละข้อ-ตอบข้อความเก่า-หรือตอบหลังถูกปิด) สำหรับการกด และ `setFollowStatus` ที่ไม่ให้ event เก่ากว่าเปลี่ยนสถานะ ข้อความหรือการกดจากลูกค้าที่บันทึกว่าเลิกติดตามตั้งกลับเป็นติดตามอยู่ ([data-model กฎของ repository](../architecture/data-model.md#กฎของ-repository)) test อยู่ใน `rich-menu.use-case.spec.ts` ("taps next to a text the AI has not answered yet") และ `receive-line-events.use-case.spec.ts`
+- **วิธีแก้เมื่อเกิด:** เรียงบรรทัดเหตุการณ์ `contact.followed` และ `contact.unfollowed` ในแชทของลูกค้าคนนั้นกับเวลาของข้อความ ถ้าสถานะเปลี่ยนตาม event ที่เก่ากว่า ให้ตรวจว่า migration ที่เพิ่ม `followStatusAt` apply แล้ว
 
 ## 3. AI
 
@@ -109,7 +123,7 @@
 
 - **อาการ:** AI ตอบนอกหัวข้อ ยกราคาหรือเงื่อนไขที่ไม่มีในคลังความรู้ หรือส่งลิงก์ที่มาจากข้อความของลูกค้าหรือจากในไฟล์
 - **สาเหตุ:** ข้อความที่ไว้ใจไม่ได้อยู่ใน context เดียวกับคำสั่ง และการกรองที่ทำแค่ใน prompt ถูกหลบได้
-- **การป้องกันในโปรเจกต์นี้:** บางส่วน AI ไม่มีเครื่องมือ, คำสั่งระบบไม่มีความลับ, เนื้อหา PDF ถูกแยกจากคำสั่ง, ขอบเขตหัวข้อตรวจแยกและปิดแบบปลอดภัยเมื่อไม่แน่ใจ ([threat-model](../security/threat-model.md#ภัยและการรับมือ), [ADR 0020](../adr/0020-topic-guardrail-as-separate-check.md)) ลิงก์ป้องกันแล้ว: หลังทำความสะอาด คำตอบที่มี URL (`http`/`https`, `www.` หรือ domain ที่มี path) ซึ่งไม่อยู่ในคลังความรู้หรือคำแนะนำของร้านไม่ถูกส่ง แชทขึ้นรอแอดมินด้วย `ai.link_not_allowed` (`disallowedLinks` ใน [`reply-links.logic.ts`](../../src/core/domain/reply-links.logic.ts), [ai-prompt ข้อ 6.1](../specs/ai-prompt.md#61-ลิงก์ในคำตอบ)) และชุดคำถามวัดคุณภาพมีข้อ C6, C7 กับการตรวจลิงก์ทุกข้อ ที่ยังเหลือ: ราคาและเงื่อนไขที่ไม่มีในคลังกันด้วย prompt อย่างเดียว และลิงก์ที่แฝงใน PDF ถือว่าร้านเขียน
+- **การป้องกันในโปรเจกต์นี้:** บางส่วน AI ไม่มีเครื่องมือ, คำสั่งระบบไม่มีความลับ, เนื้อหา PDF ถูกแยกจากคำสั่ง, ขอบเขตหัวข้อตรวจแยกและปิดแบบปลอดภัยเมื่อไม่แน่ใจ ([threat-model](../security/threat-model.md#ภัยและการรับมือ), [ADR 0020](../adr/0020-topic-guardrail-as-separate-check.md)) ลิงก์ป้องกันแล้ว: หลังทำความสะอาด คำตอบที่มี URL (`http`/`https`, `www.` หรือ domain ที่มี path) ซึ่งไม่อยู่ในคลังความรู้หรือคำแนะนำสำหรับ AI ไม่ถูกส่ง แชทขึ้นรอแอดมินด้วย `ai.link_not_allowed` (`disallowedLinks` ใน [`reply-links.logic.ts`](../../src/core/domain/reply-links.logic.ts), [ai-prompt ข้อ 6.1](../specs/ai-prompt.md#61-ลิงก์ในคำตอบ)) และชุดคำถามวัดคุณภาพมีข้อ C6, C7 กับการตรวจลิงก์ทุกข้อ ที่ยังเหลือ: ราคาและเงื่อนไขที่ไม่มีในคลังกันด้วย prompt อย่างเดียว และลิงก์ที่แฝงใน PDF ถือว่าแอดมินเขียน
 - **วิธีแก้เมื่อเกิด:** ปิด AI ตอบแทนของลูกค้าคนนั้นหรือปิด kill switch, อ่านข้อความที่แปลงจาก PDF ในหน้าตั้งค่าว่ามีคำสั่งแฝงหรือไม่ ([operations คลังความรู้](../runbooks/operations.md#คลังความรู้)) แล้วเพิ่มกรณีนั้นในชุดคำถามวัดคุณภาพ ([ai-prompt ข้อ 8](../specs/ai-prompt.md#8-ชุดคำถามวัดคุณภาพ-ai)) ซึ่งรันเมื่อเจ้าของงานสั่งเท่านั้น
 
 ### A5. ข้อมูลภายในหลุดถึงผู้ใช้
@@ -130,16 +144,16 @@
 
 ### D1. แก้หรือลบ migration ที่ apply ไปแล้ว
 
-- **อาการ:** `prisma migrate deploy` ใน build ของ production ล้มด้วย checksum ไม่ตรงหรือหาไฟล์ไม่เจอ และ deploy ไม่ผ่าน
+- **อาการ:** โครงตารางของ production ไม่ตรงกับไฟล์ใน repo โดยไม่มีอะไรล้ม หรือฐานข้อมูลใหม่ที่สร้างจากไฟล์ต่างจาก production
 - **สาเหตุ:** ไฟล์ใน `prisma/migrations/` ถูกแก้ จัดรูปแบบใหม่ หรือลบหลังจาก apply ไปแล้ว ทำให้ประวัติใน repo ไม่ตรงกับตาราง `_prisma_migrations`
-- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว ขั้น `pnpm migrations:immutable` ในงาน `check` ของ CI ([`ci.yml`](../../.github/workflows/ci.yml)) เทียบกับ base (first parent เมื่ออยู่บน `main`, merge base กับ `origin/main` เมื่ออยู่ branch อื่น) และล้มเมื่อไฟล์ใน `prisma/migrations/<name>/` ที่มีอยู่แล้วถูกแก้ ลบ เปลี่ยนชื่อ หรือมีไฟล์เพิ่ม การเพิ่ม directory ใหม่ทำได้ กฎอยู่ใน [`migrations.logic.ts`](../../scripts/migrations.logic.ts) ([test](../../e2e/migrations.unit.ts)) และสั่งรันเองได้ด้วยคำสั่งเดียวกัน (ดู [project-setup ข้อ 5](../architecture/project-setup.md#5-packagejson))
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว ขั้น `pnpm migrations:immutable` ในงาน `check` ของ CI ([`ci.yml`](../../.github/workflows/ci.yml)) เทียบกับ base (first parent เมื่ออยู่บน `main`, merge base กับ `origin/main` เมื่ออยู่ branch อื่น) และล้มเมื่อไฟล์ใน `prisma/migrations/<name>/` ที่มีอยู่แล้วถูกแก้ ลบ เปลี่ยนชื่อ หรือมีไฟล์เพิ่ม การเพิ่ม directory ใหม่ทำได้ การเทียบกับ base จับไม่ได้ถ้า migration ถูกแก้ในหลาย commit ที่ต่อกัน และ `prisma migrate deploy` ไม่ปฏิเสธ migration ที่ apply แล้วซึ่งถูกแก้หรือลบ (ยืนยันกับ Prisma 7.10.1) จึงมี `pnpm migrations:applied` ที่เทียบ checksum ในตาราง `_prisma_migrations` กับไฟล์ ([deploy ตรวจ migration ที่ apply แล้ว](../runbooks/deploy.md#ตรวจ-migration-ที่-apply-แล้ว)) คำสั่งนี้ยังไม่อยู่ใน build ของ production กฎอยู่ใน [`migrations.logic.ts`](../../scripts/migrations.logic.ts) ([test](../../e2e/migrations.unit.ts)) และสั่งรันเองได้ด้วยคำสั่งเดียวกัน (ดู [project-setup ข้อ 5](../architecture/project-setup.md#5-packagejson))
 - **วิธีแก้เมื่อเกิด:** คืนไฟล์ให้ตรงกับ commit ที่ apply ทุก byte จากประวัติของ Git แล้วเขียนการเปลี่ยนเป็น migration ใหม่ ห้ามแก้ตาราง `_prisma_migrations` ใน production โดยไม่ถามเจ้าของงาน
 
 ### D2. Migration ที่ทำให้ย้อนกลับไม่ได้
 
 - **อาการ:** Deploy ใหม่ล้มหลัง migration ผ่านแล้ว หรือเลื่อน deployment ก่อนหน้าขึ้นแล้วโค้ดรุ่นก่อนพังกับโครงตารางใหม่
 - **สาเหตุ:** Build ของ production รัน migration ก่อน build แอป ฐานข้อมูลจึงเปลี่ยนแม้ build ล้ม และ migration ที่ลบหรือเปลี่ยนชนิดคอลัมน์ทำให้โค้ดรุ่นก่อนใช้ไม่ได้
-- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว กฎให้ migration เป็นแบบเพิ่มเท่านั้น และการลบหรือเปลี่ยนชนิดทำสองขั้นหลังถามเจ้าของงาน ([deploy ย้อนกลับ](../runbooks/deploy.md#ย้อนกลับ), [AGENTS.md](../../AGENTS.md)) ขั้น `pnpm migrations:destructive` ในงาน `check` สแกนเฉพาะไฟล์ migration ที่การเปลี่ยนนั้นเพิ่มใหม่ และล้มเมื่อมี `DROP TABLE`, `DROP COLUMN`, `ALTER COLUMN ... TYPE`, `RENAME`, `TRUNCATE` หรือ `DELETE FROM` ที่ไม่มี `WHERE` (ไม่นับใน comment และ string literal) เว้นแต่ไฟล์มีบรรทัด `-- approved-destructive: <เหตุผล>` (ต้นบรรทัด เหตุผลไม่ว่าง) ซึ่งใส่ได้หลังเจ้าของงานอนุมัติเท่านั้น บรรทัดนี้ทำให้การตัดสินใจอยู่ใน diff ให้ reviewer เห็น แต่ไม่พิสูจน์ว่าเจ้าของงานอนุมัติจริง ส่วนนั้นยังเป็นกฎของ AGENTS.md คำสั่งอื่นที่เปลี่ยนข้อมูลโดยไม่อยู่ในรายการ (เช่น `UPDATE` ไม่มี `WHERE`, `SET NOT NULL`, `DROP INDEX`) ตรวจด้วย review กฎอยู่ใน [`migrations.logic.ts`](../../scripts/migrations.logic.ts) ([test](../../e2e/migrations.unit.ts))
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว กฎให้ migration เป็นแบบเพิ่มเท่านั้น และการลบหรือเปลี่ยนชนิดทำสองขั้นหลังถามเจ้าของงาน ([deploy ย้อนกลับ](../runbooks/deploy.md#ย้อนกลับ), [AGENTS.md](../../AGENTS.md)) ขั้น `pnpm migrations:destructive` ในงาน `check` สแกนไฟล์ migration ทุกไฟล์ทุกรอบ (ไม่ใช่เฉพาะที่ commit ล่าสุดเพิ่ม ซึ่งหลุดเมื่อ push หลาย commit) และล้มเมื่อมี `DROP TABLE`, `DROP COLUMN`, `ALTER COLUMN ... TYPE`, `RENAME`, `TRUNCATE` หรือ `DELETE FROM` ที่ไม่มี `WHERE` (ไม่นับใน comment และ string literal) เว้นแต่ไฟล์มีบรรทัด `-- approved-destructive: <เหตุผล>` (ต้นบรรทัด เหตุผลไม่ว่าง) ซึ่งใส่ได้หลังเจ้าของงานอนุมัติเท่านั้น บรรทัดนี้ทำให้การตัดสินใจอยู่ใน diff ให้ reviewer เห็น แต่ไม่พิสูจน์ว่าเจ้าของงานอนุมัติจริง ส่วนนั้นยังเป็นกฎของ AGENTS.md คำสั่งอื่นที่เปลี่ยนข้อมูลโดยไม่อยู่ในรายการ (เช่น `UPDATE` ไม่มี `WHERE`, `SET NOT NULL`, `DROP INDEX`) ตรวจด้วย review กฎอยู่ใน [`migrations.logic.ts`](../../scripts/migrations.logic.ts) ([test](../../e2e/migrations.unit.ts))
 - **วิธีแก้เมื่อเกิด:** ทำตาม [deploy ย้อนกลับ](../runbooks/deploy.md#ย้อนกลับ) ถ้าโค้ดรุ่นก่อนใช้กับตารางใหม่ไม่ได้ ให้แก้ไปข้างหน้าด้วย PR ใหม่แทนการย้อน
 
 ### D3. โค้ดกับฐานข้อมูลรับค่าไม่ตรงกัน
@@ -170,6 +184,20 @@
 - **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว ยอดรวมคำนวณด้วย aggregate ใน SQL (`sumCost` ใน [`usage.repository.ts`](../../src/adapters/prisma/usage.repository.ts)), cursor ของรายชื่อใช้ `{ sortAt, id }` และ polling บอก `hasMore` ([api-contract](../architecture/api-contract.md#protocol-ของ-polling))
 - **วิธีแก้เมื่อเกิด:** เพิ่ม test ที่มีแถวมากกว่าหนึ่งหน้าและค่าการเรียงซ้ำกัน แล้วเพิ่ม id เป็นตัวตัดสินในการเรียง
 
+### D7. เวลาของฐานข้อมูลไม่ใช่ UTC
+
+- **อาการ:** SQL ที่รันเองใน console ได้ช่วงวันหรือเวลาที่เลื่อนไปเจ็ดชั่วโมง หรือค่าที่ `$queryRaw` แปลงเป็นวันที่ไม่ตรงกับที่ Prisma อ่าน
+- **สาเหตุ:** `TimeZone` ของ session มาจากค่าเริ่มต้นของ database หรือ role ซึ่งผู้ให้บริการตั้งต่างกัน และ pooler แบบ transaction ไม่ส่งต่อพารามิเตอร์ตอนเชื่อมต่อแน่นอน
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว migration ที่สิบเอ็ดตั้ง `ALTER DATABASE ... SET "TimeZone" TO 'UTC'` ([data-model](../architecture/data-model.md#migration-ที่สิบเอ็ด-ผลจากการ-review), [ADR 0028 ข้อ 8](../adr/0028-review-fixes-concurrency-polling-and-ci.md#การตัดสินใจ)) adapter test ตรวจ `SHOW TimeZone` และ `pg_db_role_setting`
+- **วิธีแก้เมื่อเกิด:** รัน `SHOW TimeZone` ผ่าน `DATABASE_URL` ถ้าไม่ใช่ UTC ให้ดูว่ามีค่าของ role ที่ทับ (`ALTER ROLE ... SET`) แล้วถามเจ้าของงานก่อนแก้
+
+### D8. ค่าจาก URL หรือ body ที่ Postgres รับไม่ได้
+
+- **อาการ:** API ตอบ 500 แทน 400 หรือ 404 เมื่อ path มี id ที่ไม่ใช่ UUID, ข้อความมีอักขระ NUL หรือ cursor เป็นตัวเลขเกิน `bigint`
+- **สาเหตุ:** Postgres ปฏิเสธ `\u0000` ใน `text`, UUID ที่ผิดรูป และตัวเลขเกิน 2^63-1 ด้วย error ของ driver ซึ่งกลายเป็น 500
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว id ใน path ตรวจด้วย `pathIdSchema` ซึ่งตอบรหัส not found ของสิ่งนั้น, ข้อความและชื่อไฟล์ที่มี NUL ถูกปฏิเสธที่การตรวจ body และ query (`check` ใน [`http-request.ts`](../../src/composition/http-request.ts)), `parseParams` และการอัปโหลด PDF และ seq ไม่เกิน `SEQ_MAX` ([api-contract](../architecture/api-contract.md), test ใน `http-request.spec.ts` และ `route.spec.ts`)
+- **วิธีแก้เมื่อเกิด:** หา `http.request.failed` ที่มี `errorCode` เป็น `internal` ของ route นั้น แล้วเพิ่มการตรวจใน schema ของ contract พร้อม test ที่ส่งค่านั้น
+
 ## 5. เวลาและเงิน
 
 ### T1. วันตามเวลาไทยกับวันของ UTC
@@ -199,14 +227,14 @@
 
 - **อาการ:** ผู้ใช้จริงถูกจำกัดทั้งที่ยังไม่ได้ลอง หรือสคริปต์เดารหัสได้ไม่จำกัด
 - **สาเหตุ:** อ่าน IP จาก header ที่ผู้เรียกปลอมได้ หรือ proxy เติม IP ของตัวเอง ทุกคนจึงตกอยู่ใน key เดียวกันหรือได้ key ใหม่ทุกคำขอ
-- **การป้องกันในโปรเจกต์นี้:** บางส่วน (ป้องกันแล้วในโค้ด ยังต้องยืนยันบน Vercel) `clientIpOf` อ่านเฉพาะค่าสุดท้ายของ `x-forwarded-for` ซึ่ง proxy ที่ใกล้ที่สุดเขียนและผู้เรียกเลือกไม่ได้ ไม่ว่า Vercel จะแทนที่หรือต่อท้าย header ไม่อ่าน `x-real-ip` และ IPv6 นับต่อ /64 ([`http-request.ts`](../../src/composition/http-request.ts), [infrastructure IP ของผู้เรียก](../architecture/infrastructure.md#ip-ของผู้เรียก), [ADR 0022](../adr/0022-client-ip-from-last-forwarded-hop.md)) คำขอที่ไม่มี IP ของการลองรหัสนับในถังแยก `RATE_LIMIT_UNLOCK_NO_IP` ที่เข้มกว่า ผู้ที่มี IP จึงไม่ถูกล็อกตาม และทุกคำขอแบบนั้น log `access.unlock.client_ip_missing` ([`unlock-access.use-case.ts`](../../src/core/use-cases/unlock-access.use-case.ts)) พฤติกรรมของ header บน Vercel จริงยังต้องยืนยันตามขั้นใน [implementation-plan](../plans/implementation-plan.md#สิ่งที่ต้องยืนยันก่อนหรือระหว่างสร้าง)
+- **การป้องกันในโปรเจกต์นี้:** บางส่วน (ป้องกันแล้วในโค้ด ยังต้องยืนยันบน Vercel) `clientIpOf` อ่านเฉพาะค่าสุดท้ายของ `x-forwarded-for` ซึ่ง proxy ที่ใกล้ที่สุดเขียนและผู้เรียกเลือกไม่ได้ ไม่ว่า Vercel จะแทนที่หรือต่อท้าย header ไม่อ่าน `x-real-ip` และ IPv6 นับต่อ /64 ([`http-request.ts`](../../src/composition/http-request.ts), [infrastructure IP ของผู้เรียก](../architecture/infrastructure.md#ip-ของผู้เรียก), [ADR 0022](../adr/0022-client-ip-from-last-forwarded-hop.md)) ทุกคำขอนับแบบ atomic ก่อนเทียบรหัส (`hit`) คำขอที่เกินถูกปฏิเสธโดยไม่เทียบ และรหัสถูกคืนการนับของตัวเอง (`refund`) คำขอที่ยิงพร้อมกันจึงลองได้ไม่เกินค่าจำกัด ([ADR 0028 ข้อ 1](../adr/0028-review-fixes-concurrency-polling-and-ci.md#การตัดสินใจ), test "under concurrency" ใน `unlock-access.use-case.spec.ts`) คำขอที่ไม่มี IP ของการลองรหัสนับในถังแยก `RATE_LIMIT_UNLOCK_NO_IP` ที่เข้มกว่า ผู้ที่มี IP จึงไม่ถูกล็อกตาม และทุกคำขอแบบนั้น log `access.unlock.client_ip_missing` ([`unlock-access.use-case.ts`](../../src/core/use-cases/unlock-access.use-case.ts)) พฤติกรรมของ header บน Vercel จริงยังต้องยืนยันตามขั้นใน [implementation-plan](../plans/implementation-plan.md#สิ่งที่ต้องยืนยันก่อนหรือระหว่างสร้าง)
 - **วิธีแก้เมื่อเกิด:** ดู `access.unlock.rate_limited` และ `access.unlock.client_ip_missing` ถ้ามีคนถูกจำกัดพร้อมกันหลายคน แปลว่า IP เป็นค่าเดียวกันหรือ proxy ไม่ส่ง IP ให้รอหน้าต่างหมดแล้วตรวจ header ที่ Vercel ส่งจริงตามขั้นใน implementation-plan ห้ามแก้ด้วยการตั้ง `RATE_LIMIT_SCALE` ใน production
 
 ### S3. ค่า environment ของ production ไม่ตรงกับที่โค้ดคาด
 
 - **อาการ:** Production ทำงานเหมือนเครื่อง dev (ส่งไป stub, จำกัดความถี่หลวม, ไฟล์หายหลัง deploy) หรือพฤติกรรมไม่ตรงกับโค้ดที่ deploy
 - **สาเหตุ:** ค่าที่ใช้เฉพาะการทดสอบถูกตั้งใน production หรือค่าที่ถูกรูปแบบแต่ผิดความหมาย การตรวจตอนเริ่มระบบจับได้แค่ค่าที่ขาดหรือผิดรูปแบบ
-- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว environment ทุกตัวถูกตรวจด้วย schema ตอนเริ่มระบบและล้มพร้อมบอกชื่อ ([`env.ts`](../../src/composition/env.ts), [infrastructure](../architecture/infrastructure.md#environment-variable)) เมื่อ `VERCEL_ENV` เป็น `production` (Vercel ตั้งให้เอง) schema ปฏิเสธเพิ่ม: `LINE_API_BASE_URL`, `LINE_DATA_API_BASE_URL` หรือ `ANTHROPIC_BASE_URL` ที่ถูกตั้งไม่ว่าค่าใด, `FILE_STORAGE=local` และ `RATE_LIMIT_SCALE` ที่ไม่ใช่ 1 โดยบอกชื่อ ไม่บอกค่า ([project-setup ข้อ 6.10](../architecture/project-setup.md#610-envexample), `env.spec.ts`) Docker, CI และเครื่อง dev ไม่มี `VERCEL_ENV` จึงทำงานเหมือนเดิม ค่าที่ถูกรูปแบบแต่ผิดความหมายแบบอื่น (เช่น `APP_BASE_URL` ของเครื่องอื่น) ยังจับไม่ได้
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว environment ทุกตัวถูกตรวจด้วย schema ตอนเริ่มระบบและล้มพร้อมบอกชื่อ ([`env.ts`](../../src/composition/env.ts), [infrastructure](../architecture/infrastructure.md#environment-variable)) เมื่อ `VERCEL_ENV` เป็น `production` (Vercel ตั้งให้เอง) schema ปฏิเสธเพิ่ม: `LINE_API_BASE_URL`, `LINE_DATA_API_BASE_URL` หรือ `ANTHROPIC_BASE_URL` ที่ถูกตั้งไม่ว่าค่าใด, `FILE_STORAGE=local` และ `RATE_LIMIT_SCALE` ที่ไม่ใช่ 1 โดยบอกชื่อ ไม่บอกค่า ([project-setup ข้อ 6.10](../architecture/project-setup.md#610-envexample), `env.spec.ts`) Docker, CI และเครื่อง dev ไม่มี `VERCEL_ENV` จึงทำงานเหมือนเดิม `APP_BASE_URL` ถูก trim และแปลงเป็น origin และค่าที่มี path หรือไม่ใช่ URL `http`/`https` ทำให้ล้ม ค่าที่ถูกรูปแบบแต่ผิดความหมายแบบอื่น (เช่น `APP_BASE_URL` ของเครื่องอื่น) ยังจับไม่ได้ แต่ไม่ทำให้เข้าระบบไม่ได้แล้ว ([S6](#s6-เข้าระบบไม่ได้เพราะต้นทางไม่ตรง))
 - **วิธีแก้เมื่อเกิด:** ถ้า deploy แล้วแอปไม่เริ่ม ให้ดู log ของ function หา `Missing or invalid environment variables:` ซึ่งบอกชื่อตัวที่ผิด ลบหรือแก้ตามขั้นที่ 3 ของ [deploy ตั้งค่าครั้งแรก](../runbooks/deploy.md#2-vercel) แล้ว deploy ใหม่ เมื่อพฤติกรรมไม่ตรงกับโค้ด ให้ตรวจ environment ก่อนสงสัยโค้ด
 
 ### S4. ความลับหรือข้อมูลลูกค้าใน log และ URL
@@ -223,13 +251,20 @@
 - **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว root layout ตั้ง `dynamic = 'force-dynamic'` ([`app/layout.tsx`](../../app/layout.tsx)), CSP สร้างใน proxy ([`csp.ts`](../../src/composition/csp.ts)) และ E2E ล้มเมื่อมี CSP violation หรือ console error ([`e2e/helpers/test.ts`](../../e2e/helpers/test.ts))
 - **วิธีแก้เมื่อเกิด:** เปิด console ของเบราว์เซอร์หา `[csp-violation]` อย่าแก้ด้วยการเพิ่ม `'unsafe-inline'` ใน `script-src` ให้ตรวจว่าหน้าหรือ layout ใหม่ไม่ได้เปลี่ยนเป็น static
 
+### S6. เข้าระบบไม่ได้เพราะต้นทางไม่ตรง
+
+- **อาการ:** ใส่รหัสถูกแล้วได้ "คำขอนี้ไม่ได้มาจากหน้าเว็บของระบบ โหลดหน้าใหม่แล้วลองอีกครั้ง" (403 `request.origin_forbidden`) ทุกครั้ง หรือทุกปุ่มที่บันทึกข้อมูลได้ข้อความเดียวกัน ทั้งที่เปิดเว็บของระบบเอง
+- **สาเหตุ:** การตรวจต้นทางเทียบ `Origin` กับค่าเดียวที่ตั้งไว้ (`APP_BASE_URL`) ความต่างใด ๆ ระหว่างค่านั้นกับ address ที่ browser ใช้ (deployment เดียวมีหลายโดเมนบน Vercel, `/` ท้าย, `http` กับ `https`, พิมพ์ผิด, โดเมนที่เพิ่มทีหลัง) จึงปิดทุกคำขอที่แก้ข้อมูล อีกทางคือหา origin ของคำขอจาก `request.url` หรือ `nextUrl.origin` ซึ่งใน Next.js standalone เป็น address ที่ server bind (`http://0.0.0.0:3000`) ไม่ใช่ host ที่ browser ใช้
+- **การป้องกันในโปรเจกต์นี้:** บางส่วน (ป้องกันแล้วในโค้ด ยังต้องยืนยันบน Vercel) `isAllowedOrigin` ([`request-origin.ts`](../../src/composition/request-origin.ts), [test](../../src/composition/request-origin.spec.ts)) ที่ proxy.ts และตัวห่อ route ใช้ร่วมกันรับ `Origin` ที่เท่ากับ origin ของคำขอเอง (จาก `x-forwarded-proto`/`x-forwarded-host` หรือ `Host`) หรือของ `APP_BASE_URL` ซึ่งถูกแปลงเป็น origin ตอนเริ่มระบบ ([ADR 0025](../adr/0025-same-origin-or-app-base-url.md)) ไม่มี `Origin`, `null` และเว็บอื่นยังได้ 403 พฤติกรรมของ header บน Vercel จริงยังไม่ได้ยืนยัน
+- **วิธีแก้เมื่อเกิด:** ดู log `http.origin.rejected` และทำตาม [deploy "เมื่อเข้าระบบไม่ได้"](../runbooks/deploy.md#เมื่อเข้าระบบไม่ได้เพราะ-คำขอนี้ไม่ได้มาจากหน้าเว็บของระบบ) ห้ามแก้ด้วยการปิดการตรวจต้นทางหรือรับ `Origin` ที่ไม่มี ถ้า proxy หน้า Vercel ไม่ส่ง host ที่ browser ใช้ ให้ตั้ง `APP_BASE_URL` เป็นโดเมนนั้น
+
 ## 7. หน้าเว็บ
 
 ### F1. คำตอบของ polling ที่มาช้าทับข้อมูลใหม่ หรือแถวหายหลังเน็ตหลุด
 
 - **อาการ:** สถานะข้อความย้อนกลับ, รายชื่อแสดงของแท็บก่อน หรือข้อความที่เข้ามาระหว่างออฟไลน์ไม่ขึ้น
 - **สาเหตุ:** คำขอหลายตัวของข้อมูลเดียวกันค้างพร้อมกันแล้วตัวที่ช้ากว่าเขียนทีหลัง หรือ cursor เดินข้ามแถวที่ commit ช้า
-- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว Polling ใช้ cursor `updatedSeq` ที่ย้อนหลัง `POLL_OVERLAP_SEQ`, รวมด้วย id ให้แถวที่ `updatedSeq` สูงกว่าชนะ และโหลดหน้าแรกใหม่หลังเชื่อมต่อกลับหรือเมื่อแท็บกลับมา ([`polling.ts`](../../src/common/polling.ts), [api-contract](../architecture/api-contract.md#protocol-ของ-polling), [ADR 0005](../adr/0005-polling-instead-of-realtime.md))
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว Polling ใช้ cursor `updatedSeq` ที่ย้อนหลัง `POLL_OVERLAP_SEQ`, รวมด้วย id ให้แถวที่ `updatedSeq` สูงกว่าชนะ และโหลดหน้าแรกใหม่หลังเชื่อมต่อกลับหรือเมื่อแท็บกลับมา โดยรวมหน้าแรกเข้ากับสิ่งที่โหลดไว้ ไม่ทิ้งหน้าที่เก่ากว่าที่แอดมินเลื่อนดูอยู่ (`contactListFromPage`, `threadFromFirstPage`) ([`polling.ts`](../../src/common/polling.ts), [api-contract](../architecture/api-contract.md#protocol-ของ-polling), [ADR 0005](../adr/0005-polling-instead-of-realtime.md))
 - **วิธีแก้เมื่อเกิด:** ดู network ของเบราว์เซอร์ว่า `afterUpdatedSeq` เดินหน้าตามที่ควรหรือไม่ แล้วเขียน test ใน `polling.spec.ts` หรือ `inbox.send.logic` ที่ส่งคำตอบสลับลำดับ
 
 ### F2. Hydration ไม่ตรงกัน
@@ -243,7 +278,7 @@
 
 - **อาการ:** รายการว่างแสดงพร้อมกับ error หรือแอดมินคิดว่าไม่มีข้อความใหม่ทั้งที่เชื่อมต่อไม่ได้
 - **สาเหตุ:** ตารางแสดงเสมอโดยไม่แยกสถานะ error ออกจากสถานะว่าง
-- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว รายชื่อแสดง `ErrorState` เมื่อโหลดไม่สำเร็จและยังไม่มีข้อมูล ([`ContactList.tsx`](../../src/features/inbox/list/ContactList.tsx)) และแถบสถานะการเชื่อมต่อ ([`ConnectionBanner.tsx`](../../src/common/ConnectionBanner.tsx)) ขึ้นเมื่อ polling ล้มติดกันถึง `POLL_FAILURES_BEFORE_BANNER` รอบ ([`polling.ts`](../../src/common/polling.ts))
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว รายชื่อแสดง `ErrorState` เมื่อโหลดไม่สำเร็จและยังไม่มีข้อมูล ([`ContactList.tsx`](../../src/features/inbox/list/ContactList.tsx)) และแถบสถานะการเชื่อมต่อ ([`ConnectionBanner.tsx`](../../src/common/ConnectionBanner.tsx)) ขึ้นเมื่อ query ใดของ polling ล้มติดกันถึง `POLL_FAILURES_BEFORE_BANNER` รอบ ([`polling.ts`](../../src/common/polling.ts)) ส่วนข้อมูลของลูกค้าที่ error อยู่ใน `SectionErrorBoundary` ที่ผูก key กับ `contactId` การสลับแชทจึงล้าง error ของคนก่อน
 - **วิธีแก้เมื่อเกิด:** หน้าจอใหม่ที่มีรายการต้องมีสามสถานะแยกกัน (กำลังโหลด, error, ว่าง) ตาม [ui-screens](../specs/ui-screens.md)
 
 ### F4. CSS เพี้ยนหรือ build ล้มเพราะ Tailwind อ่านไฟล์ที่ไม่ใช่โค้ด
@@ -267,13 +302,20 @@
 - **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้วบางส่วน ทุก dropdown ใช้ `Select` ใน `src/common/ui/select.tsx` ([frontend](../architecture/frontend.md#popup-และ-dropdown)) ไม่มี lint ที่ห้าม element เหล่านี้ ตรวจด้วย review และรายการตรวจก่อนเปิด PR
 - **วิธีแก้เมื่อเกิด:** แทนด้วย `Select` และเปิดดูใน browser จริงที่ 390 และ 1280 ทั้งตอนปิดและตอนเปิด
 
+### F7. Polling ยิงถี่เมื่อบาง query ล้ม
+
+- **อาการ:** ระหว่างที่ API บางเส้นล้ม หน้าเว็บยิงคำขอถี่ขึ้น หรือหลังเน็ตกลับมาทุก query โหลดหน้าแรกใหม่พร้อมกันซ้ำ ๆ
+- **สาเหตุ:** ตัวนับความล้มเหลวเดียวของทั้งหน้า query ที่สำเร็จจึงรีเซ็ตการถ่วงของ query ที่ล้ม และการโหลดใหม่หลังกลับมาเชื่อมต่อเกิดทุกครั้งที่มี query สำเร็จ
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว `pollController` นับความล้มเหลวต่อ query การโหลดใหม่เกิดเมื่อ query ที่เคยล้มสำเร็จเท่านั้น ครั้งเดียวต่อการกลับมา และห่างกันไม่น้อยกว่าช่วงปกติ ([`polling.ts`](../../src/common/polling.ts), [ADR 0028 ข้อ 6](../adr/0028-review-fixes-concurrency-polling-and-ci.md#การตัดสินใจ)) test ใน `polling.spec.ts` ใช้ fake timer นับจำนวนคำขอ
+- **วิธีแก้เมื่อเกิด:** ดู network ของเบราว์เซอร์ว่า query ที่ล้มยิงตามช่วงที่ถ่วงแล้วหรือไม่ แล้วเขียน test ใน `polling.spec.ts` ที่มี query ล้มหนึ่งตัวกับตัวที่ปกติ
+
 ## 8. การอัปโหลดและที่เก็บไฟล์
 
 ### U1. ไฟล์ปลอมชนิดหรือใหญ่เกิน
 
 - **อาการ:** ไฟล์ที่ไม่ใช่รูปถูกส่งให้ลูกค้า หรือที่เก็บไฟล์เต็มเร็วผิดปกติ
 - **สาเหตุ:** เชื่อนามสกุลหรือ `Content-Type` ที่ผู้ส่งบอก และสิทธิ์อัปโหลดไม่ผูกชนิดกับขนาด
-- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว ชนิดตรวจจาก byte แรกของไฟล์ (`sniffContentType` ใน [`media.logic.ts`](../../src/core/domain/media.logic.ts)), สิทธิ์อัปโหลดกำหนดชนิด ขนาด และอายุ `UPLOAD_TICKET_TTL_MS` และที่เก็บแบบ local ตรวจลายเซ็น ชนิด และขนาดก่อนเขียน ([backend](../architecture/backend.md#api))
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว ชนิดตรวจจาก byte แรกของไฟล์ (`sniffContentType` ใน [`media.logic.ts`](../../src/core/domain/media.logic.ts)), สิทธิ์อัปโหลดกำหนดชนิด ขนาด และอายุ `UPLOAD_TICKET_TTL_MS` และที่เก็บแบบ local ตรวจลายเซ็น ชนิด และขนาดที่ต้องตรงกับที่ขอสิทธิ์ทุก byte ก่อนเขียน ([backend](../architecture/backend.md#api)) ข้อความ error บอกชนิดที่รับและเพดานขนาด และปุ่มแนบไฟล์กับคลังความรู้มีคำใบ้ของเพดานเดียวกัน
 - **วิธีแก้เมื่อเกิด:** ดู `upload.ticket.rejected`, `upload.local_put.rejected` และ `media.store.failed` แล้วเทียบกับเพดานใน [project-setup](../architecture/project-setup.md#101-แกนกลาง)
 
 ### U2. ดาวน์โหลดซ้ำหรือไฟล์ค้าง
@@ -283,13 +325,20 @@
 - **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว `StoreInboundMedia` ปิดสถานะด้วย compare-and-set บน `pending` และงานที่แพ้ลบไฟล์ของตัวเอง, การยกเลิกเรียก `DiscardUpload` ([use-cases StoreInboundMedia](../architecture/use-cases.md#storeinboundmedia)) ไฟล์ที่ค้างเพราะปิดแท็บกลางคันเป็นข้อที่ยอมรับใน [line-messaging](../specs/line-messaging.md#สื่อขาออก)
 - **วิธีแก้เมื่อเกิด:** ไฟล์ค้างไม่กระทบการทำงาน ลบจาก Blob store ได้เมื่อไม่มี Message ใดอ้าง URL นั้น
 
+### U3. ไฟล์ใหญ่ถูกตัดระหว่างทาง
+
+- **อาการ:** วิดีโอที่ใหญ่กว่า 10 MB อัปโหลด "สำเร็จ" แต่เล่นไม่ได้หรือสั้นกว่าต้นฉบับ
+- **สาเหตุ:** เมื่อมี `proxy.ts` Next.js เก็บ body ของคำขอที่ไม่ใช่ GET ไว้ก่อนส่งต่อ และตัดที่ 10 MB โดยไม่บอก
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว `next.config.ts` ตั้ง `experimental.proxyClientMaxBodySize` เป็น `PROXY_BODY_MAX_BYTES` (ขนาดวิดีโอสูงสุดบวกส่วนเผื่อ) และที่เก็บแบบ local ปฏิเสธ body ที่สั้นกว่าขนาดที่ขอสิทธิ์ด้วย `upload.incomplete` ([ADR 0028 ข้อ 9](../adr/0028-review-fixes-concurrency-polling-and-ci.md#การตัดสินใจ)) E2E เส้นที่ 5 อัปโหลดไฟล์เกิน 10 MB ผ่าน proxy และ unit test ใน `e2e/next-config.unit.ts`
+- **วิธีแก้เมื่อเกิด:** เทียบขนาดของไฟล์ในที่เก็บกับ `sizeBytes` ของสิทธิ์อัปโหลด ถ้าอัปเกรด Next.js ให้ตรวจชื่อของตัวเลือกนี้ใน `node_modules/next/dist/docs/`
+
 ## 9. Deploy และ CI
 
 ### C1. Production เป็นโค้ดที่ไม่ผ่านการตรวจ
 
 - **อาการ:** Production มีโค้ดที่ CI ไม่เคยผ่าน
 - **สาเหตุ:** Deploy ด้วยมือหรือ deploy จาก branch ที่ไม่ผ่าน CI
-- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว Vercel ไม่ deploy จาก Git เอง, CI เรียก Deploy Hook หลังสี่งานผ่าน และห้ามเรียก Hook ด้วยมือ ([deploy](../runbooks/deploy.md#เมื่อ-ci-ล้ม), [ADR 0013](../adr/0013-ci-on-main-then-deploy-hook.md)) CI รันเฉพาะบน `main` ผลที่แนบใน PR จึงมาจากการรันเองตาม [AGENTS.md](../../AGENTS.md)
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว Vercel ไม่ deploy จาก Git เอง, CI เรียก Deploy Hook หลังสี่งานผ่าน และห้ามเรียก Hook ด้วยมือ ([deploy](../runbooks/deploy.md#เมื่อ-ci-ล้ม), [ADR 0013](../adr/0013-ci-on-main-then-deploy-hook.md)) รอบที่เริ่มแล้วไม่ถูกยกเลิก (`cancel-in-progress: false`) และงาน `deploy` เรียก Hook เฉพาะเมื่อ `main` ยังเป็น commit ที่ตรวจ เพราะ Hook build จาก `main` ล่าสุด ไม่ใช่ commit ที่ผ่าน ([ADR 0028 ข้อ 7](../adr/0028-review-fixes-concurrency-polling-and-ci.md#การตัดสินใจ)) CI รันเฉพาะบน `main` ผลที่แนบใน PR จึงมาจากการรันเองตาม [AGENTS.md](../../AGENTS.md)
 - **วิธีแก้เมื่อเกิด:** เลื่อน deployment ที่ผ่าน CI ล่าสุดขึ้นตาม [deploy ย้อนกลับ](../runbooks/deploy.md#ย้อนกลับ) แล้วเปิด PR ให้ `main` ตรงกับ production
 
 ### C2. ไฟล์ที่เครื่องมือสร้างเองทำให้ working tree สกปรก
@@ -352,11 +401,11 @@
 - **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว กฎให้แก้เอกสารใน commit เดียวกันและข้อเท็จจริงหนึ่งเรื่องอยู่ที่เดียว ([docs README กฎของเอกสาร](../README.md#กฎของเอกสาร), [AGENTS.md](../../AGENTS.md)) และขั้น `pnpm docs:check` ในงาน `check` ของ CI ล้มเมื่อ (1) ลิงก์ relative หรือ `#anchor` ใน `docs/**`, `README.md` และ `AGENTS.md` ชี้ไปไม่ถึง โดย anchor ใช้กฎ slug ของ GitHub รวมอักษรไทย (2) ค่าในตารางของ [project-setup ข้อ 10](../architecture/project-setup.md#10-ค่าคงที่ของระบบ) ไม่ตรงกับค่าคงที่ในโค้ด (แปลงหน่วย ms/วินาที, KB/MB, ครั้งต่อวินาที และสตริง USD ตามชื่อ) หรือ (3) บล็อก YAML ใน [project-setup ข้อ 8](../architecture/project-setup.md#8-ci) ไม่เหมือน [`ci.yml`](../../.github/workflows/ci.yml) รายงานเป็น `ไฟล์:บรรทัด` กฎอยู่ใน [`docs-check.logic.ts`](../../scripts/docs-check.logic.ts) ([test](../../e2e/docs-check.unit.ts)) ค่าในเอกสารส่วนอื่นนอกตารางนั้นและ comment ในโค้ดยังตรวจด้วย review
 - **วิธีแก้เมื่อเกิด:** ถือว่าเป็น bug ของฝั่งใดฝั่งหนึ่ง ตัดสินจาก spec แล้วแก้ทั้งสองฝั่งใน PR เดียว
 
-### P2. หลายคนหรือหลาย agent แก้ working tree เดียวกัน
+### P2. ผู้พัฒนาหลายคนแก้ working tree เดียวกัน
 
 - **อาการ:** Commit หนึ่งลบงานที่อีกคนเพิ่ง commit, มีไฟล์ของงานอื่นติดไปด้วย หรือ test ถูกแก้ให้อ่อนลงโดยไม่มีใครตั้งใจ
 - **สาเหตุ:** Commit จาก working tree ที่ยังเป็นสภาพก่อนงานของอีกคน หรือใช้ `git add -A` ใน tree ที่มีไฟล์ของคนอื่น
-- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว Branch อายุสั้นผ่าน PR ([code-style ข้อ 11](code-style.md#11-git)), task memory ใน `docs/agent-memory/`, ฐานข้อมูลทดสอบแยกต่อคน และกฎให้ stage ไฟล์ด้วย path ไม่ใช้ `git add -A` หรือ `git add .` เมื่อมีมากกว่าหนึ่งคนหรือหนึ่ง agent ใน checkout เดียวกัน ตรวจ `git diff --cached --name-only` ก่อน commit และอ่านไฟล์ที่คนอื่นแก้หลัง rebase (กฎใน code-style ข้อ 11 และ [AGENTS.md](../../AGENTS.md)) เป็นกฎของคนทำงาน ไม่มีเครื่องมือบังคับ
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว Branch อายุสั้นผ่าน PR ([code-style ข้อ 11](code-style.md#11-git)), task memory ใน `docs/agent-memory/`, ฐานข้อมูลทดสอบแยกต่อคน และกฎให้ stage ไฟล์ด้วย path ไม่ใช้ `git add -A` หรือ `git add .` เมื่อมีผู้พัฒนามากกว่าหนึ่งคนใน checkout เดียวกัน ตรวจ `git diff --cached --name-only` ก่อน commit และอ่านไฟล์ที่คนอื่นแก้หลัง rebase (กฎใน code-style ข้อ 11 และ [AGENTS.md](../../AGENTS.md)) เป็นกฎของคนทำงาน ไม่มีเครื่องมือบังคับ
 - **วิธีแก้เมื่อเกิด:** เทียบ diff ของ commit กับขอบเขตใน task memory คืนส่วนที่หายจากประวัติของ Git และแจ้งเจ้าของงานก่อน push
 
 ### P3. บอกว่าตรวจแล้วทั้งที่ไม่ได้รัน
@@ -377,7 +426,10 @@
 
 ก่อนเปิด PR:
 
-- [ ] การเปลี่ยนสถานะใหม่เป็น compare-and-set ในคำสั่งเดียว ไม่อ่านก่อนแล้วจึงเขียน ([M2](#m2-สองคำขอแก้แถวเดียวกันแล้วผลหนึ่งหาย))
+- [ ] การเปลี่ยนสถานะใหม่เป็น compare-and-set ในคำสั่งเดียว ไม่อ่านก่อนแล้วจึงเขียน และสถานะที่มาจาก event เทียบเวลาของ event ไม่ใช่ลำดับที่ประมวลผล ([M2](#m2-สองคำขอแก้แถวเดียวกันแล้วผลหนึ่งหาย), [M6](#m6-ข้อความของลูกค้าถูกแทนด้วยการกดปุ่ม-หรือสถานะติดตามย้อนกลับ))
+- [ ] การจำกัดความถี่นับก่อนตรวจ ไม่อ่านแล้วจึงนับ ([S2](#s2-การจำกัดความถี่นับผิดคน))
+- [ ] Schema ของคำตอบในหน้าเว็บไม่เข้มกว่าที่ server สร้าง และค่าจาก URL ตรวจรูปแบบก่อนถึงฐานข้อมูล ([M5](#m5-ความยาวของข้อความไทยนับไม่ตรงกันระหว่างสองฝั่ง), [D8](#d8-ค่าจาก-url-หรือ-body-ที่-postgres-รับไม่ได้))
+- [ ] สถานะที่หน้าเว็บนับ (ความล้มเหลว, การโหลดใหม่) แยกต่อ query และการโหลดใหม่ไม่ทิ้งหน้าที่โหลดไว้ ([F1](#f1-คำตอบของ-polling-ที่มาช้าทับข้อมูลใหม่-หรือแถวหายหลังเน็ตหลุด), [F7](#f7-polling-ยิงถี่เมื่อบาง-query-ล้ม))
 - [ ] งานใหม่ที่ล้มได้มีสถานะหรือเหตุผลที่หน้าจอเห็น และสถานะกลางทางมีทางคืนสภาพเมื่อ function ถูกตัด ([M3](#m3-สถานะกลางทางค้างเมื่อ-function-ถูกตัด), [M4](#m4-ความล้มเหลวที่ไม่มีใครเห็น))
 - [ ] การเรียกภายนอกใหม่มี timeout ที่เหมาะกับงาน และเพิ่มเข้า `timing-budget.ts` จน `timing-budget.spec.ts` ยืนยันว่าเวลาแย่ที่สุดอยู่ใต้ `maxDuration` ([A2](#a2-timeout-ไม่สัมพันธ์กับงานและเพดานเวลาของ-function))
 - [ ] การส่งออกที่ลองใหม่ได้มี key เดิมทุกครั้ง ไม่ลองใหม่หลังผู้ให้บริการลืม key แล้ว และไม่ push ซ้ำเมื่อ LINE ปฏิเสธ payload เพราะทุก push กินโควตา ([L3](#l3-reply-token-หมดอายุหรือถูกใช้สองครั้ง), [L4](#l4-ลูกค้าได้ข้อความซ้ำเมื่อระบบลองส่งใหม่))
@@ -390,12 +442,14 @@
 - [ ] หน้าใหม่ไม่ถูก prerender และไม่มี console error หรือ CSP violation ที่ 390 และ 1280 ([S5](#s5-csp-บล็อก-script-ของหน้าที่ถูก-prerender), [F2](#f2-hydration-ไม่ตรงกัน))
 - [ ] ไม่มี control ที่ browser วาด popup เอง (`<select>`, `<datalist>`, `<input type="date|month|time|color">`) dropdown ใช้ `Select` และ document ไม่เลื่อนบนหน้าหลังเข้าระบบ ([F5](#f5-ทั้งหน้าเลื่อนทะลุโครงของแอป), [F6](#f6-dropdown-ไม่ตามธีม))
 - [ ] Log ใหม่ใช้ field ที่มีใน `LogFields` เท่านั้น ([S4](#s4-ความลับหรือข้อมูลลูกค้าใน-log-และ-url))
-- [ ] Diff มีเฉพาะไฟล์ของงานนี้ (stage ด้วย path) เอกสารกับ comment ที่เกี่ยวข้องถูกแก้ด้วย และ `pnpm docs:check` ผ่าน ([P1](#p1-เอกสารหรือ-comment-ไม่ตรงกับโค้ด), [P2](#p2-หลายคนหรือหลาย-agent-แก้-working-tree-เดียวกัน))
+- [ ] การตรวจต้นทางใหม่ใช้ `isAllowedOrigin` ไม่เทียบ `Origin` เอง และไม่ใช้ `request.url` หรือ `nextUrl.origin` เป็น origin ของคำขอ ([S6](#s6-เข้าระบบไม่ได้เพราะต้นทางไม่ตรง))
+- [ ] Diff มีเฉพาะไฟล์ของงานนี้ (stage ด้วย path) เอกสารกับ comment ที่เกี่ยวข้องถูกแก้ด้วย และ `pnpm docs:check` ผ่าน ([P1](#p1-เอกสารหรือ-comment-ไม่ตรงกับโค้ด), [P2](#p2-ผู้พัฒนาหลายคนแก้-working-tree-เดียวกัน))
 
 ก่อนและหลัง deploy:
 
-- [ ] Environment ใน Vercel ไม่มีค่าที่ใช้เฉพาะการทดสอบ ([S3](#s3-ค่า-environment-ของ-production-ไม่ตรงกับที่โค้ดคาด))
+- [ ] Environment ใน Vercel ไม่มีค่าที่ใช้เฉพาะการทดสอบ ([S3](#s3-ค่า-environment-ของ-production-ไม่ตรงกับที่โค้ดคาด)) และ `APP_BASE_URL` เป็นโดเมนถาวรของ production ซึ่ง Webhook URL ในหน้าตั้งค่าแสดงตาม ([S6](#s6-เข้าระบบไม่ได้เพราะต้นทางไม่ตรง))
 - [ ] โค้ดรุ่นก่อนยังทำงานกับโครงตารางหลัง migration ได้ ([D2](#d2-migration-ที่ทำให้ย้อนกลับไม่ได้))
+- [ ] `pnpm migrations:applied` กับ `DIRECT_URL` ของ production ผ่าน ([D1](#d1-แก้หรือลบ-migration-ที่-apply-ไปแล้ว))
 - [ ] ทำครบตาม [ตรวจหลัง deploy](../runbooks/deploy.md#ตรวจหลัง-deploy) และส่วนสถานะระบบไม่มีข้อผิดพลาดใหม่ของ LINE หรือ AI ([M4](#m4-ความล้มเหลวที่ไม่มีใครเห็น))
 
 ## ช่องว่างที่ยังเหลือ
@@ -406,4 +460,6 @@
 | --- | --- | --- | --- |
 | [L4](#l4-ลูกค้าได้ข้อความซ้ำเมื่อระบบลองส่งใหม่) (และค่าที่ต้องยืนยันใน [L3](#l3-reply-token-หมดอายุหรือถูกใช้สองครั้ง), [L5](#l5-line-ปฏิเสธทั้งคำขอเพราะรูปแบบข้อความ)) | บางส่วน | รูปแบบของ retry key, หน้าต่าง 24 ชั่วโมง, การแยก 400 ของ reply, 202 ของสื่อ และการตรวจ Channel secret ทำแล้ว ([ADR 0023](../adr/0023-retry-key-v5-window-and-reply-400.md)) ที่เหลือ: เมื่อมี LINE OA จริง เจ้าของงานทำขั้นทดสอบด้วยมือ 9 ข้อใน [line-oa-setup](../runbooks/line-oa-setup.md#ทดสอบด้วยมือเมื่อมี-line-oa-จริง) แล้วแก้ค่าใน project-setup และ comment ที่เป็นสมมติฐานตามผล (ติดตามใน [implementation-plan](../plans/implementation-plan.md#สิ่งที่ต้องยืนยันก่อนหรือระหว่างสร้าง)) | S |
 | [A4](#a4-ข้อความของลูกค้าหรือ-pdf-สั่งให้-ai-ทำนอกเรื่อง) | บางส่วน | ลิงก์ทำแล้ว ที่เหลือคือราคาและเงื่อนไขที่ไม่มีในคลัง ซึ่งยังกันด้วย prompt อย่างเดียว ต้องออกแบบใน spec ก่อนว่าจะตรวจตัวเลขในคำตอบกับคลังความรู้อย่างไรโดยไม่กันคำตอบที่ถูก | M |
+| [S6](#s6-เข้าระบบไม่ได้เพราะต้นทางไม่ตรง) | บางส่วน | โค้ดทำแล้ว ([ADR 0025](../adr/0025-same-origin-or-app-base-url.md)) เหลือการยืนยัน header ของ Vercel ตามขั้นใน [implementation-plan](../plans/implementation-plan.md#สิ่งที่ต้องยืนยันก่อนหรือระหว่างสร้าง) ถ้า Vercel ส่งต่อ `x-forwarded-host` ที่ผู้เรียกตั้งเอง ให้ใช้เฉพาะ `Host` และเขียน ADR ใหม่ | S |
 | [S2](#s2-การจำกัดความถี่นับผิดคน) | บางส่วน | โค้ดทำแล้ว ([ADR 0022](../adr/0022-client-ip-from-last-forwarded-hop.md)) เหลือการยืนยันบน Vercel ตามขั้นใน [implementation-plan](../plans/implementation-plan.md#สิ่งที่ต้องยืนยันก่อนหรือระหว่างสร้าง) ถ้าค่าสุดท้ายของ `x-forwarded-for` ไม่ใช่ IP ของผู้เรียก ให้แก้ `clientIpOf` และเขียน ADR ใหม่ | S |
+| [D1](#d1-แก้หรือลบ-migration-ที่-apply-ไปแล้ว) | บางส่วน | `pnpm migrations:applied` มีแล้วแต่รันด้วยมือ ([ADR 0028 ข้อ 7](../adr/0028-review-fixes-concurrency-polling-and-ci.md#การตัดสินใจ)) เสนอให้ใส่ก่อน `prisma migrate deploy` ใน `vercel-build` ซึ่งเป็นการแก้ค่า deploy ต้องถามเจ้าของงานก่อน | S |

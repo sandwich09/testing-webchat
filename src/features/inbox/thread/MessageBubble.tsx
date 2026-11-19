@@ -14,7 +14,7 @@ import { copy } from '@/features/inbox/inbox.constants';
 import { linkify, type ThreadMessage } from '@/features/inbox/inbox.logic';
 import { outgoingStatus } from '@/features/inbox/inbox.send.logic';
 import { DeliveryStatus } from '@/features/inbox/thread/DeliveryStatus';
-import { resolveMedia } from '@/features/inbox/thread/inbox.thread.logic';
+import { quoteView, resolveMedia } from '@/features/inbox/thread/inbox.thread.logic';
 import { MediaContent } from '@/features/inbox/thread/MediaContent';
 
 type MessageBubbleProps = {
@@ -25,6 +25,10 @@ type MessageBubbleProps = {
   isLast: boolean;
   onRetry: (messageId: string) => void;
   onOpenMedia: (message: ThreadMessage, trigger: HTMLElement) => void;
+  /** The customer's name, for a quote of their own message. */
+  customerName: string;
+  /** Scrolls to and highlights a message when it is loaded; does nothing otherwise. */
+  onJumpToMessage: (messageId: string) => void;
 };
 
 const WIDTH_VARS = {
@@ -57,8 +61,70 @@ function TextContent({ text }: { text: string }) {
   );
 }
 
+/**
+ * The message a customer replied to with LINE's quote, above the text (ui-screens 5.3). A known
+ * message is a button that jumps to it; an unknown one is muted text.
+ */
+function QuoteBlock({
+  view,
+  onJump,
+}: {
+  view: NonNullable<ReturnType<typeof quoteView>>;
+  onJump: (messageId: string) => void;
+}) {
+  const inner = view.available ? (
+    <>
+      <span className="block truncate font-bold">{view.author}</span>
+      <span className="block truncate">{view.text}</span>
+    </>
+  ) : (
+    <span className="block truncate italic">{view.text}</span>
+  );
+  const className =
+    'mx-2 mt-2 block w-[calc(100%-1rem)] min-w-0 rounded-md border-l-[3px] border-muted bg-chat px-2 py-1 text-left text-sub text-muted';
+  if (view.available && view.messageId !== null) {
+    const target = view.messageId;
+    return (
+      <button
+        type="button"
+        data-testid={testIds.messageQuote}
+        data-available="true"
+        data-quoted-id={target}
+        aria-label={view.ariaLabel}
+        title={copy.quote.jumpHint}
+        className={cn(className, 'cursor-pointer hover:bg-selected')}
+        onClick={() => {
+          onJump(target);
+        }}
+      >
+        {inner}
+      </button>
+    );
+  }
+  return (
+    <div
+      data-testid={testIds.messageQuote}
+      data-available={view.available ? 'true' : 'false'}
+      aria-label={view.ariaLabel}
+      role="note"
+      className={className}
+    >
+      {inner}
+    </div>
+  );
+}
+
 /** One bubble with the time and sender beside it and the delivery state under it (ui-screens 5.3). */
-function MessageBubbleBase({ message, side, isLast, onRetry, onOpenMedia }: MessageBubbleProps) {
+function MessageBubbleBase({
+  message,
+  side,
+  isLast,
+  onRetry,
+  onOpenMedia,
+  customerName,
+  onJumpToMessage,
+}: MessageBubbleProps) {
+  const quote = quoteView(message.quote, customerName);
   const [stickerFailed, setStickerFailed] = useState(false);
   const view = resolveMedia(message);
   const { status } = outgoingStatus(message);
@@ -114,11 +180,15 @@ function MessageBubbleBase({ message, side, isLast, onRetry, onOpenMedia }: Mess
       style={style}
       className={cn(
         'max-w-(--bubble-narrow) min-w-0 overflow-hidden medium:max-w-(--bubble-wide)',
+        // A quote jumped here (MessageList): a ring for QUOTE_HIGHLIGHT_MS, not colour alone
+        // since the jump also moves the message into view and focus stays on the quote.
+        'transition-shadow data-[highlight=true]:ring-2 data-[highlight=true]:ring-accent-strong',
         !stickerWorks && (isStore ? 'bg-bubble-out' : 'border border-line bg-surface'),
         status === 'pending' && 'opacity-[0.55]',
         status === 'failed' && 'ring-1 ring-danger',
       )}
     >
+      {quote !== null ? <QuoteBlock view={quote} onJump={onJumpToMessage} /> : null}
       {content}
     </div>
   );

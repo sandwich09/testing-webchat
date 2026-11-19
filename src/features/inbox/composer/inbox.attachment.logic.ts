@@ -22,10 +22,10 @@ export type AttachmentError =
   | { kind: 'check'; code: CheckCode; sizeMb?: string }
   /** Reading, converting or making the preview failed. */
   | { kind: 'convert' }
-  /** `POST /api/uploads` failed with this code. */
-  | { kind: 'request'; code: ErrorMessageCode }
-  /** A PUT of the preview or the file failed. */
-  | { kind: 'upload' };
+  /** `POST /api/uploads` failed with this code; `sizeMb` is the file the ticket was asked for. */
+  | { kind: 'request'; code: ErrorMessageCode; sizeMb?: string }
+  /** A PUT of the preview or the file failed, with the server's code when it answered one. */
+  | { kind: 'upload'; code?: ErrorMessageCode; sizeMb?: string };
 
 type Attempt = { attempt: number; fileName: string };
 export type Prepared = { kind: AttachmentKind; contentType: MainContentType; previewUrl: string };
@@ -220,8 +220,25 @@ export function conversionFor(sourceType: MediaKind): {
 
 const MB = 1024 * 1024;
 
+/** A size in MB as the screens show it: one decimal at most ("10", "52.4"). */
+export const mbText = (bytes: number): string => String(Math.round((bytes / MB) * 10) / 10);
+
 function fill(template: string, values: Record<string, string>): string {
   return template.replace(/\{(\w+)\}/g, (whole, name: string) => values[name] ?? whole);
+}
+
+/**
+ * The limits every attachment message may name (ui-copy `inbox.attach.*`), from the constants:
+ * the copy holds placeholders only, never the numbers.
+ */
+export const attachmentLimits = (): Record<'imageMaxMb' | 'videoMaxMb', string> => ({
+  imageMaxMb: mbText(IMAGE_MAX_BYTES),
+  videoMaxMb: mbText(VIDEO_MAX_BYTES),
+});
+
+/** The hint by the attach button: the accepted types and sizes, before a file is chosen. */
+export function attachHintText(): string {
+  return fill(copy.composer.attachHint, attachmentLimits());
 }
 
 /** Thai text of an attachment error (ui-copy `inbox.attach.error.*` and the error catalog). */
@@ -230,16 +247,27 @@ export function attachmentErrorText(error: AttachmentError): string {
     case 'check': {
       const maxBytes = error.code === 'video_too_large' ? VIDEO_MAX_BYTES : IMAGE_MAX_BYTES;
       return fill(copy.attach.error[error.code], {
-        maxMb: String(Math.round((maxBytes / MB) * 10) / 10),
+        ...attachmentLimits(),
+        maxMb: mbText(maxBytes),
         sizeMb: error.sizeMb ?? '',
       });
     }
     case 'convert':
       return copy.attach.error.convertFailed;
     case 'request':
-      return errorMessage(error.code) ?? copy.attach.error.uploadFailed;
-    case 'upload':
-      return copy.attach.error.uploadFailed;
+    case 'upload': {
+      // A file the store refused as too large gets the text that names its own size too.
+      const code = error.code === 'media.too_large' ? 'upload.too_large' : error.code;
+      const text =
+        code === undefined
+          ? null
+          : errorMessage(code, {
+              variant: 'outbound',
+              ...attachmentLimits(),
+              size: error.sizeMb ?? '—',
+            });
+      return text ?? copy.attach.error.uploadFailed;
+    }
   }
 }
 

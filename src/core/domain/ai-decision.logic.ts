@@ -31,6 +31,7 @@ export function handoffReasonForType(type: Exclude<MessageType, 'text' | 'event'
       return 'customer_sent_image';
     case 'video':
       return 'customer_sent_video';
+    case 'audio': // a voice message is never transcribed or sent to the model
     case 'sticker':
     case 'other':
       return 'customer_sent_non_text';
