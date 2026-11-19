@@ -3,3 +3,8 @@
 # esbuild, @prisma/engines and prisma; none is needed (esbuild ships its binary as an
 # optional dependency, and the Prisma CLI fetches its engines when a command needs them).
 onlyBuiltDependencies: []
+
+# @vercel/cli-config (pulled in by @vercel/blob) pins a zod release with a known advisory
+# (GHSA-mrhx-c7xc-m3w5); it works with the patched line the app itself uses.
+overrides:
+  '@vercel/cli-config>zod': 4.6.7
