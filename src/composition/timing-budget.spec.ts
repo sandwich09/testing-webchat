@@ -29,6 +29,7 @@ import {
   lineCallWorstMs,
   mediaDownloadsWorstMs,
   mediaJobWorstMs,
+  profileRefreshJobWorstMs,
   webhookWorstMs,
   guardTestWorstMs,
   lineCheckWorstMs,
@@ -61,6 +62,7 @@ describe('timing budget (project-setup 10.4, "เวลาแย่ที่ส�
     expect(contentStatusWorstMs()).toBe(5000);
     expect(mediaDownloadsWorstMs()).toBe(200_000);
     expect(mediaJobWorstMs()).toBe(255_000);
+    expect(profileRefreshJobWorstMs()).toBe(3000);
     expect(extractJobWorstMs()).toBe(262_000);
   });
 

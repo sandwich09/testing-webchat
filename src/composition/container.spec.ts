@@ -134,6 +134,7 @@ describe('assembleUseCases', () => {
     'unlockAccess',
     'checkHealth',
     'receiveLineEvents',
+    'refreshContactProfile',
     'storeInboundMedia',
     'generateAiReply',
     'sendAdminMessage',

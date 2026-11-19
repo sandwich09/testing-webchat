@@ -64,6 +64,7 @@ export type LogEvent =
   | 'line.webhook.event_failed'
   | 'line.webhook.batch_unstored'
   | 'line.profile.fetch_failed'
+  | 'line.profile.refreshed'
   | 'line.send.succeeded'
   | 'line.send.failed'
   | 'line.send.reply_token_rejected'

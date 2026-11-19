@@ -49,6 +49,23 @@ export function createContactRepository(client: PrismaClient): ContactRepository
     });
   };
 
+  const claimProfileRefresh: ContactRepository['claimProfileRefresh'] = async (
+    id,
+    now,
+    staleBefore,
+  ) => {
+    // One UPDATE: of concurrent claims for a row, the second re-reads the WHERE after the first
+    // commits and matches nothing (pitfalls M2).
+    const { count } = await client.contact.updateMany({
+      where: {
+        id,
+        OR: [{ profileFetchedAt: null }, { profileFetchedAt: { lte: staleBefore } }],
+      },
+      data: { profileFetchedAt: now },
+    });
+    return count === 1;
+  };
+
   const setFollowStatus: ContactRepository['setFollowStatus'] = async (id, status, at) => {
     const data: Prisma.ContactUpdateManyMutationInput =
       status === 'following'
@@ -216,6 +233,7 @@ export function createContactRepository(client: PrismaClient): ContactRepository
     findById,
     ensure,
     updateProfile,
+    claimProfileRefresh,
     setFollowStatus,
     recordInbound,
     recordOutbound,

@@ -20,6 +20,7 @@ import {
   type DocumentDto,
   type LineBotInfoResponse,
   type ListDocumentsResponse,
+  type SetLineCredentialsBody,
   type SettingsDto,
   type SystemStatusDto,
   type UpdateSettingsBody,
@@ -49,12 +50,8 @@ export function updateSettings(patch: SettingsPatch): Promise<SettingsDto> {
   });
 }
 
-/** PUT /api/settings/line-credentials */
-export function saveLineCredentials(body: {
-  channelId: string;
-  channelSecret: string;
-  channelAccessToken: string;
-}): Promise<LineBotInfo> {
+/** PUT /api/settings/line-credentials with the values the admin changed (at least one). */
+export function saveLineCredentials(body: SetLineCredentialsBody): Promise<LineBotInfo> {
   return apiFetch('/api/settings/line-credentials', {
     method: 'PUT',
     body,

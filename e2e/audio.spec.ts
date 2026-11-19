@@ -14,7 +14,7 @@ test('journey 13: a voice message from LINE is stored and plays in the thread', 
   isMobile,
 }) => {
   const suffix = uniqueSuffix();
-  const name = `ลูกค้าเสียง ${suffix}`;
+  const name = `ผู้ใช้เสียง ${suffix}`;
   const v = await createContactWithMessage(request, { displayName: name, text: `ทัก ${suffix}` });
   await openChat(page, name);
 

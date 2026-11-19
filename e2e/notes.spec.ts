@@ -20,7 +20,7 @@ test('journey 11: an admin note is kept, survives a reload and never leaves the 
   request,
 }) => {
   const suffix = uniqueSuffix();
-  const name = `ลูกค้าโน้ต ${suffix}`;
+  const name = `ผู้ใช้โน้ต ${suffix}`;
   await createContactWithMessage(request, { displayName: name, text: `สวัสดี ${suffix}` });
   const lineBefore = await stubLineRequests();
   const claudeBefore = await stubClaudeRequests();
@@ -70,8 +70,8 @@ test('journey 11: a note being typed and a failed delete stay with their own cus
   // 11.7 answers one delete with 503 on purpose.
   consoleErrors.allow(failedResourceLine(503));
   const suffix = uniqueSuffix();
-  const first = `ลูกค้าแรก ${suffix}`;
-  const second = `ลูกค้าสอง ${suffix}`;
+  const first = `ผู้ใช้แรก ${suffix}`;
+  const second = `ผู้ใช้สอง ${suffix}`;
   await createContactWithMessage(request, { displayName: first, text: `หนึ่ง ${suffix}` });
   await createContactWithMessage(request, { displayName: second, text: `สอง ${suffix}` });
 

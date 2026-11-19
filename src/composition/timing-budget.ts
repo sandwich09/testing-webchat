@@ -48,10 +48,16 @@ export const aiRoundWorstMs = (): number =>
 export const aiRunWorstMs = (debounceMs: number): number =>
   debounceMs * AI_MAX_ROUNDS_PER_RUN + aiRoundWorstMs() * AI_MAX_ROUNDS_PER_RUN;
 
-/** POST /api/line/webhook: one profile fetch before the response, then the longest job. */
+/** RefreshContactProfile: one profile fetch, no retry (the rest is database work). */
+export const profileRefreshJobWorstMs = (): number => lineCallWorstMs(LINE_PROFILE_TIMEOUT_MS, 0);
+
+/**
+ * POST /api/line/webhook: one profile fetch before the response (a first-seen contact), then the
+ * longest job. The jobs of one request run side by side, so the longest one counts.
+ */
 export const webhookWorstMs = (debounceMs: number): number =>
   lineCallWorstMs(LINE_PROFILE_TIMEOUT_MS, 0) +
-  Math.max(aiRunWorstMs(debounceMs), mediaJobWorstMs());
+  Math.max(aiRunWorstMs(debounceMs), mediaJobWorstMs(), profileRefreshJobWorstMs());
 
 /** One content download from LINE (the store into Blob has no timeout of its own). */
 export const contentDownloadWorstMs = (): number =>

@@ -107,14 +107,14 @@
 - [x] Document ไม่เลื่อนทะลุโครงของแอป ([pitfalls F5](../guidelines/pitfalls-and-prevention.md#f5-ทั้งหน้าเลื่อนทะลุโครงของแอป))
 - [x] แถวในส่วนเดียวกันของหน้าตั้งค่าไม่มีเส้นคั่น ([ui-screens ข้อ 9.2](../specs/ui-screens.md#92-โครงร่วม))
 - [x] หัวข้อของขอบเขตหัวข้อแก้เป็นรายการทีละหัวข้อ และถ้อยคำของแอปเป็นกลาง ([ui-screens ข้อ 9.13](../specs/ui-screens.md#913-ส่วนขอบเขตหัวข้อ))
-- [x] รายชื่อเรียงตามข้อความล่าสุดของลูกค้า และโหลดเพิ่มเมื่อเลื่อน ([webchat-inbox](../specs/webchat-inbox.md#รายชื่อลูกค้า))
+- [x] รายชื่อเรียงตามข้อความล่าสุดของผู้ใช้ และโหลดเพิ่มเมื่อเลื่อน ([webchat-inbox](../specs/webchat-inbox.md#รายชื่อผู้ใช้))
 - [ ] ข้อมูลตัวอย่างใน seed (ร้านสมมติ) จะคงไว้หรือเปลี่ยน รอเจ้าของงานตัดสิน
 
 ## ปรับเป็นเครื่องมือทดสอบที่เป็นกลาง
 
 - [x] แกนของคำสั่งระบบที่เป็นกลาง ชื่อ AI ขอบเขตคำตอบ การทักทายผ่านขอบเขตหัวข้อ และโมเดลเริ่มต้น Sonnet 5.5 ([ADR 0026](../adr/0026-neutral-core-prompt-and-layered-settings.md)) พร้อม migration ที่หก
-- [x] ข้อความที่ลูกค้าตอบกลับ (`quotedMessageId`) และ id ของข้อความที่ส่ง ([line-messaging](../specs/line-messaging.md#ข้อความที่ตอบกลับ)) พร้อม migration ที่เจ็ด
-- [x] โน้ตของแอดมินในแผงข้อมูลลูกค้า ([webchat-inbox](../specs/webchat-inbox.md#โน้ตของแอดมิน)) พร้อม migration ที่แปด
+- [x] ข้อความที่ผู้ใช้ตอบกลับ (`quotedMessageId`) และ id ของข้อความที่ส่ง ([line-messaging](../specs/line-messaging.md#ข้อความที่ตอบกลับ)) พร้อม migration ที่เจ็ด
+- [x] โน้ตของแอดมินในแผงข้อมูลผู้ใช้ ([webchat-inbox](../specs/webchat-inbox.md#โน้ตของแอดมิน)) พร้อม migration ที่แปด
 - [x] ไอคอนของแอปและรูปโปรไฟล์ของ LINE OA ([frontend](../architecture/frontend.md#brand-assets))
 - [x] ปุ่มพับเมนูที่มุมขวาบนของเมนูซ้าย ([ui-screens ข้อ 3.2](../specs/ui-screens.md#32-รูปลักษณ์))
 - [x] ข้อความเสียงขาเข้าเก็บและเล่นได้ ([line-messaging](../specs/line-messaging.md#สื่อขาเข้า)) พร้อม migration ที่เก้า
@@ -136,6 +136,20 @@
 - [x] Migration ที่สิบเอ็ด รวมค่าเริ่มต้น `TimeZone` เป็น UTC ของ database ([data-model](../architecture/data-model.md#migration-ที่สิบเอ็ด-ผลจากการ-review))
 - [x] ใส่ `pnpm migrations:applied` ใน `vercel-build` ก่อน `prisma migrate deploy` ([ADR 0029](../adr/0029-applied-migrations-check-in-production-build.md))
 
+## หน้าตั้งค่าแบบแท็บ คำว่าผู้ใช้ และโปรไฟล์ของ LINE
+
+ขอบเขตและเหตุผลอยู่ใน [ADR 0031](../adr/0031-settings-tabs-user-wording-and-neutral-prompt.md)
+
+- [x] หน้าตั้งค่าห้าแท็บ แท็บใน `?tab=` และเปิดแท็บ LINE เมื่อยังไม่ได้เชื่อม ([ui-screens ข้อ 9.2](../specs/ui-screens.md#92-โครงร่วม))
+- [x] ปุ่มบันทึกของช่องอยู่เสมอ คอลัมน์ control กว้างเท่ากัน และคำลงท้ายเป็น segmented control
+- [x] ช่อง LINE ที่บันทึกแล้วล็อกพร้อมปุ่มดินสอ และ `PUT /api/settings/line-credentials` รับบางค่า ([api-contract](../architecture/api-contract.md#put-apisettingsline-credentials))
+- [x] "ผู้ใช้" แทน "ลูกค้า" ในหน้าจอ ข้อความที่ส่งทาง LINE prompt และเอกสาร ([ux-writing](../guidelines/ux-writing.md#กฎถ้อยคำบนหน้าจอ))
+- [x] แกนของคำสั่งไม่สมมติว่าเป็นร้าน และตอบคำถาม "ตอบเรื่องอะไรได้บ้าง" ตามขอบเขตคำตอบ ([ai-prompt ข้อ 2.2](../specs/ai-prompt.md#22-แม่แบบ))
+- [x] ข้อความปฏิเสธบอกชื่อหัวข้อ และคำถามว่าคุยอะไรได้ผ่านการคัดกรอง ([topic-guard](../specs/topic-guard.md))
+- [x] CSP อนุญาตรูปโปรไฟล์จาก `sprofile.line-scdn.net` ([pitfalls S7](../guidelines/pitfalls-and-prevention.md#s7-รูปโปรไฟล์ของ-line-ไม่ขึ้นเพราะ-host-ไม่อยู่ใน-csp))
+- [x] ดึงโปรไฟล์ของผู้ใช้ที่มีอยู่แล้วใหม่อย่างมากวันละครั้ง หลังตอบ webhook (`Contact.profileFetchedAt`, migration ที่สิบสอง) ([line-messaging](../specs/line-messaging.md#โปรไฟล์ของผู้ใช้))
+- [ ] เจ้าของงานรันชุดคำถามวัดคุณภาพกับ prompt ใหม่ และตัดสินว่าจะเพิ่มข้อของคำถาม "ตอบเรื่องอะไรได้บ้าง" และข้อความปฏิเสธที่บอกหัวข้อหรือไม่ ([ai-prompt ข้อ 8](../specs/ai-prompt.md#8-ชุดคำถามวัดคุณภาพ-ai))
+
 ## สิ่งที่ต้องยืนยันก่อนหรือระหว่างสร้าง
 
 ข้อเหล่านี้มาจากความเข้าใจตอนออกแบบและยังไม่ได้ตรวจกับเอกสารปัจจุบัน เมื่อยืนยันแล้วให้แก้เอกสารที่เกี่ยวข้องและขีดออก ค่าของ constant ที่กระทบอยู่ใน [project-setup](../architecture/project-setup.md#10-ค่าคงที่ของระบบ)
@@ -154,12 +168,12 @@
 | ชื่อ header และรูปแบบของการสลับโมเดลสำรองฝั่ง server | Adapter ของ Claude |
 | ราคา input และ output ของโมเดลสำรอง `claude-opus-5`, `claude-opus-4-8`, `claude-sonnet-5` | ตารางราคาใน [usage-cost](../specs/usage-cost.md) |
 | จำนวนข้อความสูงสุดต่อคำขอ reply หรือ push ของ LINE | `LINE_MAX_PARTS_PER_REQUEST` ใน [domain-and-ports](../architecture/domain-and-ports.md) |
-| คำตอบของ LINE เมื่อ retry key ถูกรับไปแล้ว (สมมติ 409 พร้อม `x-line-accepted-request-id`) และ "ส่งอีกครั้ง" ไม่ทำให้ลูกค้าได้ข้อความซ้ำ ทดสอบด้วยมือตามข้อ 1 และ 3 ของ [line-oa-setup](../runbooks/line-oa-setup.md#ทดสอบด้วยมือเมื่อมี-line-oa-จริง) | `MessagingGateway.push`, [stubs-and-fixtures](../qa/stubs-and-fixtures.md), การคืนสภาพการส่งที่ค้าง (`line.send_interrupted`) |
+| คำตอบของ LINE เมื่อ retry key ถูกรับไปแล้ว (สมมติ 409 พร้อม `x-line-accepted-request-id`) และ "ส่งอีกครั้ง" ไม่ทำให้ผู้ใช้ได้ข้อความซ้ำ ทดสอบด้วยมือตามข้อ 1 และ 3 ของ [line-oa-setup](../runbooks/line-oa-setup.md#ทดสอบด้วยมือเมื่อมี-line-oa-จริง) | `MessagingGateway.push`, [stubs-and-fixtures](../qa/stubs-and-fixtures.md), การคืนสภาพการส่งที่ค้าง (`line.send_interrupted`) |
 | ข้อความ error จริงของ LINE, อายุจริงของ reply token, loading, วิดีโอขาเข้าและขาออก, host ของรูปโปรไฟล์และสติกเกอร์, `mode: standby`, ความยาวข้อความและจำนวนข้อความต่อคำขอ ทดสอบด้วยมือตามข้อ 2 และ 4 ถึง 9 ของ [line-oa-setup](../runbooks/line-oa-setup.md#ทดสอบด้วยมือเมื่อมี-line-oa-จริง) | `REPLY_TOKEN_USABLE_MS`, `LINE_TEXT_MAX_CHARS`, `LINE_MAX_PARTS_PER_REQUEST`, `IMAGE_MAX_BYTES`, `VIDEO_MAX_BYTES`, `PREVIEW_MAX_BYTES` |
 | การแยกโควตา push เต็มออกจาก 429 ของ LINE | `line.quota_exceeded` กับ `line.rate_limited` |
 | Endpoint ภาพตัวอย่างของวิดีโอขาเข้าของ LINE และวิดีโอจริงที่ได้ 202 ก่อน transcode เสร็จ | `MessagingGateway.downloadContent`, `getContentStatus`, stub |
 | ความหมายของ `events[].mode` (`standby`) และ `message.contentProvider.type` ของ webhook | [api-contract](../architecture/api-contract.md#post-apilinewebhook) |
-| รูปแบบ URL รูปสติกเกอร์ของ LINE และ host ใน CSP (`profile.line-scdn.net`, `stickershop.line-scdn.net`) | `MessageDto.sticker.imageUrl`, CSP ใน [project-setup](../architecture/project-setup.md#62-nextconfigts), สติกเกอร์ใน seed |
+| รูปแบบ URL รูปสติกเกอร์ของ LINE และ host ใน CSP (`profile.line-scdn.net`, `sprofile.line-scdn.net`, `stickershop.line-scdn.net`) | `MessageDto.sticker.imageUrl`, CSP ใน [project-setup](../architecture/project-setup.md#62-nextconfigts), สติกเกอร์ใน seed |
 | รูปแบบของ `webhookEventId` และ field ของ fixture (`mode`, `quoteToken`, `stickerResourceType`, `keywords`, `follow.isUnblocked`) | [stubs-and-fixtures](../qa/stubs-and-fixtures.md) |
 | Vercel เขียน `x-forwarded-for` เป็น IP ที่ edge เห็น โดยแทนที่หรือต่อท้ายค่าที่ผู้เรียกส่งมา ค่าสุดท้ายจึงเป็นของ Vercel เสมอ ([ADR 0022](../adr/0022-client-ip-from-last-forwarded-hop.md)) ตรวจบน production: (1) ส่งรหัสผิดหกครั้งไปที่ `POST /api/access/unlock` แต่ละครั้งใส่ header `x-forwarded-for: 198.51.100.<n>` คนละค่า ครั้งที่หกต้องได้ 429 (2) ส่งรหัสผิดหนึ่งครั้งจากเครือข่ายอื่น (เช่นมือถือ) ทันทีหลังข้อ 1 ต้องได้ 401 ไม่ใช่ 429 (3) log ไม่มี `access.unlock.client_ip_missing` | `clientIpOf` ใน `src/composition/http-request.ts`, `RequestContext.clientIp` และการจำกัดความถี่ |
 | Vercel ส่ง `x-forwarded-host` (หรือ `Host`) เป็นโดเมนที่ browser ใช้ และ `x-forwarded-proto: https` โดยไม่รับค่าที่ผู้เรียกส่งมา ([ADR 0025](../adr/0025-same-origin-or-app-base-url.md)) ตรวจบน production: (1) เข้าระบบได้ทั้งที่โดเมน production และโดเมนอื่นของ deployment เดียวกัน (2) `curl -X POST https://<โดเมน>/api/access/lock -H 'Origin: https://evil.example' -H 'x-forwarded-host: evil.example'` ต้องได้ 403 (3) คำขอเดียวกันโดยไม่มี `Origin` ต้องได้ 403 | `requestOwnOrigin` ใน `src/composition/request-origin.ts` |

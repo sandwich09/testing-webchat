@@ -30,7 +30,7 @@ const config: UseCaseConfig = {
   priceTable: PRICE_TABLE,
 };
 const ctx = { requestId: 'req-1', clientIp: '203.0.113.9' };
-const SECRET = 'ลูกค้าแพ้ถั่ว โทรหลัง 5 โมง';
+const SECRET = 'ผู้ใช้แพ้ถั่ว โทรหลัง 5 โมง';
 
 describe('contact notes', () => {
   let clock: FakeClock;

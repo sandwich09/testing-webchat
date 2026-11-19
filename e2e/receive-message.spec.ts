@@ -15,7 +15,7 @@ test('journey 1: a new customer and their messages show up in the inbox', async 
   isMobile,
 }) => {
   const suffix = uniqueSuffix();
-  const name = `ลูกค้าทดสอบ ${suffix}`;
+  const name = `ผู้ใช้ทดสอบ ${suffix}`;
   const firstText = `สวัสดี ${suffix}`;
 
   // 1.1 (the shared login state of global.setup.ts is the loginByApi of this step)
@@ -115,3 +115,26 @@ test('journey 1: a new customer and their messages show up in the inbox', async 
   // 1.13
   await expectNoA11yViolations(page);
 });
+
+// LINE serves profile pictures from two hosts; both must pass the CSP `img-src` (pitfalls S7).
+// The real hosts are never called: the test fixture (helpers/test.ts) answers them with a fixture
+// image, and fails on any CSP violation.
+
+for (const host of ['profile.line-scdn.net', 'sprofile.line-scdn.net']) {
+  test(`journey 1: a profile picture on ${host} shows as the avatar`, async ({ page, request }) => {
+    const suffix = uniqueSuffix();
+    const name = `ผู้ใช้มีรูป ${suffix}`;
+    const pictureUrl = `https://${host}/e2e-${suffix}`;
+    const v = newFixtureVars({ text: `สวัสดี ${suffix}` });
+    await stubLineProfile({ userId: v.userId, displayName: name, pictureUrl });
+    expect((await postLineWebhook(request, 'follow', nextEventVars(v))).status()).toBe(200);
+    expect((await postLineWebhook(request, 'message-text', v)).status()).toBe(200);
+
+    await page.goto('/chats');
+    const avatar = row(page, name).locator(`img[src="${pictureUrl}"]`);
+    await expect(avatar).toBeVisible();
+    await expect
+      .poll(() => avatar.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0))
+      .toBe(true);
+  });
+}

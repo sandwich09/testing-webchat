@@ -58,15 +58,15 @@ const ERROR_MESSAGES: Record<ErrorMessageCode, MessageEntry> = {
   // Webhook and LINE
   'webhook.signature_invalid': null,
   'webhook.payload_invalid': null,
-  'line.not_configured': 'ยังไม่ได้ตั้งค่า LINE Official Account ตั้งค่าได้ที่ ตั้งค่า › LINE Official Account',
+  'line.not_configured': 'ยังไม่ได้ตั้งค่า LINE Official Account ตั้งค่าได้ที่ ตั้งค่า › LINE',
   'line.credentials_unreadable':
-    'อ่าน credential ของ LINE ที่บันทึกไว้ไม่ได้ กรอก Channel secret และ Channel access token ใหม่ที่ ตั้งค่า › LINE Official Account',
+    'อ่าน credential ของ LINE ที่บันทึกไว้ไม่ได้ กรอก Channel secret และ Channel access token ใหม่ที่ ตั้งค่า › LINE',
   'line.credentials_invalid': 'Channel access token ไม่ถูกต้อง ตรวจค่าที่คัดลอกมาอีกครั้ง',
   'line.channel_secret_invalid':
     'Channel ID กับ Channel secret ไม่ตรงกัน ตรวจว่าคัดลอกทั้งสองค่ามาจาก channel เดียวกัน',
   'line.channel_mismatch':
     'Channel access token เป็นของ channel อื่น ไม่ใช่ channel ของ Channel ID นี้ คัดลอกทั้งสามค่าจาก channel เดียวกันใน LINE Developers Console',
-  'line.unauthorized': 'ส่งไม่สำเร็จ Channel access token ใช้ไม่ได้ ตรวจที่ ตั้งค่า › LINE Official Account',
+  'line.unauthorized': 'ส่งไม่สำเร็จ Channel access token ใช้ไม่ได้ ตรวจที่ ตั้งค่า › LINE',
   'line.quota_exceeded': 'ส่งไม่สำเร็จ โควตาข้อความของ LINE เต็ม',
   'line.rate_limited': 'ส่งไม่สำเร็จ LINE รับคำขอถี่เกินไป รอสักครู่แล้วกด "ส่งอีกครั้ง"',
   'line.push_failed': 'ส่งไม่สำเร็จ LINE ไม่รับข้อความนี้ กด "ส่งอีกครั้ง" ถ้ายังไม่ได้ ให้ตรวจไฟล์ที่แนบ',
@@ -89,7 +89,7 @@ const ERROR_MESSAGES: Record<ErrorMessageCode, MessageEntry> = {
 
   // Contacts and messages
   'contact.not_found': 'ไม่พบแชทนี้ เลือกแชทจากรายชื่อ',
-  'contact.unfollowed': 'ลูกค้าเลิกติดตามแล้ว ส่งข้อความไม่ได้',
+  'contact.unfollowed': 'ผู้ใช้เลิกติดตามแล้ว ส่งข้อความไม่ได้',
   'message.not_found': 'ไม่พบข้อความนี้ โหลดหน้าใหม่แล้วลองอีกครั้ง',
   'message.not_retryable': 'ข้อความนี้ส่งแล้วหรือกำลังส่งอยู่',
   'message.retry_expired':
@@ -117,8 +117,8 @@ const ERROR_MESSAGES: Record<ErrorMessageCode, MessageEntry> = {
   'media.not_found': null,
 
   // AI
-  'ai.disabled_globally': 'AI ถูกปิดทั้งระบบ เปิดได้ที่ ตั้งค่า › AI ตอบแทน',
-  'ai.budget_exhausted': 'งบ AI ของวันนี้เต็ม ใช้ได้อีกครั้งหลังเที่ยงคืน หรือเพิ่มงบต่อวันที่ ตั้งค่า › AI ตอบแทน',
+  'ai.disabled_globally': 'AI ถูกปิดทั้งระบบ เปิดได้ที่ ตั้งค่า › AI',
+  'ai.budget_exhausted': 'งบ AI ของวันนี้เต็ม ใช้ได้อีกครั้งหลังเที่ยงคืน หรือเพิ่มงบต่อวันที่ ตั้งค่า › AI',
   'ai.refused': 'AI ปฏิเสธที่จะตอบข้อความนี้',
   'ai.truncated': 'คำตอบของ AI ยาวเกินจนถูกตัด จึงไม่ได้ส่ง',
   'ai.invalid_output': 'คำตอบของ AI อยู่ในรูปแบบที่ใช้ไม่ได้ จึงไม่ได้ส่ง',
@@ -180,18 +180,18 @@ export function errorMessage(code: ErrorMessageCode, ctx: ErrorMessageContext = 
 export const ERROR_MESSAGE_CODES = Object.keys(ERROR_MESSAGES) as ErrorMessageCode[];
 
 const HANDOFF_REASON_TEXT: Record<HandoffReason, string> = {
-  customer_sent_image: 'ลูกค้าส่งรูป AI จึงหยุดรอแอดมิน',
-  customer_sent_video: 'ลูกค้าส่งวิดีโอ AI จึงหยุดรอแอดมิน',
-  customer_sent_non_text: 'ลูกค้าส่งข้อความที่ไม่ใช่ตัวอักษร เช่น เสียงหรือสติกเกอร์ AI จึงหยุดรอแอดมิน',
+  customer_sent_image: 'ผู้ใช้ส่งรูป AI จึงหยุดรอแอดมิน',
+  customer_sent_video: 'ผู้ใช้ส่งวิดีโอ AI จึงหยุดรอแอดมิน',
+  customer_sent_non_text: 'ผู้ใช้ส่งข้อความที่ไม่ใช่ตัวอักษร เช่น เสียงหรือสติกเกอร์ AI จึงหยุดรอแอดมิน',
   budget_reached: 'งบ AI ของวันนี้เต็ม',
   ai_not_in_knowledge: 'AI ไม่พบคำตอบในคลังความรู้ จึงหยุดรอแอดมิน',
-  ai_needs_human_action: 'ลูกค้าขอเรื่องที่ต้องให้คนจัดการ AI จึงหยุดรอแอดมิน',
-  ai_unsafe_or_offtopic: 'ลูกค้าคุยนอกเรื่องหรือใช้คำไม่เหมาะสม AI จึงหยุดรอแอดมิน',
+  ai_needs_human_action: 'ผู้ใช้ขอเรื่องที่ต้องให้คนจัดการ AI จึงหยุดรอแอดมิน',
+  ai_unsafe_or_offtopic: 'ผู้ใช้คุยนอกเรื่องหรือใช้คำไม่เหมาะสม AI จึงหยุดรอแอดมิน',
   ai_other: 'AI ตอบเรื่องนี้ไม่ได้ จึงหยุดรอแอดมิน',
   ai_failed: 'AI ตอบไม่สำเร็จ จึงหยุดรอแอดมิน ดูรายละเอียดที่ ตั้งค่า › สถานะระบบ',
   ai_timeout: 'AI ตอบไม่ทันเวลา จึงหยุดรอแอดมิน',
-  customer_asked_admin: 'ลูกค้ากดปุ่มคุยกับแอดมิน AI ตอบแทนจึงปิด',
-  ai_unavailable: 'ลูกค้ากดปุ่มคุยกับ AI ขณะที่ AI ปิดทั้งระบบ จึงรอแอดมิน',
+  customer_asked_admin: 'ผู้ใช้กดปุ่มคุยกับแอดมิน AI ตอบแทนจึงปิด',
+  ai_unavailable: 'ผู้ใช้กดปุ่มคุยกับ AI ขณะที่ AI ปิดทั้งระบบ จึงรอแอดมิน',
 };
 
 /** Text for a handoff reason the browser does not know. */
@@ -210,13 +210,13 @@ const EVENT_TEXT: Record<
   Exclude<EventCode, `${typeof HANDOFF_EVENT_PREFIX}${HandoffReason}`>,
   string
 > = {
-  'ai.turned_off_by_admin': 'คุณตอบเอง AI ตอบแทนของลูกค้าคนนี้จึงปิด เปิดอีกครั้งได้ที่สวิตช์ด้านบน',
+  'ai.turned_off_by_admin': 'คุณตอบเอง AI ตอบแทนของผู้ใช้คนนี้จึงปิด เปิดอีกครั้งได้ที่สวิตช์ด้านบน',
   'guard.blocked': 'นอกขอบเขตหัวข้อ AI จึงไม่ตอบ',
-  'contact.followed': 'ลูกค้าเพิ่มเพื่อน',
-  'contact.unfollowed': 'ลูกค้าเลิกติดตามแล้ว',
-  'customer.tapped_ai_on': 'ลูกค้ากดปุ่ม คุยกับ AI',
-  'customer.tapped_admin': 'ลูกค้ากดปุ่ม คุยกับแอดมิน',
-  'customer.tapped_how_to': 'ลูกค้ากดปุ่ม วิธีทดสอบ',
+  'contact.followed': 'ผู้ใช้เพิ่มเพื่อน',
+  'contact.unfollowed': 'ผู้ใช้เลิกติดตามแล้ว',
+  'customer.tapped_ai_on': 'ผู้ใช้กดปุ่ม คุยกับ AI',
+  'customer.tapped_admin': 'ผู้ใช้กดปุ่ม คุยกับแอดมิน',
+  'customer.tapped_how_to': 'ผู้ใช้กดปุ่ม วิธีทดสอบ',
   'welcome.sent': 'ส่งข้อความต้อนรับแล้ว',
 };
 

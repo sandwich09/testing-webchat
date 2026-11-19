@@ -187,7 +187,7 @@ describe('errorMessage', () => {
     );
     expect(errorMessage('settings.guard_rate_limited')).toBe('ทดลองถี่เกินไป รอสักครู่แล้วลองใหม่');
     expect(errorMessage('ai.budget_exhausted')).toBe(
-      'งบ AI ของวันนี้เต็ม ใช้ได้อีกครั้งหลังเที่ยงคืน หรือเพิ่มงบต่อวันที่ ตั้งค่า › AI ตอบแทน',
+      'งบ AI ของวันนี้เต็ม ใช้ได้อีกครั้งหลังเที่ยงคืน หรือเพิ่มงบต่อวันที่ ตั้งค่า › AI',
     );
   });
 
@@ -234,11 +234,11 @@ describe('eventCodeText', () => {
 
   it('gives text for the other known codes', () => {
     expect(eventCodeText('ai.turned_off_by_admin')).toBe(
-      'คุณตอบเอง AI ตอบแทนของลูกค้าคนนี้จึงปิด เปิดอีกครั้งได้ที่สวิตช์ด้านบน',
+      'คุณตอบเอง AI ตอบแทนของผู้ใช้คนนี้จึงปิด เปิดอีกครั้งได้ที่สวิตช์ด้านบน',
     );
     expect(eventCodeText('guard.blocked')).toBe('นอกขอบเขตหัวข้อ AI จึงไม่ตอบ');
-    expect(eventCodeText('contact.followed')).toBe('ลูกค้าเพิ่มเพื่อน');
-    expect(eventCodeText('contact.unfollowed')).toBe('ลูกค้าเลิกติดตามแล้ว');
+    expect(eventCodeText('contact.followed')).toBe('ผู้ใช้เพิ่มเพื่อน');
+    expect(eventCodeText('contact.unfollowed')).toBe('ผู้ใช้เลิกติดตามแล้ว');
   });
 
   it('gives null for an unknown code so the line is not shown', () => {

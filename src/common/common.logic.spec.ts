@@ -10,6 +10,7 @@ import {
   formatInt,
   formatMessageTime,
   formatMonthKey,
+  nextTabIndex,
   formatMonthYear,
   formatUsdForScreen,
   initialOf,
@@ -225,5 +226,16 @@ describe('mergeById', () => {
       ],
     );
     expect(merged.map((r) => `${r.id}:${r.v}`)).toEqual(['a:cur', 'b:cur', 'c:new']);
+  });
+});
+
+describe('nextTabIndex', () => {
+  it('wraps around', () => {
+    expect(nextTabIndex('ArrowRight', 2, 3)).toBe(0);
+    expect(nextTabIndex('ArrowLeft', 0, 3)).toBe(2);
+    expect(nextTabIndex('ArrowRight', 0, 3)).toBe(1);
+    expect(nextTabIndex('Home', 2, 3)).toBe(0);
+    expect(nextTabIndex('End', 0, 3)).toBe(2);
+    expect(nextTabIndex('ArrowDown', 0, 3)).toBeNull();
   });
 });

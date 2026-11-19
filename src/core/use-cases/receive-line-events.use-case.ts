@@ -11,6 +11,7 @@ import type {
   RichMenuAction,
 } from '@/core/domain';
 import {
+  PROFILE_REFRESH_AFTER_MS,
   RICH_MENU_LABELS,
   err,
   ok,
@@ -34,7 +35,12 @@ export type FollowUpJob =
       tapMessageId: MessageId;
     }
   /** A follow event with a reply token: the welcome card (SendWelcome), reply only. */
-  | { kind: 'welcome'; contactId: ContactId; replyToken: string };
+  | { kind: 'welcome'; contactId: ContactId; replyToken: string }
+  /**
+   * An event of a contact seen before: RefreshContactProfile, which fetches the profile only when
+   * the last attempt is older than PROFILE_REFRESH_AFTER_MS. At most one per contact per request.
+   */
+  | { kind: 'refresh_profile'; contactId: ContactId };
 
 export type ReceiveLineEventsInput = { rawBody: string; signature: string | null };
 
@@ -213,7 +219,9 @@ export const makeReceiveLineEvents: (
 
   /**
    * First-seen contacts only, inside the request. The adapter applies LINE_PROFILE_TIMEOUT_MS and
-   * does not retry; any failure leaves the contact without a name and processing continues.
+   * does not retry; any failure leaves the contact without a name and processing continues. The
+   * attempt is recorded (claimProfileRefresh) success or not, so the daily refresh of a later
+   * event tries again only PROFILE_REFRESH_AFTER_MS later.
    */
   const fetchProfile = async (
     token: LineAccessToken,
@@ -222,6 +230,13 @@ export const makeReceiveLineEvents: (
     ctx: RequestContext,
   ): Promise<void> => {
     try {
+      const now = clock.now();
+      const claimed = await contacts.claimProfileRefresh(
+        contactId,
+        now,
+        new Date(now.getTime() - PROFILE_REFRESH_AFTER_MS),
+      );
+      if (!claimed) return;
       const profile = await gateway.getProfile(token, lineUserId);
       if (profile.ok) {
         await contacts.updateProfile(contactId, profile.value);
@@ -245,6 +260,7 @@ export const makeReceiveLineEvents: (
     event: ContactEvent,
     token: LineAccessToken,
     ctx: RequestContext,
+    batch: Batch,
     withProfile: boolean,
   ): Promise<{ contact: Contact; created: boolean }> => {
     const ensured = await contacts.ensure({
@@ -252,8 +268,17 @@ export const makeReceiveLineEvents: (
       lineUserId: event.userId,
       now: clock.now(),
     });
-    if (ensured.created && withProfile) {
+    if (!withProfile) return ensured;
+    if (ensured.created) {
       await fetchProfile(token, ensured.contact.id, event.userId, ctx);
+    } else if (
+      !batch.followUps.some(
+        (job) => job.kind === 'refresh_profile' && job.contactId === ensured.contact.id,
+      )
+    ) {
+      // Decided after the response: the job claims and fetches only when the profile is stale,
+      // so this never delays the webhook nor blocks storing the event.
+      batch.followUps.push({ kind: 'refresh_profile', contactId: ensured.contact.id });
     }
     return ensured;
   };
@@ -265,7 +290,7 @@ export const makeReceiveLineEvents: (
     batch: Batch,
   ): Promise<void> => {
     const { followUps } = batch;
-    const { contact } = await ensureContact(event, token, ctx, true);
+    const { contact } = await ensureContact(event, token, ctx, batch, true);
     const { inserted, message } = await messages.insertInboundIfAbsent(
       newMessageOf(event, contact.id),
     );
@@ -317,7 +342,7 @@ export const makeReceiveLineEvents: (
       logger.log('info', 'line.postback.ignored', { requestId: ctx.requestId });
       return;
     }
-    const { contact } = await ensureContact(event, token, ctx, true);
+    const { contact } = await ensureContact(event, token, ctx, batch, true);
     const limit = await hitRateLimit('rich_menu_tap', contact.id, clock.now());
     if (limit.limited) {
       logger.log('info', 'line.postback.rate_limited', {
@@ -396,7 +421,7 @@ export const makeReceiveLineEvents: (
         });
         return;
       case 'follow': {
-        const { contact, created } = await ensureContact(event, token, ctx, true);
+        const { contact, created } = await ensureContact(event, token, ctx, batch, true);
         if (
           (created || contact.followStatus === 'unfollowed') &&
           (await contacts.setFollowStatus(contact.id, 'following', event.timestamp))
@@ -417,7 +442,7 @@ export const makeReceiveLineEvents: (
       }
       case 'unfollow': {
         // LINE serves no profile of a user who has just blocked the account.
-        const { contact } = await ensureContact(event, token, ctx, false);
+        const { contact } = await ensureContact(event, token, ctx, batch, false);
         // setFollowStatus ignores an unfollow older than the latest follow or customer message.
         if (
           contact.followStatus === 'following' &&

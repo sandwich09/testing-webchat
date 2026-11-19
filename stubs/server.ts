@@ -580,7 +580,7 @@ function profileReply(userId: string): Reply {
   }
   return json(200, {
     userId,
-    displayName: `ลูกค้าทดสอบ ${userId.slice(-4)}`,
+    displayName: `ผู้ใช้ทดสอบ ${userId.slice(-4)}`,
     language: 'th',
   });
 }

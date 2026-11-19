@@ -231,6 +231,19 @@ describe('setLineCredentialsBodySchema', () => {
     ).toBe(false);
   });
 
+  it('takes any non-empty subset of the three values, and refuses none', () => {
+    for (const body of [
+      { channelId: '1234567890' },
+      { channelSecret: 's' },
+      { channelAccessToken: 't' },
+      { channelSecret: 's', channelAccessToken: 't' },
+    ]) {
+      expect(setLineCredentialsBodySchema.safeParse(body).success).toBe(true);
+    }
+    expect(setLineCredentialsBodySchema.safeParse({}).success).toBe(false);
+    expect(setLineCredentialsBodySchema.safeParse({ channelSecret: '' }).success).toBe(false);
+  });
+
   it('takes a Channel ID of 1 to LINE_CHANNEL_ID_MAX_CHARS digits and nothing else', () => {
     const parse = (channelId: unknown) =>
       setLineCredentialsBodySchema.safeParse({
@@ -248,10 +261,12 @@ describe('setLineCredentialsBodySchema', () => {
       '-1',
       '9'.repeat(LINE_CHANNEL_ID_MAX_CHARS + 1),
       12,
-      undefined,
+      null,
     ]) {
       expect(parse(bad), String(bad)).toBe(false);
     }
+    // Left out is allowed: the stored Channel ID is kept (partial update).
+    expect(parse(undefined)).toBe(true);
   });
 
   it('answers the secret check with the bot info', () => {

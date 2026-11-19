@@ -8,6 +8,8 @@ import type {
   GenerateAiReplyOutput,
   HandleRichMenuActionInput,
   HandleRichMenuActionOutput,
+  RefreshContactProfileInput,
+  RefreshContactProfileOutput,
   SendWelcomeInput,
   SendWelcomeOutput,
   StoreInboundMediaInput,
@@ -21,6 +23,7 @@ export interface JobDeps {
   generateAiReply: UseCase<GenerateAiReplyInput, GenerateAiReplyOutput>;
   handleRichMenuAction: UseCase<HandleRichMenuActionInput, HandleRichMenuActionOutput>;
   sendWelcome: UseCase<SendWelcomeInput, SendWelcomeOutput>;
+  refreshContactProfile: UseCase<RefreshContactProfileInput, RefreshContactProfileOutput>;
   extractDocument: ExtractDocument;
 }
 
@@ -30,7 +33,7 @@ export const makeJobs = (deps: () => JobDeps) => ({
    * POST /api/line/webhook: every follow-up of ReceiveLineEvents runs after the 200, each in
    * its own job: `store_media` → StoreInboundMedia, `ai_reply` → GenerateAiReply,
    * `rich_menu_action` → HandleRichMenuAction (then GenerateAiReply in the same job when it starts
-   * the AI), `welcome` → SendWelcome.
+   * the AI), `welcome` → SendWelcome, `refresh_profile` → RefreshContactProfile.
    */
   scheduleLineFollowUps: (
     followUps: readonly FollowUpJob[],
@@ -94,6 +97,13 @@ export const makeJobs = (deps: () => JobDeps) => ({
               ),
             { requestId: ctx.requestId, route, contactId: followUp.contactId },
           );
+          break;
+        case 'refresh_profile':
+          d.runJob(() => d.refreshContactProfile({ contactId: followUp.contactId }, ctx), {
+            requestId: ctx.requestId,
+            route,
+            contactId: followUp.contactId,
+          });
           break;
       }
     }

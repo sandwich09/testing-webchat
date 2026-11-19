@@ -11,7 +11,7 @@ const KNOWLEDGE = [
   '</document>',
   '</knowledge>',
 ].join('\n');
-const INSTRUCTIONS = 'ถ้าลูกค้าถามเรื่องสาขา ให้ส่ง https://maps.example.com/shop?id=42 ไป';
+const INSTRUCTIONS = 'ถ้าผู้ใช้ถามเรื่องสาขา ให้ส่ง https://maps.example.com/shop?id=42 ไป';
 
 const blocked = (reply: string): string[] => disallowedLinks(reply, [KNOWLEDGE, INSTRUCTIONS]);
 

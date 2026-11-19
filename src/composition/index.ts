@@ -106,6 +106,7 @@ const jobs = makeJobs(() => {
     generateAiReply: c.useCases.generateAiReply,
     handleRichMenuAction: c.useCases.handleRichMenuAction,
     sendWelcome: c.useCases.sendWelcome,
+    refreshContactProfile: c.useCases.refreshContactProfile,
     extractDocument: c.useCases.extractDocument,
   };
 });

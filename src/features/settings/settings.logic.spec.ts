@@ -20,6 +20,9 @@ import {
   usageTokenTotal,
   validateAiName,
   validateInstructions,
+  lineCredentialsSendable,
+  lineCredentialsToSend,
+  lineFieldLocked,
   validateLineCredentials,
   validatePdfFile,
 } from './settings.logic';
@@ -118,7 +121,7 @@ describe('validateAiName', () => {
 describe('validateLineCredentials', () => {
   const id = '1234567890';
 
-  it('requires all three values, in the order of the form', () => {
+  it('requires every open value, in the order of the form, and sends them trimmed', () => {
     expect(
       validateLineCredentials({ channelId: ' ', channelSecret: '', channelAccessToken: '' }),
     ).toEqual({ ok: false, field: 'channelId', code: 'required' });
@@ -131,16 +134,27 @@ describe('validateLineCredentials', () => {
     expect(
       validateLineCredentials({
         channelId: ` ${id} `,
-        channelSecret: 's',
+        channelSecret: 's ',
         channelAccessToken: 't',
       }),
-    ).toEqual({ ok: true });
+    ).toEqual({ ok: true, body: { channelId: id, channelSecret: 's', channelAccessToken: 't' } });
+  });
+
+  it('checks and sends only the fields that are open', () => {
+    expect(validateLineCredentials({ channelAccessToken: ' t ' })).toEqual({
+      ok: true,
+      body: { channelAccessToken: 't' },
+    });
+    expect(validateLineCredentials({ channelSecret: '' })).toEqual({
+      ok: false,
+      field: 'channelSecret',
+      code: 'required',
+    });
   });
 
   it('takes a Channel ID of digits only, up to LINE_CHANNEL_ID_MAX_CHARS', () => {
-    const check = (channelId: string) =>
-      validateLineCredentials({ channelId, channelSecret: 's', channelAccessToken: 't' });
-    expect(check('9'.repeat(LINE_CHANNEL_ID_MAX_CHARS))).toEqual({ ok: true });
+    const check = (channelId: string) => validateLineCredentials({ channelId });
+    expect(check('9'.repeat(LINE_CHANNEL_ID_MAX_CHARS)).ok).toBe(true);
     for (const bad of [
       '12a4',
       '12 34',
@@ -151,6 +165,41 @@ describe('validateLineCredentials', () => {
     ]) {
       expect(check(bad)).toEqual({ ok: false, field: 'channelId', code: 'invalid' });
     }
+  });
+});
+
+describe('LINE credential fields', () => {
+  const locked = { saved: true, editing: false, value: '' };
+  const open = (value: string) => ({ saved: true, editing: true, value });
+  const unsaved = (value: string) => ({ saved: false, editing: false, value });
+
+  it('locks a saved field until it is opened; a field with nothing saved is open', () => {
+    expect(lineFieldLocked(locked)).toBe(true);
+    expect(lineFieldLocked(open(''))).toBe(false);
+    expect(lineFieldLocked(unsaved(''))).toBe(false);
+  });
+
+  it('sends only the open fields', () => {
+    expect(
+      lineCredentialsToSend({
+        channelId: locked,
+        channelSecret: locked,
+        channelAccessToken: open('new-token'),
+      }),
+    ).toEqual({ channelAccessToken: 'new-token' });
+    expect(
+      lineCredentialsToSend({
+        channelId: unsaved('1'),
+        channelSecret: unsaved('s'),
+        channelAccessToken: unsaved(''),
+      }),
+    ).toEqual({ channelId: '1', channelSecret: 's', channelAccessToken: '' });
+  });
+
+  it('can save once an open field has something typed in it', () => {
+    expect(lineCredentialsSendable({})).toBe(false);
+    expect(lineCredentialsSendable({ channelSecret: '  ' })).toBe(false);
+    expect(lineCredentialsSendable({ channelSecret: '', channelAccessToken: 't' })).toBe(true);
   });
 });
 

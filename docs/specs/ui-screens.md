@@ -26,7 +26,7 @@
 | ชื่อในเอกสารนี้ | ขนาด / ระยะบรรทัด | ใช้กับ |
 | --- | --- | --- |
 | `text-body` | 15px / 1.55 | เนื้อข้อความในฟอง, ค่าในแผงข้อมูล, คำอธิบายในตั้งค่า |
-| `text-name` | 15px / 1.5 ตัวหนาเมื่อระบุ | ชื่อลูกค้าในรายชื่อและส่วนหัว |
+| `text-name` | 15px / 1.5 ตัวหนาเมื่อระบุ | ชื่อผู้ใช้ในรายชื่อและส่วนหัว |
 | `text-sub` | 14px / 1.5 | ข้อความล่าสุดในรายชื่อ, บรรทัดรองของส่วนหัว, ป้ายสถานะข้อความ |
 | `text-meta` | 12px / 1.5 | เวลาในรายชื่อและข้างฟอง, ป้ายวันที่, ตัวเลขยังไม่อ่าน, hint ใต้ช่องพิมพ์ |
 | `text-title` | 20px / 1.4 ตัวหนา | หัวคอลัมน์ "แชท", หัวหน้าตั้งค่า |
@@ -54,15 +54,15 @@
 
 ทุกช่วง: หน้าไม่มีการเลื่อนแนวนอน ตารางที่กว้างกว่าจอเลื่อนแนวนอนภายในกล่องของตัวเอง
 
-การเลื่อนแนวตั้งของหน้าหลังเข้าระบบ: document ไม่เลื่อนเลย (`scrollHeight` ของ document เท่ากับความสูงของหน้าต่างทุกหน้า) กล่องนอกสุดของ `AppShell` สูงเท่าหน้าต่าง (`100dvh` และ `100vh` สำรองเมื่อ browser ไม่รองรับ `dvh`) เป็น `position: relative` และ `overflow: hidden` จึงเป็น containing block ของทุก element ที่วางแบบ absolute ภายใน (เช่นข้อความ `sr-only` ในรายการที่เลื่อน) และตัดส่วนเกิน เฉพาะกล่องด้านในเลื่อน: รายการลูกค้า, พื้นที่ข้อความ, แผงข้อมูล และคอลัมน์ของหน้าตั้งค่า แต่ละกล่องเป็น flex item ที่มี `min-h-0` เมนูซ้ายสูงเต็มหน้าต่าง ปุ่มออกจากระบบและพับเมนูอยู่ล่างสุดของหน้าต่างเสมอ popup ที่วางนอกกล่องเหล่านี้ (`Select`, dialog, toast, tooltip) เป็น `position: fixed` E2E ตรวจข้อนี้ใน journey 4 ([stubs-and-fixtures](../qa/stubs-and-fixtures.md))
+การเลื่อนแนวตั้งของหน้าหลังเข้าระบบ: document ไม่เลื่อนเลย (`scrollHeight` ของ document เท่ากับความสูงของหน้าต่างทุกหน้า) กล่องนอกสุดของ `AppShell` สูงเท่าหน้าต่าง (`100dvh` และ `100vh` สำรองเมื่อ browser ไม่รองรับ `dvh`) เป็น `position: relative` และ `overflow: hidden` จึงเป็น containing block ของทุก element ที่วางแบบ absolute ภายใน (เช่นข้อความ `sr-only` ในรายการที่เลื่อน) และตัดส่วนเกิน เฉพาะกล่องด้านในเลื่อน: รายการผู้ใช้, พื้นที่ข้อความ, แผงข้อมูล และคอลัมน์ของหน้าตั้งค่า แต่ละกล่องเป็น flex item ที่มี `min-h-0` เมนูซ้ายสูงเต็มหน้าต่าง ปุ่มออกจากระบบและพับเมนูอยู่ล่างสุดของหน้าต่างเสมอ popup ที่วางนอกกล่องเหล่านี้ (`Select`, dialog, toast, tooltip) เป็น `position: fixed` E2E ตรวจข้อนี้ใน journey 4 ([stubs-and-fixtures](../qa/stubs-and-fixtures.md))
 
 ### 1.5 URL
 
 | URL | แสดง |
 | --- | --- |
 | `/` | redirect ไป `/chats` |
-| `/chats` | หน้าแชท ยังไม่เลือกลูกค้า (จอแคบ: รายชื่อ) |
-| `/chats/[contactId]` | หน้าแชทของลูกค้าคนนั้น (จอแคบ: แชทเต็มจอ) |
+| `/chats` | หน้าแชท ยังไม่เลือกผู้ใช้ (จอแคบ: รายชื่อ) |
+| `/chats/[contactId]` | หน้าแชทของผู้ใช้คนนั้น (จอแคบ: แชทเต็มจอ) |
 | `/settings` | หน้าตั้งค่า |
 
 ไม่มี cookie ที่ถูกต้อง: `proxy.ts` rewrite ทุก URL ไปหน้ายินดีต้อนรับโดย URL เดิมไม่เปลี่ยน ([project-setup](../architecture/project-setup.md#proxyts)) เข้าระบบแล้ว `router.refresh()` จึงอยู่หน้าเดิม ([access-gate](access-gate.md) ข้อ 1) Path ของหน้าเว็บกำหนดใน [project-setup](../architecture/project-setup.md#3-โครงโฟลเดอร์)
@@ -122,7 +122,7 @@
 | `ConfirmDialog.tsx` | dialog ยืนยันสองปุ่ม |
 | `query-keys.ts` | key ของ TanStack Query ทั้งหมด (ข้อ 7) |
 | `polling.ts` | `usePollingInterval()` คืนช่วง polling และการถ่วงเวลา (ข้อ 7.4) |
-| `common.hooks.ts` | `useSettings()` ที่เมนู หน้าแชทและหน้าตั้งค่าใช้ร่วมกัน และ `useHydrated()` ที่เป็น `false` ระหว่าง render ฝั่ง server และ hydration แล้วเป็น `true` ใช้กับข้อความที่ขึ้นกับ browser (เช่นนาฬิกา) ที่แสดงก่อนมีข้อมูลจาก API และกับรายชื่อลูกค้า (ข้อ 4.3) |
+| `common.hooks.ts` | `useSettings()` ที่เมนู หน้าแชทและหน้าตั้งค่าใช้ร่วมกัน และ `useHydrated()` ที่เป็น `false` ระหว่าง render ฝั่ง server และ hydration แล้วเป็น `true` ใช้กับข้อความที่ขึ้นกับ browser (เช่นนาฬิกา) ที่แสดงก่อนมีข้อมูลจาก API และกับรายชื่อผู้ใช้ (ข้อ 4.3) |
 | `toast.ts` | `showToast(tone, text)` ทางเดียวที่แสดง toast (ข้อ 10) |
 | `useStoredFlag.ts` | ค่า boolean ใน `localStorage` (`tw.railCollapsed`, `tw.infoPanelOpen`) ที่ render ฝั่ง server และ hydration ใช้ค่าเริ่มต้นเสมอ แล้วอ่านค่าที่เก็บหลัง hydration (`useSyncExternalStore`) |
 | `common.api.ts`, `common.logic.ts`, `common.constants.ts`, `layout.constants.ts` | ตามชื่อ |
@@ -270,7 +270,7 @@ src/common/AppShell.tsx
 
 เมนูกลายเป็นแถบบนสูง 56px พื้น `rail` เส้นล่าง 1px `line`: โลโก้ (ไม่มีชื่อแอป), ช่องว่างยืด, `แชท` พร้อมตัวเลข, `ตั้งค่า`, `ออกจากระบบ` เป็นปุ่มไอคอน 44×44 มี `aria-label` ไม่มีปุ่มพับเมนู
 
-เมื่อเปิดแชทของลูกค้าที่จอแคบ แถบนี้ยังอยู่ และส่วนหัวของแชทอยู่ถัดลงมา
+เมื่อเปิดแชทของผู้ใช้ที่จอแคบ แถบนี้ยังอยู่ และส่วนหัวของแชทอยู่ถัดลงมา
 
 ### 3.4 แถบการเชื่อมต่อ
 
@@ -288,7 +288,7 @@ src/common/AppShell.tsx
 
 `app-rail`, `rail-brand`, `nav-inbox`, `nav-inbox-unread`, `nav-settings`, `nav-logout`, `rail-collapse`, `connection-banner`, `section-error`, `section-error-retry`
 
-## 4. รายชื่อลูกค้า
+## 4. รายชื่อผู้ใช้
 
 ### 4.1 Component
 
@@ -334,7 +334,7 @@ Field ของ `ContactDto` ที่ใช้: `id`, `displayName`, `pictureUr
 | แท็บ | แถวแท็บแบบเส้นใต้ `role="tablist"`: `inbox.list.tabAll`, `inbox.list.tabUnread` + ` {counts.unread}`, `inbox.list.tabNeedsAdmin` + ` {counts.needsAdmin}` ตัวอักษร 14px แท็บที่เลือกเป็นตัวหนาสี `fg` มีเส้นใต้ 2px `accent` แท็บอื่นสี `muted` จำนวนเป็น 0 ยังแสดง "0" แถวมีเส้นล่าง 1px `line` |
 | แถว | สูงอย่างน้อย 68px padding 12px 16px ช่องว่างรูปกับข้อความ 12px รูป 44px |
 | ชื่อ | `text-name` ตัดบรรทัดเดียว ตัวหนาเมื่อ `unreadCount > 0` ชื่อว่างใช้ `inbox.contact.unnamed` |
-| เวลา | มุมขวาบน `text-meta` สี `muted` `formatListTime(lastMessage?.at ?? createdAt, now)` ไม่ตัดข้ามบรรทัด `lastMessage.at` คือเวลาข้อความล่าสุดของลูกค้า จึงเป็นค่าเดียวกับที่รายการใช้เรียง ส่วนบรรทัดที่สองเป็นข้อความล่าสุดของใครก็ได้ |
+| เวลา | มุมขวาบน `text-meta` สี `muted` `formatListTime(lastMessage?.at ?? createdAt, now)` ไม่ตัดข้ามบรรทัด `lastMessage.at` คือเวลาข้อความล่าสุดของผู้ใช้ จึงเป็นค่าเดียวกับที่รายการใช้เรียง ส่วนบรรทัดที่สองเป็นข้อความล่าสุดของใครก็ได้ |
 | บรรทัดที่สอง | `buildContactPreview(contact)` ตัดบรรทัดเดียว `text-sub` สี `muted` ตัวหนาและสี `fg` เมื่อยังไม่อ่าน คำนำ "รอแอดมิน ·" เป็นสี `warn` ตัวหนา |
 | ตัวเลขยังไม่อ่าน | ชิดขวาของบรรทัดที่สอง แคปซูล `accent-strong` ตัวขาว 12px ตัวหนา สูง 20px เกิน 99 แสดง `99+` |
 | แถวที่เลือก | พื้น `selected` |
@@ -348,8 +348,8 @@ Field ของ `ContactDto` ที่ใช้: `id`, `displayName`, `pictureUr
 | สถานะ | แสดง | `data-testid` |
 | --- | --- | --- |
 | กำลังโหลดครั้งแรก | `ContactListSkeleton`: 8 แถว วงกลม 44px + แท่ง 2 เส้น (60% และ 85%) | `contact-list-skeleton` |
-| ไม่มีลูกค้าเลย และยังไม่ได้เชื่อม LINE OA | `EmptyState`: `inbox.list.emptyNoLine.title`, `inbox.list.emptyNoLine.body`, ลิงก์ `inbox.list.goToSettings` ไป `/settings` | `contact-list-empty` |
-| ไม่มีลูกค้าเลย เชื่อม LINE OA แล้ว | `inbox.list.empty.title`, `inbox.list.empty.body` | `contact-list-empty` |
+| ไม่มีผู้ใช้เลย และยังไม่ได้เชื่อม LINE OA | `EmptyState`: `inbox.list.emptyNoLine.title`, `inbox.list.emptyNoLine.body`, ลิงก์ `inbox.list.goToSettings` ไป `/settings` | `contact-list-empty` |
+| ไม่มีผู้ใช้เลย เชื่อม LINE OA แล้ว | `inbox.list.empty.title`, `inbox.list.empty.body` | `contact-list-empty` |
 | แท็บยังไม่อ่านว่าง | `inbox.list.emptyUnread` | `contact-list-empty` |
 | แท็บรอแอดมินว่าง | `inbox.list.emptyNeedsAdmin` | `contact-list-empty` |
 | ค้นหาไม่พบ | `inbox.list.emptySearch` แทน `{q}` | `contact-list-empty` |
@@ -364,7 +364,7 @@ Field ของ `ContactDto` ที่ใช้: `id`, `displayName`, `pictureUr
 
 ### 4.4 การโหลดเพิ่ม
 
-รายการเรียงตามข้อความล่าสุดของลูกค้า ใหม่ไปเก่า ([webchat-inbox](webchat-inbox.md)) หน้าแรก `CONTACT_PAGE_LIMIT` แถว (เลื่อนเพื่อโหลดเพิ่ม ไม่มีเลขหน้า) เมื่อ sentinel ท้ายรายการเข้าจอ (IntersectionObserver) และ `hasMore` ขอหน้าถัดไปด้วย `before` ของคำตอบก่อนหน้า ตาม [protocol ของ polling](../architecture/api-contract.md#รายชื่อลูกค้า) Polling ไม่ดึงหน้าแรกซ้ำ แต่ขอ `afterUpdatedSeq` แล้วรวมเข้ารายการด้วย `mergeById` กรองด้วย `matchesContactFilter` และเรียงด้วย `compareContacts` (ข้อ 8)
+รายการเรียงตามข้อความล่าสุดของผู้ใช้ ใหม่ไปเก่า ([webchat-inbox](webchat-inbox.md)) หน้าแรก `CONTACT_PAGE_LIMIT` แถว (เลื่อนเพื่อโหลดเพิ่ม ไม่มีเลขหน้า) เมื่อ sentinel ท้ายรายการเข้าจอ (IntersectionObserver) และ `hasMore` ขอหน้าถัดไปด้วย `before` ของคำตอบก่อนหน้า ตาม [protocol ของ polling](../architecture/api-contract.md#รายชื่อผู้ใช้) Polling ไม่ดึงหน้าแรกซ้ำ แต่ขอ `afterUpdatedSeq` แล้วรวมเข้ารายการด้วย `mergeById` กรองด้วย `matchesContactFilter` และเรียงด้วย `compareContacts` (ข้อ 8)
 
 ### 4.5 คีย์บอร์ด
 
@@ -402,12 +402,12 @@ src/features/inbox/
             thread/AudioPlayer.tsx   ตัวเล่นข้อความเสียง (ข้อ 5.3)
           thread/DeliveryStatus.tsx  กำลังส่ง / ส่งแล้ว / ส่งไม่สำเร็จ + ส่งอีกครั้ง
       thread/SystemLine.tsx
-      thread/WelcomeCardBubble.tsx  การ์ดต้อนรับที่ส่งให้ลูกค้า (ข้อ 5.3)
+      thread/WelcomeCardBubble.tsx  การ์ดต้อนรับที่ส่งให้ผู้ใช้ (ข้อ 5.3)
       thread/NewMessagesButton.tsx
     composer/Composer.tsx       ข้อ 5.7
       composer/AttachmentTray.tsx
     thread/MediaLightbox.tsx    ข้อ 6.4
-  thread/ThreadPlaceholder.tsx  ยังไม่เลือกลูกค้า
+  thread/ThreadPlaceholder.tsx  ยังไม่เลือกผู้ใช้
   composer/inbox.media.ts       buildPreviewImage, convertToJpeg, captureVideoFrame, readHeadBytes (ใช้ API ของ browser)
 ```
 
@@ -459,21 +459,21 @@ Field ของ `MessageDto` ที่ใช้: `id`, `seq`, `updatedSeq`, `dir
 | พื้น | `chat` padding 16px 20px (จอแคบ 12px) |
 | Element | `role="log"` `aria-live="polite"` `aria-label` `inbox.thread.logLabel` และ `tabindex="0"` เพื่อเลื่อนด้วยคีย์บอร์ด |
 | ป้ายวันที่ | กลาง แคปซูล พื้น `fg` ความทึบ 0.6 (ตัวขาว 12px ได้ contrast 4.5:1 บนพื้น `chat`) ตัวขาว `text-meta` padding 2px 10px margin 16px 0 `formatDayChip(date, now)` |
-| กลุ่มลูกค้า | ซ้าย: รูป 28px ติดฟองสุดท้ายของกลุ่ม ชื่อ `text-meta` สี `muted` เหนือฟองแรก (เว้นซ้าย 36px) |
-| ฟองลูกค้า | พื้น `surface`, ขอบ 1px `line`, มุม 17px มุมล่างซ้ายของฟองสุดท้ายในกลุ่ม 5px |
+| กลุ่มผู้ใช้ | ซ้าย: รูป 28px ติดฟองสุดท้ายของกลุ่ม ชื่อ `text-meta` สี `muted` เหนือฟองแรก (เว้นซ้าย 36px) |
+| ฟองผู้ใช้ | พื้น `surface`, ขอบ 1px `line`, มุม 17px มุมล่างซ้ายของฟองสุดท้ายในกลุ่ม 5px |
 | ฟองฝั่งแอดมิน | ขวา พื้น `bubble-out` ไม่มีขอบ มุม 17px มุมล่างขวาของฟองสุดท้ายในกลุ่ม 5px ไม่มีรูป |
 | ระยะ | ฟองในกลุ่มห่าง 3px กลุ่มห่าง 14px |
 | เนื้อข้อความ | `text-body` สี `fg` padding 8px 12px `white-space: pre-wrap`, `overflow-wrap: anywhere` ลิงก์จาก `linkify` เป็น `<a target="_blank" rel="noopener noreferrer">` ขีดเส้นใต้ |
-| เวลาและผู้ส่ง | ข้างฟองสุดท้ายของกลุ่ม ชิดล่าง ห่าง 6px: ฝั่งลูกค้าอยู่ขวาของฟอง `formatMessageTime` ฝั่งแอดมินอยู่ซ้ายของฟอง เรียงเป็น 2 บรรทัด: ป้ายผู้ส่งตัวหนา (`inbox.message.senderYou` หรือ `inbox.message.senderAi`) แล้วเวลา ทั้งหมด `text-meta` สี `muted` |
+| เวลาและผู้ส่ง | ข้างฟองสุดท้ายของกลุ่ม ชิดล่าง ห่าง 6px: ฝั่งผู้ใช้อยู่ขวาของฟอง `formatMessageTime` ฝั่งแอดมินอยู่ซ้ายของฟอง เรียงเป็น 2 บรรทัด: ป้ายผู้ส่งตัวหนา (`inbox.message.senderYou` หรือ `inbox.message.senderAi`) แล้วเวลา ทั้งหมด `text-meta` สี `muted` |
 | สถานะกำลังส่ง | ฟองความทึบ 0.55 และใต้ฟองมี `inbox.message.sending` `text-meta` |
 | สถานะส่งแล้ว | ไอคอน `Check` 12px สี `muted` ก่อนเวลา พร้อมข้อความซ่อน `inbox.message.sent` |
 | สถานะส่งไม่สำเร็จ | ฟองความทึบเต็ม ขอบ 1px `danger` ใต้ฟอง: ไอคอน `AlertCircle` + `failedLineText(deliveryError)` 14px สี `danger` คือ `inbox.message.failed` + ` · ` + เหตุผลจาก error catalog (แบบ `outbound`) ที่ตัดคำ "ส่งไม่สำเร็จ" ต้นข้อความออกเพื่อไม่ให้ซ้ำ ไม่มีเหตุผลแสดงแค่ `inbox.message.failed` และปุ่มข้อความ `inbox.message.retry` 14px ตัวหนา สูง 32px (จอแคบ 44px) เมื่อ `isRetryExpired(row, now)` เป็นจริง (`delivery.retryExpiresAt` ไม่หลัง `now` ของนาฬิกาที่เดินทุกนาที หรือ server ตอบ `message.retry_expired`) เหตุผลเป็นของ `message.retry_expired` (`{hours}` จาก `LINE_RETRY_KEY_WINDOW_MS`), `message-error` มี `data-code="message.retry_expired"` และไม่มีปุ่ม |
-| ข้อความที่ตอบกลับ | กล่อง `message-quote` ในฟองเหนือเนื้อข้อความ margin 8px 8px 0 พื้น `chat` เส้นซ้าย 3px `muted` มุม 6px `text-sub` สี `muted`: บรรทัดแรกป้ายผู้เขียนตัวหนา (`inbox.message.senderYou`, `inbox.message.senderAi` หรือชื่อลูกค้า) บรรทัดที่สองข้อความหนึ่งบรรทัด (`truncate`) หรือป้ายชนิดสื่อจาก `inbox.media.*` ข้อความต้นทางที่รู้จักเป็น `<button>` ชื่อ `inbox.quote.label` (มีคำว่า "ตอบกลับ") title `inbox.quote.jumpHint` กดแล้ว `MessageList` เลื่อนฟองต้นทางมากลางจอ (ไม่ animate เมื่อ `prefers-reduced-motion`) และใส่ `data-highlight` เป็น true (วง 2px `accent-strong`) นาน `QUOTE_HIGHLIGHT_MS` ฟองต้นทางที่ไม่ได้โหลดอยู่: ไม่ทำอะไร ข้อความต้นทางที่ไม่รู้จัก: `div` role note ข้อความ `inbox.quote.unavailable` ตัวเอียง ชื่อ `inbox.quote.labelUnavailable` ฟังก์ชันล้วน `quoteView` ใน `inbox.thread.logic.ts` |
+| ข้อความที่ตอบกลับ | กล่อง `message-quote` ในฟองเหนือเนื้อข้อความ margin 8px 8px 0 พื้น `chat` เส้นซ้าย 3px `muted` มุม 6px `text-sub` สี `muted`: บรรทัดแรกป้ายผู้เขียนตัวหนา (`inbox.message.senderYou`, `inbox.message.senderAi` หรือชื่อผู้ใช้) บรรทัดที่สองข้อความหนึ่งบรรทัด (`truncate`) หรือป้ายชนิดสื่อจาก `inbox.media.*` ข้อความต้นทางที่รู้จักเป็น `<button>` ชื่อ `inbox.quote.label` (มีคำว่า "ตอบกลับ") title `inbox.quote.jumpHint` กดแล้ว `MessageList` เลื่อนฟองต้นทางมากลางจอ (ไม่ animate เมื่อ `prefers-reduced-motion`) และใส่ `data-highlight` เป็น true (วง 2px `accent-strong`) นาน `QUOTE_HIGHLIGHT_MS` ฟองต้นทางที่ไม่ได้โหลดอยู่: ไม่ทำอะไร ข้อความต้นทางที่ไม่รู้จัก: `div` role note ข้อความ `inbox.quote.unavailable` ตัวเอียง ชื่อ `inbox.quote.labelUnavailable` ฟังก์ชันล้วน `quoteView` ใน `inbox.thread.logic.ts` |
 | บรรทัดเหตุการณ์ | `SystemLine` กลาง 14px สี `muted` ไม่มีพื้น margin 12px 0 ข้อความ `eventCodeText(message.eventCode)` จาก [error-catalog](../architecture/error-catalog.md#บรรทัดเหตุการณ์) |
-| การกดปุ่มของลูกค้า | แถวขาเข้าที่ `eventCode` เป็น `customer.tapped_*` แสดงเป็น `SystemLine` "ลูกค้ากดปุ่ม …" ไม่ใช่ฟอง (`showsAsEventLine` ใน `inbox.logic.ts`) ([line-messaging](line-messaging.md#เมื่อลูกค้ากดปุ่ม)) |
+| การกดปุ่มของผู้ใช้ | แถวขาเข้าที่ `eventCode` เป็น `customer.tapped_*` แสดงเป็น `SystemLine` "ผู้ใช้กดปุ่ม …" ไม่ใช่ฟอง (`showsAsEventLine` ใน `inbox.logic.ts`) ([line-messaging](line-messaging.md#เมื่อผู้ใช้กดปุ่ม)) |
 | ข้อความต้อนรับ | `WelcomeCardBubble` ฝั่งแอดมิน ขอบ 1px `line` พื้น `surface` มุมเท่าฟอง หัว `inbox.welcome.label` 12px ตัวหนาสี `accent-strong` พร้อมไอคอน Sparkles คั่นเส้นล่าง แล้วข้อความต้อนรับ 15px และชื่อปุ่มสามปุ่มเป็นป้ายทรงแคปซูล 12px สี `muted` พื้น `chat` ที่กดไม่ได้ (`aria-hidden` และรายการมีชื่อ `inbox.welcome.buttonsLabel`) ข้างกล่องมี `inbox.welcome.sender` และเวลา `article` ชื่อ `inbox.welcome.label` `data-testid` `welcome-bubble` ไม่รวมกลุ่มกับฟองอื่น |
 
-บรรทัด `guard.blocked` ของขอบเขตหัวข้อแสดงด้วย `SystemLine` แบบเดียวกับบรรทัดอื่น และข้อความปฏิเสธที่ส่งให้ลูกค้าเป็นฟองฝั่งแอดมินผู้ส่ง `ai` ตามปกติ จึงไม่ต้องมี component ใหม่ในแชท ([topic-guard](topic-guard.md))
+บรรทัด `guard.blocked` ของขอบเขตหัวข้อแสดงด้วย `SystemLine` แบบเดียวกับบรรทัดอื่น และข้อความปฏิเสธที่ส่งให้ผู้ใช้เป็นฟองฝั่งแอดมินผู้ส่ง `ai` ตามปกติ จึงไม่ต้องมี component ใหม่ในแชท ([topic-guard](topic-guard.md))
 
 บรรทัดเหตุการณ์คือ `MessageDto` ที่ `type` เป็น `event` ในรายการข้อความเดียวกัน จึงแสดงตามตำแหน่งของ `seq` ตามลำดับเวลาที่เกิด ไม่ใช่บรรทัดที่สร้างจากสถานะของ Contact และไม่ต่อท้ายแชท `eventCode` ที่หน้าจอไม่รู้จักไม่แสดง การจัดกลุ่ม การวางป้ายวันที่ และบรรทัดเหตุการณ์มาจาก `groupMessagesForDisplay` (ข้อ 8)
 
@@ -513,11 +513,11 @@ Field ของ `MessageDto` ที่ใช้: `id`, `seq`, `updatedSeq`, `dir
 
 | สถานะ | แสดง | `data-testid` |
 | --- | --- | --- |
-| ยังไม่เลือกลูกค้า (`wide`, `medium`) | `ThreadPlaceholder` กลางพื้น `chat`: ไอคอน `MessagesSquare` 40px สี `muted` + `inbox.thread.placeholder` | `thread-placeholder` |
+| ยังไม่เลือกผู้ใช้ (`wide`, `medium`) | `ThreadPlaceholder` กลางพื้น `chat`: ไอคอน `MessagesSquare` 40px สี `muted` + `inbox.thread.placeholder` | `thread-placeholder` |
 | กำลังโหลดครั้งแรก | ส่วนหัว skeleton และ 6 ฟอง skeleton สลับซ้ายขวา กว้าง 40% ถึง 65% | `thread-skeleton` |
 | ไม่มีข้อความ | กลาง: `inbox.thread.empty` | `thread-empty` |
 | โหลดไม่สำเร็จ | `ErrorState` `inbox.thread.error` + ปุ่ม `common.action.retry` | `thread-error`, `thread-retry` |
-| ไม่พบลูกค้า (404) | `inbox.thread.notFound` + ลิงก์ `inbox.thread.backToList` | `thread-not-found` |
+| ไม่พบผู้ใช้ (404) | `inbox.thread.notFound` + ลิงก์ `inbox.thread.backToList` | `thread-not-found` |
 | ปกติ | ตามข้อ 5.2 ถึง 5.4 | `thread` |
 
 ### 5.7 ช่องตอบ
@@ -565,7 +565,7 @@ State ของ `Composer`:
 
 `useTypingPing(contactId)` ใน `composer/inbox.composer.hooks.ts` ผูกกับ `onChange` ของช่องพิมพ์ ตัวจำกัดความถี่คือ `createTypingPinger` ใน `composer/inbox.typing.controller.ts` ซึ่งรับนาฬิกาและฟังก์ชันส่งจากภายนอก:
 - เรียก `notifyTyping` เมื่อค่าใหม่ไม่ว่าง และ `shouldSendTypingPing(lastSentAt, now, TYPING_PING_INTERVAL_MS)` เป็นจริง หน้าเว็บจึงส่งไม่เกินหนึ่ง ping ต่อ `TYPING_PING_INTERVAL_MS` ขณะแอดมินพิมพ์
-- Server จำกัดเพิ่มอีกชั้นที่ `RATE_LIMIT_TYPING` ต่อลูกค้า และขอให้ LINE แสดง loading เป็นเวลา `LINE_LOADING_SECONDS` ([line-messaging](line-messaging.md#loading-ฝั่ง-line)) ค่าทั้งสามอยู่ใน [project-setup](../architecture/project-setup.md#10-ค่าคงที่ของระบบ)
+- Server จำกัดเพิ่มอีกชั้นที่ `RATE_LIMIT_TYPING` ต่อผู้ใช้ และขอให้ LINE แสดง loading เป็นเวลา `LINE_LOADING_SECONDS` ([line-messaging](line-messaging.md#loading-ฝั่ง-line)) ค่าทั้งสามอยู่ใน [project-setup](../architecture/project-setup.md#10-ค่าคงที่ของระบบ)
 - `lastSentAt` เริ่มใหม่เมื่อเปลี่ยนแชท ไม่เรียกเมื่อช่องตอบถูกปิด
 - ไม่รอผล ไม่ retry ไม่แสดง error และไม่นับเข้าแถบการเชื่อมต่อ
 
@@ -615,7 +615,7 @@ State ของ `Composer`:
 ช่องตอบ: `composer`, `composer-input`, `composer-send`, `composer-attach`, `composer-file-input`, `composer-hint`, `composer-disabled-reason`, `attachment-tray`, `attachment-preview`, `attachment-progress`, `attachment-status`, `attachment-cancel` (`attachment-tray` มี `data-state` ตามข้อ 7.6)
 
 
-## 6. แผงข้อมูลลูกค้าและ dialog ของหน้าแชท
+## 6. แผงข้อมูลผู้ใช้และ dialog ของหน้าแชท
 
 ### 6.1 Component
 
@@ -627,7 +627,7 @@ src/features/inbox/thread/InfoPanel.tsx
 
 `NotesBlock` อยู่ท้ายแผงใต้รายการข้อมูล เส้นบน 1px `line` padding 12px 16px: หัว `inbox.notes.title` ตัวหนาพร้อมไอคอน `Lock` (ป้ายบอกว่าเห็นเฉพาะแอดมินเป็นคำ ไม่ใช่สีอย่างเดียว) บรรทัด `inbox.notes.hint` สี `muted`, `<textarea>` 2 บรรทัดขยายได้ (ชื่อ `inbox.notes.inputLabel` placeholder `inbox.notes.placeholder`) Enter เพิ่ม Shift+Enter ขึ้นบรรทัดใหม่ ใต้ช่องคือ `inbox.notes.keys` หรือข้อความผิดพลาด (`inbox.notes.tooLong`, รหัสจาก server หรือ `inbox.notes.addFailed`) และตัวนับ `inbox.notes.counter` (แดงเมื่อเกิน) ปุ่ม `inbox.notes.add` ขนาด sm รายการเป็น `<ul>` คั่นด้วยเส้น `line` แต่ละโน้ตคือข้อความ `pre-wrap` + เวลา `formatDateTime` (`text-meta` `muted`) + ปุ่มไอคอน `Trash2` ชื่อ `inbox.notes.delete` โน้ตที่กำลังบันทึกจาง 0.6 พร้อม `inbox.notes.saving` แทนเวลาและไม่มีปุ่มลบ ลบผ่าน `ConfirmDialog` (`inbox.notes.deleteTitle`, `inbox.notes.deleteDescription`, ปุ่ม `inbox.notes.deleteConfirm` สีแดง) สำเร็จ toast `inbox.notes.deleted` สามสถานะแยกกัน: skeleton สองบรรทัด, `ErrorState` `inbox.notes.error` พร้อมปุ่มลองใหม่ และ `inbox.notes.empty` ทำงานเหมือนกันในคอลัมน์ข้าง (1280) และแผงเต็มจอ (390) query key `qk.contactNotes(id)` ไม่ polling
 
-Props: `{ contactId: string; onClose(): void; mode: "column" | "sheet" | "fullscreen" }` ใช้ `useContactDetail` และ `useSettings` ตัวเดียวกับส่วนหัว จึงไม่ยิงซ้ำ `InboxPage` ใส่ `key={contactId}` ให้แผง (ที่ `SectionErrorBoundary` ที่ห่อ) เปลี่ยนแชทจึงได้แผงใหม่: โน้ตที่พิมพ์ค้าง ข้อความผิดพลาด และ dialog ลบที่เปิดอยู่เป็นของลูกค้าคนเดียว ไม่ติดไปลูกค้าคนถัดไป
+Props: `{ contactId: string; onClose(): void; mode: "column" | "sheet" | "fullscreen" }` ใช้ `useContactDetail` และ `useSettings` ตัวเดียวกับส่วนหัว จึงไม่ยิงซ้ำ `InboxPage` ใส่ `key={contactId}` ให้แผง (ที่ `SectionErrorBoundary` ที่ห่อ) เปลี่ยนแชทจึงได้แผงใหม่: โน้ตที่พิมพ์ค้าง ข้อความผิดพลาด และ dialog ลบที่เปิดอยู่เป็นของผู้ใช้คนเดียว ไม่ติดไปผู้ใช้คนถัดไป
 
 โน้ต: การเพิ่มโน้ตโหลดรายการใหม่เมื่อจบ (สำเร็จหรือไม่) เพราะการเพิ่มก่อนรายการแรกโหลดเสร็จยกเลิกการโหลดนั้น และโน้ตที่มีอยู่จะไม่ขึ้นจนกว่าแผงจะ mount ใหม่ dialog ลบโน้ตล้างผลของการลองครั้งก่อนเมื่อปิด เปิดใหม่จึงไม่เห็นข้อความผิดพลาดเก่า
 
@@ -662,7 +662,7 @@ Props: `{ contactId: string; onClose(): void; mode: "column" | "sheet" | "fullsc
 | ผิดพลาด | `inbox.info.error` + `common.action.retry` | `info-error` |
 | ปกติ | ตามข้อ 6.2 | `info-panel` |
 
-ไม่มีสถานะว่าง เพราะแผงเปิดได้เฉพาะเมื่อเลือกลูกค้าแล้ว
+ไม่มีสถานะว่าง เพราะแผงเปิดได้เฉพาะเมื่อเลือกผู้ใช้แล้ว
 
 ### 6.4 Lightbox ของรูปและวิดีโอ
 
@@ -718,7 +718,7 @@ export const qk = {
 
 `retry` ของ query: 0 สำหรับ query ที่ poll (รอบถัดไปคือการลองใหม่) และ 1 สำหรับ query อื่น ไม่ retry เมื่อได้ 4xx
 
-### 7.2 รายชื่อลูกค้า
+### 7.2 รายชื่อผู้ใช้
 
 `useContacts({ filter, q })` เก็บใน `qk.contacts({ filter, q })`:
 
@@ -734,7 +734,7 @@ type ContactListState = {
 ```
 
 1. หน้าแรก: `listContacts({ filter, q })` แล้ว `cursor = highWater`
-2. ทุกรอบ poll: `listContacts({ afterUpdatedSeq: pollAfter(cursor) })` ได้ลูกค้าที่เปลี่ยนโดยไม่กรอง แล้ว `items = mergeById(items, page.contacts)` กรองด้วย `matchesContactFilter(c, filter, q)` เรียงด้วย `compareContacts`, `counts` และ `lineConfigured` ใช้ค่าล่าสุด, `cursor = advanceCursor(cursor, page.highWater)` ถ้า `page.hasMore` เป็น true ขอรอบถัดไปทันที
+2. ทุกรอบ poll: `listContacts({ afterUpdatedSeq: pollAfter(cursor) })` ได้ผู้ใช้ที่เปลี่ยนโดยไม่กรอง แล้ว `items = mergeById(items, page.contacts)` กรองด้วย `matchesContactFilter(c, filter, q)` เรียงด้วย `compareContacts`, `counts` และ `lineConfigured` ใช้ค่าล่าสุด, `cursor = advanceCursor(cursor, page.highWater)` ถ้า `page.hasMore` เป็น true ขอรอบถัดไปทันที
 3. เลื่อนลง: `listContacts({ filter, q, before })` ต่อท้าย `items` ด้วย `mergeById` ไม่แตะ `cursor`
 4. เปลี่ยน `filter` หรือ `q`: key ใหม่ โหลดหน้าแรกของ key นั้น
 5. `AppShell` poll `qk.contacts({ filter: "all", q: "" })` เมื่อหน้าแชทไม่ได้เปิด (เช่น หน้าตั้งค่า) เพื่อให้เมนูมี `counts.unread` เสมอ เมื่อหน้าแชทเปิด เมนูอ่าน `counts` จาก key ที่หน้าแชทใช้
@@ -875,6 +875,8 @@ function pollAfter(cursor: string): string               // max(0, cursor - POLL
 function advanceCursor(cursor: string, highWater: string): string // ค่าที่มากกว่า
 function mergeById<T extends { id: string; updatedSeq: string | null }>(current: readonly T[], incoming: readonly T[]): T[]
 // รวมด้วย id เก็บตัวที่ updatedSeq สูงกว่า (null คือยังไม่ถึง server ถือว่าต่ำที่สุด) แถวใหม่ต่อท้าย
+function nextTabIndex(key: string, current: number, count: number): number | null
+// แท็บแนวนอน: ArrowRight, ArrowLeft วนรอบ, Home, End; ปุ่มอื่นคืน null ใช้ทั้งแท็บของรายชื่อและแท็บของหน้าตั้งค่า
 ```
 
 รูปแบบวันที่และเวลาบนหน้าจอทุกจุดมาจากฟังก์ชันของข้อนี้และ `formatListTime`, `formatDayChip` (ข้อ 8.2) ตามกฎใน [ux-writing](../guidelines/ux-writing.md#วันที่และเวลา) ไม่มีสตริง ISO บนหน้าจอ
@@ -888,7 +890,7 @@ function mergeById<T extends { id: string; updatedSeq: string | null }>(current:
 | ไฟล์ | ฟังก์ชัน |
 | --- | --- |
 | `inbox.logic.ts` | การจัดรูปเวลาในรายชื่อ ตัวอย่างข้อความล่าสุด การกรองและเรียงรายชื่อ การจัดกลุ่มข้อความและป้ายวัน `threadSubline`, `aiSwitchView` และ type `AttachmentState` |
-| `list/inbox.list.logic.ts` | `parseFilter`, `filterQuery`, `contactHref`, `unreadBadgeText`, `unreadAriaText`, `emptyState`, `nextRowIndex`, `nextTabIndex`, `tabbableRowId` |
+| `list/inbox.list.logic.ts` | `parseFilter`, `filterQuery`, `contactHref`, `unreadBadgeText`, `unreadAriaText`, `emptyState`, `nextRowIndex`, `tabbableRowId` |
 | `thread/inbox.thread.logic.ts` | `newMessages`, `planTailScroll`, `shouldLoadOlder`, `restoredScrollTop`, `resolveMedia`, `otherLabel`, `deliveryReason`, `failedLineText`, `fillCopy` |
 | `inbox.send.logic.ts` | การเปลี่ยนสถานะของการส่งแบบ optimistic ตามข้อ 7.5 และการรวมหน้าของแชท (`threadFromFirstPage`, `applyThreadPoll`, `applyOlderPage`, `loadThread`, `buildSendBody`, `optimisticMessage`, `bodyFromRow`, `applySendEvent`, `failureEvent`, `pendingSendOfUpload`, `retryPlan(row, now)`, `isRetryExpired(row, now)`, `outgoingStatus`) |
 
@@ -942,7 +944,7 @@ function matchesContactFilter(c: ContactDto, filter: ContactFilter, q: string): 
 // unread: unreadCount > 0, needs_admin: needsAdmin, q ว่างตรงทุกคน ไม่ว่าง: displayName มี q แบบไม่สนตัวพิมพ์
 function compareContacts(a: ContactDto, b: ContactDto): number
 // (lastMessage?.at ?? createdAt) ใหม่ไปเก่า แล้ว id ใหม่ไปเก่า ตรงกับลำดับของ GET /api/contacts
-// lastMessage.at คือเวลาข้อความล่าสุดของลูกค้า ข้อความของแอดมินหรือ AI จึงไม่ย้ายแถวเมื่อรวมผลของ polling
+// lastMessage.at คือเวลาข้อความล่าสุดของผู้ใช้ ข้อความของแอดมินหรือ AI จึงไม่ย้ายแถวเมื่อรวมผลของ polling
 ```
 
 ```ts
@@ -1037,6 +1039,16 @@ function validateAccessCode(value: string): { ok: true; code: string } | { ok: f
 
 ### 8.5 `src/features/settings/settings.logic.ts`
 
+ฟังก์ชันของแท็บอยู่ใน `src/features/settings/settings.tabs.logic.ts`:
+
+```ts
+const SETTINGS_TABS = ["ai", "knowledge", "line", "usage", "status"] as const
+function parseSettingsTab(param: string | null): SettingsTab | null      // ค่าที่ไม่รู้จักคืน null
+function resolveSettingsTab(input: { param: string | null; lineConfigured: boolean | undefined; settingsFailed: boolean }): SettingsTab | null
+// แท็บใน URL ก่อน; ไม่มี: lineConfigured false → "line", true → "ai", ยังโหลด → null (skeleton), โหลดไม่สำเร็จ → "ai"
+function settingsTabSearch(currentSearch: string, tab: SettingsTab): string   // "?tab=line" คง parameter อื่น
+```
+
 ฟังก์ชันของส่วนขอบเขตหัวข้ออยู่ใน `src/features/settings/settings.guard.logic.ts` (`addGuardTopic`, `removeGuardTopic`, `focusAfterTopicRemoved`, `validateGuardTestInput`, `guardErrorText`, `guardTestDisabledReason`, `fillTemplate`) hook ของส่วนนี้อยู่ใน `settings.guard.hooks.ts` และฟังก์ชันเรียก API อยู่ใน `settings.guard.api.ts`
 
 ```ts
@@ -1048,7 +1060,11 @@ function parseBudgetInput(input: string): { ok: true; value: number } | { ok: fa
 // ตัวเลขทศนิยมไม่เกิน 2 ตำแหน่ง ช่วง 0 ถึง AI_DAILY_BUDGET_MAX_USD
 function validateInstructions(text: string): { ok: true } | { ok: false; code: "instructions_too_long" }   // ≤ AI_INSTRUCTIONS_MAX_CHARS ตัวอักษร
 function validateAiName(text: string): { ok: true; value: string } | { ok: false; code: "ai_name_too_long" }   // trim แล้ว ≤ AI_NAME_MAX_CHARS ว่างได้
-function validateLineCredentials(input: { channelSecret: string; channelAccessToken: string }): { ok: true } | { ok: false; field: "channelSecret" | "channelAccessToken"; code: "required" }
+function validateLineCredentials(input: Partial<Record<"channelId" | "channelSecret" | "channelAccessToken", string>>): { ok: true; body: LineCredentialsInput } | { ok: false; field; code: "required" | "invalid" }
+// ตรวจเฉพาะช่องที่เปิด (มีใน input) ตามลำดับของฟอร์ม: ว่างหลัง trim → required, Channel ID ไม่ตรง LINE_CHANNEL_ID_PATTERN → invalid; body คือค่าที่ trim แล้ว
+function lineFieldLocked(field: { saved: boolean; editing: boolean }): boolean   // saved && !editing
+function lineCredentialsToSend(fields: Record<field, { saved; editing; value }>): LineCredentialsInput   // ค่าของช่องที่ไม่ล็อก
+function lineCredentialsSendable(input: LineCredentialsInput): boolean   // มีช่องที่เปิดและมีค่าหลัง trim อย่างน้อยหนึ่งช่อง
 function monthOptions(now: Date, count = 12): { value: string; label: string }[]
 // value "2026-11", label จาก formatMonthYear ("พ.ย. 2569") ใหม่ไปเก่า เดือนแรกคือเดือนของ now ตามเวลาไทย
 function addGuardTopic(topics: readonly string[], typed: string): { ok: true; topics: string[] } | { ok: false; code: "topic_required" | "too_many_topics" | "topic_too_long" | "duplicate_topic" }
@@ -1062,7 +1078,7 @@ function validateGuardTestInput(text: string): { ok: true } | { ok: false; code:
 function guardTestDisabledReason(settings: SettingsDto): null | "killed" | "needs_topics"
 // ai.enabled false → killed, guard.topics ว่าง → needs_topics, นอกนั้น null
 function usageTokenTotal(report: Pick<UsageReport, "contacts" | "ingest" | "guard">): number
-// ผลรวม totalTokens ของทุกแถวลูกค้า ของ ingest และของ guard ใช้ในแถวรวม ส่วนยอดเงิน จำนวนครั้ง และค่าเฉลี่ยใช้ totalCostUsd, replyCount และ averageCostPerReplyUsd จาก server ตาม use-cases.md#getusagereport-และ-getcontactusage
+// ผลรวม totalTokens ของทุกแถวผู้ใช้ ของ ingest และของ guard ใช้ในแถวรวม ส่วนยอดเงิน จำนวนครั้ง และค่าเฉลี่ยใช้ totalCostUsd, replyCount และ averageCostPerReplyUsd จาก server ตาม use-cases.md#getusagereport-และ-getcontactusage
 ```
 
 ## 9. หน้าตั้งค่า
@@ -1071,98 +1087,134 @@ function usageTokenTotal(report: Pick<UsageReport, "contacts" | "ingest" | "guar
 
 ```
 src/features/settings/
-  SettingsPage.tsx              คอลัมน์เดียว กว้างสุด 760px
-    SettingsSection.tsx         หัวส่วน + เส้นคั่น + error boundary ของส่วน
-      SettingsRow.tsx           ป้ายตัวหนา + คำอธิบายหนึ่งบรรทัด ซ้าย, control ขวา
-    AiSettingsSection.tsx
-      AiPersonaRows.tsx         แถวชื่อ AI และขอบเขตคำตอบ
-      SettingsFormParts.tsx     ปุ่มบันทึกของช่อง, บรรทัด error, ข้อความเมื่อบันทึกไม่สำเร็จ, ปุ่มลูกศรของกลุ่มตัวเลือก
-    GuardSection.tsx            ข้อ 9.13 วางถัดจาก AiSettingsSection
-      GuardTestBox.tsx
-    LineSettingsSection.tsx
-    RichMenuSection.tsx         ข้อ 9.4.1 วางถัดจาก LineSettingsSection
-    KnowledgeSection.tsx
-      KbDocumentTable.tsx
-      KbTextDialog.tsx
-      KbDeleteDialog.tsx
-    UsageSection.tsx
-      UsageDetailDialog.tsx
-    SystemStatusSection.tsx
+  SettingsPage.tsx              หัวหน้า + <Suspense> รอบ SettingsTabs กว้างสุด 880px
+    SettingsTabs.tsx            tablist ห้าแท็บ และ panel ของแท็บที่เปิด (mount เฉพาะแท็บนั้น)
+      SettingsSection.tsx       การ์ด: หัวการ์ด + error boundary ของการ์ด
+        SettingsRow.tsx         ป้ายตัวหนา + คำอธิบาย ซ้าย, control ในคอลัมน์ขวาหรือใต้ป้าย
+      แท็บ AI
+        AiSettingsSection.tsx   การ์ด "การทำงาน" (AiSettingsSection) และ "ตัวตนและน้ำเสียง" (AiPersonaSection)
+          AiPersonaRows.tsx     แถวชื่อ AI, คำลงท้าย และขอบเขตคำตอบ (ใช้ในแท็บความรู้และขอบเขต)
+          SettingsFormParts.tsx ปุ่มบันทึกของช่อง, บรรทัด error, ข้อความเมื่อบันทึกไม่สำเร็จ, ปุ่มลูกศรของกลุ่มตัวเลือก
+      แท็บความรู้และขอบเขต
+        KnowledgeSection.tsx    การ์ด "ความรู้ที่ใช้ตอบ": ขอบเขตคำตอบ แล้วคลังความรู้
+          KbDocumentTable.tsx
+          KbTextDialog.tsx
+          KbDeleteDialog.tsx
+        GuardSection.tsx        การ์ด "ขอบเขตหัวข้อ" ข้อ 9.13
+          GuardTestBox.tsx
+      แท็บ LINE
+        LineSettingsSection.tsx การ์ด "การเชื่อมต่อ" ข้อ 9.4
+        RichMenuSection.tsx     การ์ด "Rich menu" (RichMenuSection) และ "ข้อความต้อนรับ" (WelcomeSection) ข้อ 9.4.1
+      แท็บค่าใช้จ่าย
+        UsageSection.tsx
+          UsageDetailDialog.tsx
+      แท็บสถานะระบบ
+        SystemStatusSection.tsx
   settings.api.ts  settings.logic.ts  settings.constants.ts  settings.hooks.ts
+  settings.tabs.logic.ts        แท็บและ URL
   settings.guard.api.ts  settings.guard.logic.ts  settings.guard.hooks.ts   ของส่วนขอบเขตหัวข้อ
 ```
 
 ### 9.2 โครงร่วม
 
+หน้าตั้งค่าแบ่งเป็นแท็บแทนหน้ายาวหน้าเดียว ([ADR 0031](../adr/0031-settings-tabs-user-wording-and-neutral-prompt.md))
+
+| แท็บ (`?tab=`) | ป้าย | การ์ดตามลำดับ |
+| --- | --- | --- |
+| `ai` | `settings.tabs.ai` | `settings.ai.title` (สวิตช์ทั้งระบบ, โมเดล, งบต่อวัน), `settings.ai.personaTitle` (ชื่อ AI, คำลงท้าย, คำแนะนำสำหรับ AI) |
+| `knowledge` | `settings.tabs.knowledge` | `settings.kb.cardTitle` (ขอบเขตคำตอบ แล้วคลังความรู้: อัปโหลด, แถบการใช้, ตาราง), `settings.guard.title` (ข้อ 9.13) |
+| `line` | `settings.tabs.line` | `settings.line.title` (ข้อ 9.4), `settings.richMenu.title` และ `settings.richMenu.welcomeTitle` (ข้อ 9.4.1) |
+| `usage` | `settings.tabs.usage` | `settings.usage.title` (ข้อ 9.9) |
+| `status` | `settings.tabs.status` | `settings.status.title` (ข้อ 9.11) |
+
+แท็บ:
+
+- `role="tablist"` (`aria-label` `settings.tabs.label`) ของปุ่ม `role="tab"` ที่ `aria-selected`, `aria-controls` ไปที่ panel `role="tabpanel"` ซึ่ง `aria-labelledby` แท็บที่เปิด แท็บที่เปิดอยู่ในลำดับ Tab อันเดียว (roving `tabIndex`) ลูกศรซ้ายขวาเลื่อนและเปิดแท็บถัดไปแบบวนรอบ Home และ End ไปแท็บแรกและแท็บสุดท้าย (`nextTabIndex` ข้อ 8.1) focus มีขอบที่มองเห็น
+- แท็บแบบขีดเส้นใต้ แท็บที่เปิดเป็นตัวหนาสี `accent-strong` พร้อมเส้นใต้ 2px แท็บอื่นสี `muted` แถบแท็บเลื่อนแนวนอนในกล่องของตัวเองที่ 390px หน้าไม่เลื่อนแนวนอน
+- แท็บที่เปิดอยู่ใน URL (`/settings?tab=ai|knowledge|line|usage|status`) เปลี่ยนแท็บด้วย `window.history.pushState` ซึ่ง Next.js รวมเข้ากับ router (`useSearchParams` เห็นค่าใหม่) โหลดหน้าใหม่ได้แท็บเดิม และปุ่มย้อนกลับกับไปข้างหน้าเปลี่ยนแท็บ ค่าที่ไม่รู้จักถือว่าไม่มี (`parseSettingsTab`)
+- ไม่มี `?tab=`: เปิด `ai` แต่ถ้ายังไม่ได้เชื่อม LINE (`line.configured` false) เปิด `line` URL ไม่เปลี่ยน ระหว่างที่ settings ยังโหลด panel แสดง skeleton และโหลด settings ไม่สำเร็จเปิด `ai` (`resolveSettingsTab` ข้อ 8.5)
+- Mount เฉพาะ panel ของแท็บที่เปิด query ของแท็บอื่นจึงไม่โหลดและไม่ polling (สถานะระบบ polling เฉพาะเมื่อแท็บสถานะระบบเปิด คลังความรู้ polling เฉพาะเมื่อแท็บความรู้และขอบเขตเปิดและมีไฟล์ที่กำลังอ่าน) กฎ polling ต่อ query ของข้อ 7.4 ไม่เปลี่ยน
+- `SettingsTabs` ใช้ `useSearchParams` จึงอยู่ใน `<Suspense>` ตามเอกสารของ Next.js
+
 | ส่วน | ค่า |
 | --- | --- |
-| หน้า | พื้น `page` คอลัมน์ `surface` กว้างสุด 760px กลางจอ padding 32px 40px (จอแคบ 20px 16px) |
-| หัวหน้า | `settings.page.title` แบบ `text-title` |
-| ส่วน | หัว `text-section` margin-top 32px เส้นบน 1px `line` padding-top 24px ไม่มีการ์ด |
-| แถว | `SettingsRow` สูงอย่างน้อย 64px padding 12px 0 ไม่มีเส้นคั่นระหว่างแถวในส่วนเดียวกัน (ระยะห่างแยกแถวแทน) เส้น 1px `line` มีเฉพาะระหว่างส่วน: ซ้ายคือป้าย 15px ตัวหนา + คำอธิบาย 14px สี `muted` หนึ่งบรรทัด, ขวาคือ control ห่าง 24px แถวที่เขียนเองในแต่ละส่วน (สถานะ LINE, ขั้นตอนตั้งค่า, แถวสถานะระบบ, แถว skeleton) ใช้ระยะเดียวกันและไม่มีเส้น ตาราง (คลังความรู้, ค่าใช้จ่าย AI, dialog รายข้อความ) ยังมีเส้นคั่นแถวของตาราง |
-| จอแคบ | control ที่กว้าง (ช่องกรอก, textarea, ตาราง) ย้ายลงใต้ป้ายเต็มความกว้าง สวิตช์และปุ่มเล็กอยู่ขวาเหมือนเดิม |
+| หน้า | พื้น `page` กว้างสุด 880px กลางจอ padding 32px 40px (จอแคบ 20px 16px) |
+| หัวหน้า | `settings.page.title` แบบ `text-title` แล้วแถบแท็บ |
+| การ์ด | พื้น `surface` ขอบ 1px `line` มุม 18px padding 20px 24px (จอแคบ 16px) ระหว่างการ์ด 16px หัวการ์ด `text-section` ตัวหนา |
+| แถว | `SettingsRow` สูงอย่างน้อย 64px padding 12px 0 ไม่มีเส้นคั่นระหว่างแถวในการ์ดเดียวกัน (ระยะห่างแยกแถวแทน): ซ้ายคือป้าย 15px ตัวหนา + คำอธิบาย 14px สี `muted` แถวที่เขียนเองในแต่ละการ์ด (สถานะ LINE, ขั้นตอนตั้งค่า, แถวสถานะระบบ, แถว skeleton) ใช้ระยะเดียวกันและไม่มีเส้น ตาราง (คลังความรู้, ค่าใช้จ่าย AI, dialog รายข้อความ) ยังมีเส้นคั่นแถวของตาราง |
+| ตำแหน่งของ control | `layout` ของ `SettingsRow`: `inline` (สวิตช์ ปุ่มเล็ก) อยู่ขวาทุกความกว้าง, `column` อยู่ในคอลัมน์ control กว้าง 340px ชิดขวาบนจอกว้าง และเต็มความกว้างใต้ป้ายบนจอแคบ, `stacked` (textarea, รายการ, ตาราง, ตัวเลือกขอบเขตคำตอบ) เต็มความกว้างใต้ป้ายทุกความกว้าง |
+| คอลัมน์ control | ทุกแถวแบบ `column` ในการ์ดเดียวกันใช้ความกว้างเดียวกัน (`SETTINGS_CONTROL_COLUMN`) และขอบขวาเดียวกัน control ในคอลัมน์ยืดเต็มคอลัมน์: Select ของโมเดล, ช่องงบ (+ ปุ่มบันทึก), ช่องชื่อ AI + ปุ่มบันทึก, กลุ่มคำลงท้าย, ช่องของ LINE + ปุ่มคัดลอกหรือปุ่มดินสอ, ปุ่มอัปโหลด PDF ช่องและปุ่มที่อยู่ด้วยกันสูงเท่ากัน (44px จอแคบ, 40px จอกว้าง) |
 
-ปุ่มทั้งหน้าเป็นแบบรอง (ขอบ 1px `line` พื้น `surface` ตัว `fg` ตัวหนา ทรงแคปซูล สูง 36px จอแคบ 44px) หน้านี้จึงไม่มีปุ่มหลัก ปุ่มหลักมีเฉพาะใน dialog
+ปุ่มทั้งหน้าเป็นแบบรอง (ขอบ 1px `line` พื้น `surface` ตัว `fg` ตัวหนา ทรงแคปซูล สูง 36px จอแคบ 44px) ยกเว้นปุ่มบันทึกของช่อง (`SaveButton`): อยู่ข้างช่องเสมอ ช่องจึงไม่ขยับเมื่อเริ่มพิมพ์ ค่ายังไม่เปลี่ยนเป็นปุ่มแบบรองที่ `disabled` ค่าเปลี่ยนแล้วเป็นปุ่มหลัก (`data-dirty` บอกสถานะ) กฎนี้ใช้กับทุกปุ่มบันทึกของช่อง: งบต่อวัน, ชื่อ AI, คำแนะนำสำหรับ AI, ข้อความวิธีทดสอบ, ข้อความในการ์ดต้อนรับ และปุ่มบันทึกของการ์ดการเชื่อมต่อ ([ux-writing](../guidelines/ux-writing.md#ปุ่ม))
 
-ทุกส่วนมีสถานะกำลังโหลด (แถว skeleton เท่าจำนวนแถวจริง) และผิดพลาด (`ErrorState` ของส่วน + `common.action.retry`) แยกกัน ส่วนที่พังไม่ทำให้ส่วนอื่นพัง
+ทุกการ์ดมีสถานะกำลังโหลด (แถว skeleton เท่าจำนวนแถวจริง) และผิดพลาด (`ErrorState` ของการ์ด + `common.action.retry`) แยกกัน การ์ดที่พังไม่ทำให้การ์ดอื่นพัง
 
 ลำดับ focus ไล่ตามลำดับที่เห็น บนลงล่าง ซ้ายไปขวา
 
 ### 9.3 ส่วน AI ตอบแทน
 
-ข้อมูล: `useSettings()` field `ai.*` แก้ด้วย `useMutation(updateSettings)`
+แท็บ AI มีสองการ์ด ข้อมูล: `useSettings()` field `ai.*` แก้ด้วย `useMutation(updateSettings)` การ์ด `settings.ai.title` (`settings-section-ai`) มีสามแถวแรกของตาราง การ์ด `settings.ai.personaTitle` (`settings-section-ai-persona`) มีคำลงท้าย ชื่อ AI และคำแนะนำสำหรับ AI แถวขอบเขตคำตอบอยู่บนสุดของการ์ด `settings.kb.cardTitle` ในแท็บความรู้และขอบเขต (ข้อ 9.5)
 
 | แถว | Control | บันทึกเมื่อ | `data-testid` |
 | --- | --- | --- | --- |
-| `settings.ai.killSwitch` | สวิตช์ | เปลี่ยนค่า (optimistic, ล้มเหลวคืนค่าเดิม + toast) toast `settings.ai.killSwitchOnToast` / `settings.ai.killSwitchOffToast` | `settings-kill-switch` |
-| `settings.ai.model` | `Select` (ข้อ 1.8) 3 ตัวเลือก กว้าง 220px (จอแคบเต็มความกว้างใต้ป้าย) ชื่อจากป้ายของแถว (`aria-labelledby`) | เลือกค่าใหม่: แสดงค่าใหม่ทันทีและ `pending` ระหว่างบันทึก สำเร็จ toast `common.toast.saved` ล้มเหลวคืนค่าเดิมและแสดง error ใต้ control | `settings-model` (ปุ่ม มี `data-value`), `settings-model-option` (ตัวเลือก มี `data-value`) |
-| `settings.ai.budget` | ช่องตัวเลขกว้าง 120px นำหน้าด้วย `$` + บรรทัดใต้ `settings.ai.budgetToday` (ยอดวันนี้จาก `ai.todayCostUsd` ของ `SettingsDto`) + ปุ่ม `common.action.save` แสดงเมื่อค่าเปลี่ยน | กดบันทึก หรือ Enter | `settings-budget`, `settings-budget-save`, `settings-budget-today` |
-| `settings.ai.particle` | กลุ่มปุ่มเลือกสองตัว (`role="radiogroup"`) `ค่ะ` / `ครับ` | เปลี่ยนค่า | `settings-particle` |
-| `settings.ai.aiName` | ช่องข้อความบรรทัดเดียวกว้าง 220px (จอแคบเต็มความกว้างใต้ป้าย) placeholder `settings.ai.aiNamePlaceholder` + ปุ่ม `common.action.save` แสดงเมื่อค่าที่ตัดช่องว่างแล้วต่างจากที่บันทึก ยาวเกิน `AI_NAME_MAX_CHARS` หลังตัดช่องว่างได้ `settings.ai.error.ai_name_too_long` ใต้ช่องและไม่ส่ง ช่องว่างล้วนล้างชื่อ | กดบันทึก หรือ Enter | `settings-ai-name`, `settings-ai-name-save` |
-| `settings.ai.answerMode` | กลุ่มตัวเลือกสองตัว (`role="radiogroup"` ชื่อจากป้ายของแถว) แบบเดียวกับคำลงท้าย (ขอบ `accent-strong` พื้น `selected` และเครื่องหมายถูกเมื่อเลือก) แต่ละตัวมีชื่อ (`settings.ai.answerModeOption.*`) และคำอธิบายหนึ่งบรรทัด (`settings.ai.answerModeOptionDesc.*` ผูกด้วย `aria-describedby`) เรียงสองคอลัมน์กว้างรวม 460px จอแคบซ้อนกันเต็มความกว้าง ปุ่มลูกศร Home และ End เลื่อนและเลือก | เปลี่ยนค่า | `settings-answer-mode` (กลุ่ม) ตัวเลือกมี `data-value` |
-| `settings.ai.instructions` | `<textarea>` เต็มความกว้างใต้ป้าย 4 ถึง 12 บรรทัด ตัวนับ `settings.ai.instructionsCounter` `text-meta` + ปุ่มบันทึกเมื่อค่าเปลี่ยน | กดบันทึก (Enter ขึ้นบรรทัดใหม่) | `settings-instructions`, `settings-instructions-save` |
+| `settings.ai.killSwitch` | สวิตช์ (`inline`) | เปลี่ยนค่า (optimistic, ล้มเหลวคืนค่าเดิม + toast) toast `settings.ai.killSwitchOnToast` / `settings.ai.killSwitchOffToast` | `settings-kill-switch` |
+| `settings.ai.model` | `Select` (ข้อ 1.8) 3 ตัวเลือก เต็มคอลัมน์ control ชื่อจากป้ายของแถว (`aria-labelledby`) | เลือกค่าใหม่: แสดงค่าใหม่ทันทีและ `pending` ระหว่างบันทึก สำเร็จ toast `common.toast.saved` ล้มเหลวคืนค่าเดิมและแสดง error ใต้ control | `settings-model` (ปุ่ม มี `data-value`), `settings-model-option` (ตัวเลือก มี `data-value`) |
+| `settings.ai.budget` | ช่องตัวเลขที่มี `$` นำหน้าในช่อง + ปุ่ม `common.action.save` เต็มคอลัมน์ control + บรรทัดใต้ `settings.ai.budgetToday` (ยอดวันนี้จาก `ai.todayCostUsd` ของ `SettingsDto`) | กดบันทึก หรือ Enter | `settings-budget`, `settings-budget-save`, `settings-budget-today` |
+| `settings.ai.aiName` | ช่องข้อความบรรทัดเดียว + ปุ่ม `common.action.save` เต็มคอลัมน์ control placeholder `settings.ai.aiNamePlaceholder` ปุ่มอยู่เสมอ เป็นปุ่มหลักเมื่อค่าที่ตัดช่องว่างแล้วต่างจากที่บันทึก ยาวเกิน `AI_NAME_MAX_CHARS` หลังตัดช่องว่างได้ `settings.ai.error.ai_name_too_long` ใต้ช่องและไม่ส่ง ช่องว่างล้วนล้างชื่อ | กดบันทึก หรือ Enter | `settings-ai-name`, `settings-ai-name-save` |
+| `settings.ai.particle` | segmented control สองตัว (`role="radiogroup"` ชื่อจากป้ายของแถว) `ค่ะ` / `ครับ` กว้างเท่ากันและเต็มคอลัมน์ control สูงเท่าช่องกรอก ตัวที่เลือกพื้น `accent-strong` ตัวขาวพร้อมเครื่องหมายถูก ปุ่มลูกศร Home และ End เลื่อนและเลือก | เปลี่ยนค่า | `settings-particle` ตัวเลือกมี `data-value` |
+| `settings.ai.instructions` | `<textarea>` เต็มความกว้างใต้ป้าย (`stacked`) 4 ถึง 12 บรรทัด ตัวนับ `settings.ai.instructionsCounter` `text-meta` + ปุ่มบันทึกที่อยู่เสมอ | กดบันทึก (Enter ขึ้นบรรทัดใหม่) | `settings-instructions`, `settings-instructions-save` |
+
+แถวขอบเขตคำตอบ (การ์ด `settings.kb.cardTitle`):
+
+| แถว | Control | บันทึกเมื่อ | `data-testid` |
+| --- | --- | --- | --- |
+| `settings.ai.answerMode` | กลุ่มตัวเลือกสองตัว (`role="radiogroup"` ชื่อจากป้ายของแถว) เต็มความกว้างใต้ป้าย (`stacked`) ขอบ `accent-strong` พื้น `selected` และเครื่องหมายถูกเมื่อเลือก แต่ละตัวมีชื่อ (`settings.ai.answerModeOption.*`) และคำอธิบายหนึ่งบรรทัด (`settings.ai.answerModeOptionDesc.*` ผูกด้วย `aria-describedby`) เรียงสองคอลัมน์ จอแคบซ้อนกัน ปุ่มลูกศร Home และ End เลื่อนและเลือก คำว่า "ขอบเขตคำตอบ" มีบนหน้าจอครั้งเดียว (ป้ายแถวนี้) | เปลี่ยนค่า | `settings-answer-mode` (กลุ่ม) ตัวเลือกมี `data-value` |
 
 ค่าที่พิมพ์แต่บันทึกไม่สำเร็จยังอยู่ และข้อความ error อยู่ใต้ช่องนั้น ([ux-writing](../guidelines/ux-writing.md) ข้อ 6, 7)
 
 ### 9.4 ส่วน LINE Official Account
 
-ข้อมูล: `useSettings()` field `line.configured`, `line.status` (`connected` / `error` / `not_configured`), `line.botName`, `line.basicId`, `line.channelId`, `line.secretStatus` (`verified` / `unchecked` / `no_channel_id`), `line.lastWebhookAt`, `line.webhookUrl`
+การ์ด `settings.line.title` ของแท็บ LINE ข้อมูล: `useSettings()` field `line.configured`, `line.status` (`connected` / `error` / `not_configured`), `line.botName`, `line.basicId`, `line.channelId`, `line.secretStatus` (`verified` / `unchecked` / `no_channel_id`), `line.lastWebhookAt`, `line.webhookUrl`
 
 | แถว | Control | `data-testid` |
 | --- | --- | --- |
 | สถานะ | ป้ายสถานะ: จุด 8px + ข้อความ (`settings.line.statusConnected` สี `success`, `settings.line.statusError` สี `danger`, `settings.line.statusNotConfigured` สี `muted`) คำอธิบายคือชื่อ OA และ Basic ID, `settings.line.lastWebhook` และเมื่อ `configured` บรรทัดของ Channel secret 14px ตาม `secretStatus`: `settings.line.secretVerified` สี `muted`, `settings.line.secretUnchecked` หรือ `settings.line.secretNoChannelId` สี `warn` (สถานะเตือนของการตรวจที่ทำไม่ได้) | `line-status`, `line-bot-name`, `line-secret-status` (`data-status` เป็นค่าของ `secretStatus`) |
-| `settings.line.webhookUrl` | ช่องอ่านอย่างเดียว ตัวอักษร monospace 14px เต็มความกว้าง + ปุ่ม `settings.line.copy` ใช้ `navigator.clipboard.writeText` toast `settings.line.copiedToast` | `line-webhook-url`, `line-webhook-copy` |
-| `settings.line.channelId` | `<input type="text" inputmode="numeric" autocomplete="off" maxlength={LINE_CHANNEL_ID_MAX_CHARS}>` เต็มความกว้าง คำอธิบาย `settings.line.channelIdDesc` placeholder `settings.line.channelIdPlaceholder` ค่าเริ่มเป็น `line.channelId` (ไม่ใช่ความลับ) และคงค่าหลังบันทึก | `line-channel-id` |
-| `settings.line.channelSecret` | `<input type="password" autocomplete="off">` เต็มความกว้าง placeholder `settings.line.secretPlaceholderSet` เมื่อตั้งแล้ว หรือ `settings.line.secretPlaceholderEmpty` | `line-channel-secret` |
-| `settings.line.accessToken` | เหมือนข้างบน | `line-access-token` |
-| ปุ่ม | `settings.line.save` (`saveLineCredentials`) และ `settings.line.test` (`testLineConnection`) เรียงขวา ปุ่มทดสอบกดไม่ได้เมื่อยังไม่ได้ตั้งค่า พร้อมเหตุผล `settings.line.testNeedsCredentials` | `line-save`, `line-test` |
+| `settings.line.webhookUrl` | ช่อง `readOnly` (ไม่ใช่ `disabled` จึงยังเลือกข้อความได้) พื้น `rail` ตัวสี `muted` monospace 14px + ปุ่ม `settings.line.copy` ในคอลัมน์ control ใช้ `navigator.clipboard.writeText` toast `settings.line.copiedToast` ค่านี้แก้ไม่ได้เสมอ | `line-webhook-url`, `line-webhook-copy` |
+| `settings.line.channelId` | คอลัมน์ control: `<input type="text" inputmode="numeric" autocomplete="off" maxlength={LINE_CHANNEL_ID_MAX_CHARS}>` คำอธิบาย `settings.line.channelIdDesc` placeholder `settings.line.channelIdPlaceholder` เมื่อบันทึกแล้ว ช่องล็อก (`disabled` พื้น `rail`) แสดง `line.channelId` + ปุ่มไอคอนดินสอ | `line-channel-id` (`data-state` เป็น `locked` หรือ `editing`), `line-channel-id-edit` |
+| `settings.line.channelSecret` | เหมือนข้างบน คำอธิบาย `settings.line.channelSecretDesc` เมื่อบันทึกแล้ว ช่องล็อกแสดง `settings.line.savedMask` (ข้อความคงที่ ไม่มาจากค่าจริงและไม่บอกความยาว) ขณะแก้เป็น `<input type="password">` placeholder `settings.line.secretPlaceholderSet` ยังไม่เคยบันทึก `settings.line.secretPlaceholderEmpty` | `line-channel-secret`, `line-channel-secret-edit` |
+| `settings.line.accessToken` | เหมือน Channel secret คำอธิบาย `settings.line.accessTokenDesc` | `line-access-token`, `line-access-token-edit` |
+| ปุ่ม | `settings.line.test` (`testLineConnection` ใช้ค่าที่บันทึกไว้) และ `settings.line.save` (`SaveButton` ข้อ 9.2) เรียงขวา ปุ่มทดสอบกดไม่ได้เมื่อยังไม่ได้ตั้งค่า พร้อมเหตุผล `settings.line.testNeedsCredentials` (จอแคบเต็มบรรทัดเหนือปุ่ม) ปุ่มบันทึก `disabled` จนกว่าช่องที่เปิดอยู่อย่างน้อยหนึ่งช่องมีค่า (`lineCredentialsSendable`) | `line-test`, `line-save` |
 | ผลทดสอบ | บรรทัดใต้ปุ่ม `role="status"`: สำเร็จ `settings.line.testOk` + ` · ` + ข้อความของ `secretStatus` ที่การทดสอบตอบ (`data-result="ok"` สี `success` เมื่อ `verified`, `data-result="warning"` สี `warn` เมื่อ `unchecked` หรือ `no_channel_id`) ไม่สำเร็จใช้ error catalog สี `danger` (`data-result="error"`) | `line-result` |
 
-- ระบบไม่แสดงค่า secret เดิม ช่องของ Channel secret และ Channel access token ว่างเสมอหลังโหลดและหลังบันทึกสำเร็จ ([admin-backoffice](admin-backoffice.md)) ช่อง Channel ID แสดงค่าที่บันทึกไว้
-- บันทึกต้องกรอกทั้งสามช่อง ตรวจด้วย `validateLineCredentials` ตามลำดับของฟอร์ม ข้อความ `settings.line.error.*Required` และ Channel ID ที่ไม่ใช่ตัวเลข 1 ถึง `LINE_CHANNEL_ID_MAX_CHARS` หลักได้ `settings.line.error.channelIdInvalid` (`{max}`) focus ไปที่ช่องแรกที่ไม่ผ่าน
-- บันทึกไม่ผ่าน (token ผิด หรือ `line.channel_secret_invalid`) ค่าที่กรอกยังอยู่ ข้อความจาก error catalog
-- บันทึกสำเร็จ: toast `settings.line.savedToast` เมื่อ `secretStatus` เป็น `verified` และ `common.toast.saved` เมื่อ `unchecked` (สถานะเตือนอยู่ในบรรทัดของ Channel secret ซึ่งโหลดใหม่หลังบันทึก)
-- ยังไม่ได้ตั้งค่า: ก่อนแถว secret แสดงหัว `settings.line.setupTitle` และรายการลำดับเลข `settings.line.setupStep1` ถึง `settings.line.setupStep3` และลิงก์ `settings.line.setupGuide` ไป [line-oa-setup](../runbooks/line-oa-setup.md) บน GitHub `data-testid` `line-setup-steps`
+ช่องที่ล็อกและปุ่มดินสอ ([ADR 0031](../adr/0031-settings-tabs-user-wording-and-neutral-prompt.md)):
+
+- ช่องที่มีค่าบันทึกแล้ว (Channel ID: `line.configured` และ `line.channelId` มีค่า, สองช่องลับ: `line.configured`) เริ่มที่ล็อก ปุ่มไอคอนดินสอ (`Pencil`) `aria-label` `settings.line.edit` แทน `{field}` ด้วยป้ายของแถว กดแล้วช่องว่าง เปิดให้พิมพ์ ได้ focus และปุ่มกลายเป็นไอคอน X `aria-label` `settings.line.cancelEdit` ซึ่งกดแล้วช่องกลับไปล็อกพร้อมค่าที่บันทึก (`lineFieldLocked`)
+- ยังไม่ได้เชื่อม LINE: ทั้งสามช่องเปิดให้พิมพ์ ไม่มีปุ่มดินสอ
+- ส่งเฉพาะช่องที่เปิดอยู่ (`lineCredentialsToSend`) ตรวจด้วย `validateLineCredentials` ตามลำดับของฟอร์ม ช่องที่เปิดแต่ว่างได้ `settings.line.error.*Required` และ Channel ID ที่ไม่ใช่ตัวเลข 1 ถึง `LINE_CHANNEL_ID_MAX_CHARS` หลักได้ `settings.line.error.channelIdInvalid` (`{max}`) focus ไปที่ช่องแรกที่ไม่ผ่าน server เติมค่าที่ไม่ส่งจากที่บันทึกไว้แล้วตรวจกับ LINE ทั้งสามค่าเหมือนเดิม รวม `line.channel_mismatch` ([use-cases SetLineCredentials](../architecture/use-cases.md#setlinecredentials))
+- ระบบไม่แสดงค่า secret เดิม หน้าเว็บไม่มีค่าลับจาก server เลย ช่องลับที่ล็อกแสดงเพียงข้อความคงที่ ([admin-backoffice](admin-backoffice.md))
+- บันทึกไม่ผ่าน (token ผิด, `line.channel_secret_invalid`, `line.channel_mismatch`) ค่าที่กรอกยังอยู่และช่องยังเปิด ข้อความจาก error catalog
+- บันทึกสำเร็จ: ทุกช่องกลับไปล็อก ค่าที่พิมพ์ถูกล้างจากหน้า toast `settings.line.savedToast` เมื่อ `secretStatus` เป็น `verified` และ `common.toast.saved` เมื่อ `unchecked` (สถานะเตือนอยู่ในบรรทัดของ Channel secret ซึ่งโหลดใหม่หลังบันทึก)
+- ยังไม่ได้ตั้งค่า: ใต้แถว Webhook URL แสดงหัว `settings.line.setupTitle` และรายการลำดับเลข `settings.line.setupStep1` ถึง `settings.line.setupStep3` และลิงก์ `settings.line.setupGuide` ไป [line-oa-setup](../runbooks/line-oa-setup.md) บน GitHub `data-testid` `line-setup-steps`
 
 ### 9.4.1 ส่วน Rich menu และข้อความต้อนรับ
 
-ข้อมูล: `useSettings()` field `richMenu` (`published`, `publishedAt`, `lastError`, `howToText`, `howToDefault`), `welcome` (`enabled`, `text`, `defaultText`, `accountName`) และ `line.configured` พฤติกรรมอยู่ใน [admin-backoffice](admin-backoffice.md#ส่วน-rich-menu-และข้อความต้อนรับ)
+สองการ์ดของแท็บ LINE: `settings.richMenu.title` (`settings-section-rich-menu`: แถวสถานะและข้อความวิธีทดสอบ) และ `settings.richMenu.welcomeTitle` (`settings-section-welcome`: สวิตช์ ข้อความในการ์ด และตัวอย่าง) ปุ่มบันทึกของสองช่องข้อความอยู่เสมอตามข้อ 9.2 ข้อมูล: `useSettings()` field `richMenu` (`published`, `publishedAt`, `lastError`, `howToText`, `howToDefault`), `welcome` (`enabled`, `text`, `defaultText`, `accountName`) และ `line.configured` พฤติกรรมอยู่ใน [admin-backoffice](admin-backoffice.md#ส่วน-rich-menu-และข้อความต้อนรับ)
 
 | แถว | Control | `data-testid` |
 | --- | --- | --- |
 | `settings.richMenu.status` | ป้ายสถานะจุด 8px + `settings.richMenu.statusPublished` (สี `success`) หรือ `settings.richMenu.statusNotPublished` (สี `muted`) คำอธิบาย `settings.richMenu.publishedAt`, `settings.richMenu.notPublishedDesc` หรือ `settings.richMenu.needsLine` ปุ่มแบบรอง `settings.richMenu.publish` (`settings.richMenu.republish` เมื่อ publish แล้ว) และ `settings.richMenu.remove` เมื่อ publish แล้ว ปุ่มปิดเมื่อยังไม่เชื่อม LINE ระหว่างทำงานปุ่มที่กดหมุน `Loader2` และ `aria-busy` ล้มแล้ว toast และบรรทัด `settings.richMenu.lastError` สี `danger` `role="status"` ใต้ปุ่ม | `rich-menu-status` (`data-status` เป็น `published` หรือ `not_published`), `rich-menu-publish`, `rich-menu-remove`, `rich-menu-error` |
-| `settings.richMenu.howTo` | textarea 7 แถว เต็มความกว้าง แสดงข้อความที่บันทึก หรือ `howToDefault` เมื่อว่าง ตัวนับ `settings.richMenu.counter` (สี `danger` เมื่อเกิน `HOW_TO_TEXT_MAX_CHARS`) ปุ่ม `settings.richMenu.reset` เมื่อมีข้อความที่บันทึกเองหรือกำลังแก้ และ `common.action.save` เมื่อแก้ บันทึกไม่สำเร็จข้อความยังอยู่ | `settings-how-to`, `settings-how-to-save`, `settings-how-to-reset` |
+| `settings.richMenu.howTo` | textarea 7 แถว เต็มความกว้าง แสดงข้อความที่บันทึก หรือ `howToDefault` เมื่อว่าง ตัวนับ `settings.richMenu.counter` (สี `danger` เมื่อเกิน `HOW_TO_TEXT_MAX_CHARS`) ปุ่ม `settings.richMenu.reset` เมื่อมีข้อความที่บันทึกเองหรือกำลังแก้ และ `common.action.save` (อยู่เสมอ เป็นปุ่มหลักเมื่อแก้) บันทึกไม่สำเร็จข้อความยังอยู่ | `settings-how-to`, `settings-how-to-save`, `settings-how-to-reset` |
 | `settings.richMenu.welcomeSwitch` | สวิตช์ toast `settings.richMenu.welcomeOnToast` หรือ `settings.richMenu.welcomeOffToast` ล้มแล้วกลับค่าเดิมพร้อม toast error | `settings-welcome-switch` |
 | `settings.richMenu.welcomeText` | เหมือนข้อความวิธีทดสอบ textarea 3 แถว ไม่เกิน `WELCOME_TEXT_MAX_CHARS` | `settings-welcome-text`, `settings-welcome-text-save`, `settings-welcome-text-reset` |
 | `settings.richMenu.preview` | การ์ดอ่านอย่างเดียวกว้างสุด 300px: หัวพื้น `accent-strong` ทึบ (ไล่สีของแบรนด์จำกัดไว้สี่ที่ตาม [frontend](../architecture/frontend.md)) มีป้าย "T" และ `WELCOME_TITLE_LINE` กับ `welcome.accountName` ตัวขาว เนื้อคือข้อความที่บันทึกหรือข้อความเริ่มต้น บรรทัด `WELCOME_NOTE` สี `muted` และชื่อปุ่มสามปุ่ม (แรกพื้น `accent-strong` ตัวขาว, สองขอบ `line`, สามตัวสี `accent-strong`) ที่กดไม่ได้ | `welcome-preview` |
 
 ### 9.5 ส่วนคลังความรู้
 
-ข้อมูล: `listKbDocuments()` คืน `{ documents: DocumentDto[]; usedTokens: number; capacityTokens: number }`
+การ์ด `settings.kb.cardTitle` ของแท็บความรู้และขอบเขต: แถวขอบเขตคำตอบ (ข้อ 9.3) แล้วคลังความรู้ ข้อมูล: `listKbDocuments()` คืน `{ documents: DocumentDto[]; usedTokens: number; capacityTokens: number }`
 
 | ส่วน | ค่า | `data-testid` |
 | --- | --- | --- |
-| แถวบน | ไม่มีป้าย (หัวส่วน `settings.kb.title` เป็นชื่อเดียวกันแล้ว จึงไม่แสดงซ้ำ) ซ้ายคือคำอธิบาย `settings.kb.description` ขวาคือปุ่ม `settings.kb.upload` (ไอคอน `Upload`) เปิด `<input type="file" accept="application/pdf">` | `kb-upload`, `kb-upload-input` |
+| แถวบน | ป้าย `settings.kb.title` คำอธิบาย `settings.kb.description` ปุ่ม `settings.kb.upload` (ไอคอน `Upload`) เต็มคอลัมน์ control พร้อม hint ใต้ปุ่ม เปิด `<input type="file" accept="application/pdf">` | `kb-upload`, `kb-upload-input` |
 | แถบการใช้ | ใต้แถวบน: แท่งสูง 4px มุมมน พื้น `line` ส่วนที่ใช้สี `accent` (เมื่อ `warn` ใช้ `warn`, `full` ใช้ `danger`) `role="meter"` + ข้อความ `settings.kb.usage` 14px `tabular-nums` | `kb-usage-meter`, `kb-usage-text` |
 | ตาราง | คอลัมน์ `settings.kb.colFile` (ตัดบรรทัดเดียว), `settings.kb.colPages`, `settings.kb.colTokens` (ชิดขวา `tabular-nums`), `settings.kb.colStatus`, ปุ่มท้ายแถว หัวตาราง 14px สี `muted` แถวคั่นด้วยเส้น 1px `line` คอลัมน์ปุ่มไม่มีข้อความหัว จึงเป็น `<td aria-hidden="true">` ว่างในแถวหัวแทน `<th>` (axe `empty-table-header`) ตารางมี `<caption>` แบบ sr-only เป็น `settings.kb.title` | `kb-table`, `kb-row` |
 | สถานะในแถว | `processing`: spinner 14px + `settings.kb.statusProcessing`; `ready`: `settings.kb.statusReady` สี `success`; `failed`: `settings.kb.statusFailed` สี `danger` + เหตุผลจาก error catalog บรรทัดที่สอง | `kb-row-status` |
@@ -1212,12 +1264,12 @@ src/features/settings/
 
 ### 9.9 ส่วนค่าใช้จ่าย AI
 
-ข้อมูล: `getUsage(month)` คืน `{ month, priceTableDate, contacts: UsageRowDto[], ingest, guard, totalCostUsd, replyCount, averageCostPerReplyUsd, noResponseCount }` ตาม [api-contract](../architecture/api-contract.md#get-apiusage) (`usageReportResponseSchema` ใน `src/contracts/usage.contract.ts`) แถวของลูกค้าใช้ `contactId`, `displayName`, `pictureUrl`, `replyCount`, `totalTokens`, `costUsd` ส่วน `ingest` และ `guard` มี field เดียวกันคือ `count`, `inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`, `totalTokens`, `costUsd` (`guard` รวมการทดลองจากหน้าตั้งค่า และ `totalCostUsd` รวมลูกค้า + `ingest` + `guard`)
+ข้อมูล: `getUsage(month)` คืน `{ month, priceTableDate, contacts: UsageRowDto[], ingest, guard, totalCostUsd, replyCount, averageCostPerReplyUsd, noResponseCount }` ตาม [api-contract](../architecture/api-contract.md#get-apiusage) (`usageReportResponseSchema` ใน `src/contracts/usage.contract.ts`) แถวของผู้ใช้ใช้ `contactId`, `displayName`, `pictureUrl`, `replyCount`, `totalTokens`, `costUsd` ส่วน `ingest` และ `guard` มี field เดียวกันคือ `count`, `inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`, `totalTokens`, `costUsd` (`guard` รวมการทดลองจากหน้าตั้งค่า และ `totalCostUsd` รวมผู้ใช้ + `ingest` + `guard`)
 
 | ส่วน | ค่า | `data-testid` |
 | --- | --- | --- |
 | แถวบน | ไม่มีป้าย (หัวส่วนเป็นชื่อเดียวกันแล้ว) ขวาคือ `Select` (ข้อ 1.8) กว้าง 160px (จอแคบตามป้าย) เดือนจาก `monthOptions(now)` ค่าเริ่มต้นเดือนนี้ (`now` คือนาฬิกาของ browser ซึ่งอ่านหลัง hydration ด้วย `useHydrated()` เท่านั้น ระหว่าง render ฝั่ง server และ hydration `Select` ไม่มีตัวเลือกและไม่มีค่า และตารางแสดง skeleton โดยยังไม่เรียก `getUsage` เพราะนาฬิกาของ server อาจอยู่คนละเดือน) `aria-label` `settings.usage.monthLabel` | `usage-month` (ปุ่ม มี `data-value`), `usage-month-option` (ตัวเลือก มี `data-value`) |
-| ตาราง | คอลัมน์ `settings.usage.colContact` (รูป 28px + ชื่อ), `settings.usage.colReplies`, `settings.usage.colTokens`, `settings.usage.colCost` ตัวเลขชิดขวา `tabular-nums` แต่ละแถวลูกค้าเป็นปุ่มทั้งแถว (`role="button"` ใน `<tr>` ไม่ได้ จึงใช้ `<button>` ในเซลล์ชื่อที่ยืดเต็มแถวด้วย `::after`) เปิด `UsageDetailDialog` | `usage-table`, `usage-row` (มี `data-contact-id`) |
+| ตาราง | คอลัมน์ `settings.usage.colContact` (รูป 28px + ชื่อ), `settings.usage.colReplies`, `settings.usage.colTokens`, `settings.usage.colCost` ตัวเลขชิดขวา `tabular-nums` แต่ละแถวผู้ใช้เป็นปุ่มทั้งแถว (`role="button"` ใน `<tr>` ไม่ได้ จึงใช้ `<button>` ในเซลล์ชื่อที่ยืดเต็มแถวด้วย `::after`) เปิด `UsageDetailDialog` | `usage-table`, `usage-row` (มี `data-contact-id`) |
 | แถวอ่านไฟล์ | `settings.usage.ingestRow` แสดงจำนวนครั้งในคอลัมน์ครั้งที่ตอบเป็น `—` และ token, ราคา กดไม่ได้ | `usage-row-ingest` |
 | แถวคัดกรอง | `settings.usage.guardRow` จาก `guard` ของรายงาน: คอลัมน์ครั้งที่ตอบเป็น `—` ป้ายรองแสดงจำนวนครั้ง `settings.usage.guardCount` แทน `{n}` ด้วย `guard.count` และ token (`guard.totalTokens`), ราคา (`guard.costUsd`) กดไม่ได้ ข้อความที่ถูกกันไม่นับเป็นครั้งที่ AI ตอบ | `usage-row-guard` |
 | แถวรวม | ตัวหนา เส้นบน 1px `fg`: `settings.usage.total` + `replyCount`, `usageTokenTotal(report)` และ `totalCostUsd` จาก server | `usage-total` |
@@ -1225,7 +1277,7 @@ src/features/settings/
 | การเรียกที่ไม่ได้คำตอบ | แสดงเฉพาะเมื่อ `noResponseCount` > 0: `settings.usage.noResponse` แทน `{n}` ด้วย `noResponseCount` 14px สี `muted` ระหว่างบรรทัดค่าเฉลี่ยกับบรรทัดคำเตือนราคา ([usage-cost](usage-cost.md#การเรียกที่ไม่ได้คำตอบ)) | `usage-no-response` |
 | ว่าง | `settings.usage.empty` (ยังแสดงบรรทัดคำเตือนราคา) | `usage-empty` |
 
-จอแคบ: ตารางเลื่อนแนวนอนในกล่องของตัวเอง คอลัมน์ลูกค้ากว้างอย่างน้อย 160px
+จอแคบ: ตารางเลื่อนแนวนอนในกล่องของตัวเอง คอลัมน์ผู้ใช้กว้างอย่างน้อย 160px
 
 ### 9.10 Dialog รายข้อความ
 
@@ -1255,9 +1307,9 @@ src/features/settings/
 
 ### 9.12 `data-testid` ของหน้าตั้งค่า
 
-`settings-page`, `settings-section-ai`, `settings-section-guard`, `settings-section-line`, `settings-section-rich-menu`, `settings-section-kb`, `settings-section-usage`, `settings-section-status` และทุกค่าที่ระบุในข้อ 9.3 ถึง 9.7 (รวม 9.4.1), 9.9 ถึง 9.11 และ 9.13
+`settings-page`, `settings-tabs` (tablist), `settings-tab` (แต่ละแท็บ มี `data-tab`), `settings-tab-panel` (มี `data-tab` ของแท็บที่เปิด), `settings-section-ai`, `settings-section-ai-persona`, `settings-section-kb`, `settings-section-guard`, `settings-section-line`, `settings-section-rich-menu`, `settings-section-welcome`, `settings-section-usage`, `settings-section-status` และทุกค่าที่ระบุในข้อ 9.3 ถึง 9.7 (รวม 9.4.1), 9.9 ถึง 9.11 และ 9.13
 
-ลำดับของส่วนในหน้าตั้งค่า: AI ตอบแทน, ขอบเขตหัวข้อ (9.13), LINE Official Account, Rich menu และข้อความต้อนรับ (9.4.1), คลังความรู้, ค่าใช้จ่าย AI, สถานะระบบ
+ลำดับของแท็บและการ์ดอยู่ในข้อ 9.2
 
 ### 9.13 ส่วนขอบเขตหัวข้อ
 
@@ -1271,7 +1323,7 @@ src/features/settings/
 | บรรทัดท้ายส่วน | `settings.guard.blockedToday` แทน `{n}` ด้วย `guard.blockedToday` 14px สี `muted` `tabular-nums` | | `guard-blocked-today` |
 
 - control ทุกตัวของส่วนนี้แก้ได้แม้ kill switch ปิด
-- ข้อความปฏิเสธที่ลูกค้าได้ไม่ใช่ค่าที่ตั้งได้ในหน้านี้ เป็นประโยคคงที่ `guardRefusalText(particle)` ที่คำลงท้ายตาม `settings.ai.particle` ([topic-guard](topic-guard.md))
+- ข้อความปฏิเสธที่ผู้ใช้ได้ไม่ใช่ค่าที่ตั้งได้ในหน้านี้ เป็นประโยคคงที่ `guardRefusalText(particle, topics)` ที่คำลงท้ายตาม `settings.ai.particle` ([topic-guard](topic-guard.md))
 - หัวข้อที่พิมพ์แต่บันทึกไม่สำเร็จยังอยู่ในช่อง และข้อความ error อยู่ใต้ช่องนั้น ข้อความ error จาก server (`settings.guard_topics_required`, `request.invalid`) ใช้ error catalog ทุก element ที่แสดง error มี `data-code`
 - ข้อความ error ที่ตรวจใน browser ใช้ key `settings.guard.errors.<code>` ซึ่งในโค้ดคือ `copy.guard.errors.<code>`
 

@@ -176,4 +176,64 @@ describe('SetLineCredentials', () => {
     expect(dump).not.toContain(TOKEN);
     expect(dump).not.toContain(FAKE_LINE_INVALID_TOKEN);
   });
+
+  describe('partial update: values left out are the stored ones', () => {
+    beforeEach(async () => {
+      expect((await run(input(), ctx)).ok).toBe(true);
+      logger.entries.length = 0;
+    });
+
+    it('replaces only the token, checking it with the stored Channel ID and secret', async () => {
+      const newToken = 'access-token-new' as LineAccessToken; // brand: test token
+      const result = await run({ channelAccessToken: newToken }, ctx);
+
+      expect(result).toMatchObject({ ok: true, value: { secretStatus: 'verified' } });
+      const stored = await settings.getEncryptedLineCredentials();
+      expect(cipher.decrypt(stored?.channelAccessTokenEnc ?? '')).toEqual({
+        ok: true,
+        value: newToken,
+      });
+      expect(cipher.decrypt(stored?.channelSecretEnc ?? '')).toEqual({ ok: true, value: SECRET });
+      expect((await settings.get()).lineChannelId).toBe(CHANNEL_ID);
+    });
+
+    it("still refuses a new secret that is not the stored Channel ID's, and keeps the old one", async () => {
+      const result = await run({ channelSecret: 'someone-elses-secret' }, ctx);
+
+      expect(result.ok ? null : result.error.code).toBe('line.channel_secret_invalid');
+      const stored = await settings.getEncryptedLineCredentials();
+      expect(cipher.decrypt(stored?.channelSecretEnc ?? '')).toEqual({ ok: true, value: SECRET });
+    });
+
+    it('still refuses a new token of another channel (channel mismatch)', async () => {
+      const result = await run({ channelAccessToken: FAKE_LINE_OTHER_CHANNEL_TOKEN }, ctx);
+
+      expect(result).toEqual({ ok: false, error: { code: 'line.channel_mismatch' } });
+      const stored = await settings.getEncryptedLineCredentials();
+      expect(cipher.decrypt(stored?.channelAccessTokenEnc ?? '')).toEqual({
+        ok: true,
+        value: TOKEN,
+      });
+    });
+
+    it('answers line.credentials_unreadable when the stored values cannot be decrypted', async () => {
+      const other = makeSetLineCredentials(
+        { gateway, cipher: new FakeSecretCipher('another-key'), settings, clock, logger },
+        config,
+      );
+      const result = await other({ channelId: CHANNEL_ID }, ctx);
+
+      expect(result.ok ? null : result.error.code).toBe('line.credentials_unreadable');
+    });
+  });
+
+  it('answers line.not_configured for a partial update when nothing is stored, and writes nothing', async () => {
+    const result = await run({ channelAccessToken: TOKEN }, ctx);
+
+    expect(result.ok ? null : result.error.code).toBe('line.not_configured');
+    expect(await settings.getEncryptedLineCredentials()).toBeNull();
+    expect(logger.entries).toMatchObject([
+      { event: 'line.credentials.rejected', errorCode: 'line.not_configured' },
+    ]);
+  });
 });

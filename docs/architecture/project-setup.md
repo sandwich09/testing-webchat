@@ -180,7 +180,7 @@ pnpm 10 ไม่รัน install script ของ dependency โดยค่�
 │   ├── features/
 │   │   ├── access/    access.api.ts, access.logic.ts, access.constants.ts, WelcomePage.tsx (ไม่มี index.ts)
 │   │   ├── inbox/     inbox.api.ts, inbox.logic.ts, inbox.constants.ts, inbox.hooks.ts, InboxPage.tsx, ...
-│   │   │   ├── list/      รายชื่อลูกค้า: ContactList.tsx, inbox.list.logic.ts, ...
+│   │   │   ├── list/      รายชื่อผู้ใช้: ContactList.tsx, inbox.list.logic.ts, ...
 │   │   │   ├── thread/    ห้องแชทและแผงข้อมูล: Thread.tsx, inbox.thread.logic.ts, inbox.thread.hooks.ts, ...
 │   │   │   └── composer/  ช่องตอบและไฟล์แนบ: Composer.tsx, inbox.attachment.logic.ts, inbox.composer.hooks.ts, ...
 │   │   └── settings/  settings.api.ts, settings.logic.ts, settings.constants.ts, SettingsPage.tsx,
@@ -209,7 +209,7 @@ pnpm 10 ไม่รัน install script ของ dependency โดยค่�
 │   ├── global.setup.ts                   reset stub และเข้าระบบครั้งเดียวแล้วเก็บ storage state
 │   ├── fixtures/                         line/ (payload ของทุกชนิด event, credentials.ts), media/, kb/ ใช้ร่วมกันทุกชั้นทดสอบ
 │   ├── helpers/                          เซ็น webhook, สั่งและอ่าน stub
-│   ├── <journey>.spec.ts                 เส้นที่ใช้ลูกค้าของตัวเอง รันขนานได้
+│   ├── <journey>.spec.ts                 เส้นที่ใช้ผู้ใช้ของตัวเอง รันขนานได้
 │   └── global-state.serial.spec.ts       เส้นที่แตะค่ารวมของระบบ (3, 4, 6, 9) รันทีละเส้น
 ├── test-support/
 │   ├── server-only.ts                    module ว่าง ใช้แทน server-only ใน Vitest
@@ -372,7 +372,7 @@ Header คงที่ที่มาจาก [threat-model](../security/threat
 default-src 'self';
 script-src 'self' 'nonce-<nonce>' 'strict-dynamic';
 style-src 'self' 'unsafe-inline';
-img-src 'self' data: blob: https://profile.line-scdn.net https://stickershop.line-scdn.net https://*.public.blob.vercel-storage.com;
+img-src 'self' data: blob: https://profile.line-scdn.net https://sprofile.line-scdn.net https://stickershop.line-scdn.net https://*.public.blob.vercel-storage.com;
 media-src 'self' blob: https://*.public.blob.vercel-storage.com;
 font-src 'self';
 connect-src 'self' https://vercel.com https://*.public.blob.vercel-storage.com;
@@ -668,7 +668,7 @@ export default defineConfig({
 | Browser | Chromium อย่างเดียว ในสภาพแวดล้อมพัฒนามีของรุ่น 1.63.0 อยู่แล้ว ใน CI test รันใน image `mcr.microsoft.com/playwright:v1.63.0-noble` (ตรึงด้วย digest) ซึ่งมี Chromium และแพ็กเกจของระบบอยู่แล้ว tag ต้องตรงกับรุ่นของ `@playwright/test` ([ADR 0030](../adr/0030-e2e-in-playwright-container.md)) |
 | Trace | ปิดเป็นค่าเริ่มต้น เปิดเองเมื่อ debug ด้วย `pnpm test:e2e --trace on` |
 | ขนาดจอ | 1280x800 และ 390x844 ตาม [test-strategy](../qa/test-strategy.md) |
-| ขนาน | เส้นที่ใช้ลูกค้าของตัวเองรันขนานใน `desktop` และ `mobile` |
+| ขนาน | เส้นที่ใช้ผู้ใช้ของตัวเองรันขนานใน `desktop` และ `mobile` |
 | ทีละตัว | เส้นที่แตะค่ารวมของระบบ (3 AI ตอบแทน, 4 kill switch, 6 คลังความรู้, 9 ขอบเขตหัวข้อ) อยู่ในไฟล์ `e2e/global-state.serial.spec.ts` ไฟล์เดียว ใช้ `test.describe.configure({ mode: 'serial' })` รันใน `serial-desktop` แล้ว `serial-mobile` หลัง `desktop` กับ `mobile` จบ ไฟล์เดียวจึงไม่มีสอง worker แตะค่ารวมพร้อมกัน |
 | การเข้าระบบ | `global.setup.ts` เรียก `POST /__control/reset` ของ stub แล้วเข้าระบบด้วย `E2E_ACCESS_CODE` ครั้งเดียวและเก็บ storage state เส้นที่ 8 ใช้ context ว่างของตัวเอง |
 | Environment ของ Playwright | `E2E_ACCESS_CODE` (ค่าเริ่มต้นเท่ากับ `ACCESS_CODE` ใน compose), `E2E_LINE_CHANNEL_SECRET` (ค่าเริ่มต้นจาก `e2e/fixtures/line/credentials.ts`), `E2E_STUB_URL` (ค่าเริ่มต้น `http://localhost:4010`) ตาม [stubs-and-fixtures](../qa/stubs-and-fixtures.md#2-การต่อกับแอป) |
@@ -1167,7 +1167,7 @@ Environment variable ตั้งเฉพาะ Production ตาม [deploy](.
 | `CONTACT_NOTE_MAX_CHARS` | 1000 ตัวอักษร | `constants.ts` | โน้ตของแอดมินหนึ่งโน้ตหลังตัดช่องว่าง ทั้ง API และฟอร์ม |
 | `CONTACT_NOTE_LIST_LIMIT` | 100 โน้ต | `constants.ts` | จำนวนโน้ตที่ `GET /api/contacts/:id/notes` คืน |
 | `AI_NAME_MAX_CHARS` | 40 ตัวอักษร | `constants.ts` | ชื่อ AI หลังตัดช่องว่าง ทั้ง API และฟอร์ม ([ai-prompt](../specs/ai-prompt.md#21-slot)) |
-| `HOW_TO_TEXT_MAX_CHARS` | 1500 ตัวอักษร | `constants.ts` | ข้อความของปุ่ม "วิธีทดสอบ" หลังตัดช่องว่าง ทั้ง API และฟอร์ม ต่ำกว่า `LINE_TEXT_MAX_CHARS` จึงส่งเป็นข้อความเดียว ([line-messaging](../specs/line-messaging.md#เมื่อลูกค้ากดปุ่ม)) |
+| `HOW_TO_TEXT_MAX_CHARS` | 1500 ตัวอักษร | `constants.ts` | ข้อความของปุ่ม "วิธีทดสอบ" หลังตัดช่องว่าง ทั้ง API และฟอร์ม ต่ำกว่า `LINE_TEXT_MAX_CHARS` จึงส่งเป็นข้อความเดียว ([line-messaging](../specs/line-messaging.md#เมื่อผู้ใช้กดปุ่ม)) |
 | `WELCOME_TEXT_MAX_CHARS` | 300 ตัวอักษร | `constants.ts` | ข้อความต้อนรับในการ์ด ทั้ง API และฟอร์ม ([line-messaging](../specs/line-messaging.md#ข้อความต้อนรับ)) |
 | `POSTBACK_DATA_MAX_CHARS` | 300 ตัวอักษร | `constants.ts` | `postback.data` ที่ยาวกว่านี้เป็น `unsupported` (ขีดจำกัดของ LINE) |
 | `RICH_MENU_WIDTH` | 2500 px | `constants.ts` | ความกว้างของรูปและพื้นที่กดของ rich menu |
@@ -1187,8 +1187,10 @@ Environment variable ตั้งเฉพาะ Production ตาม [deploy](.
 | `GUARD_MAX_TOKENS` | 2000 | `constants.ts` | `max_tokens` ของการคัดกรอง |
 | `GUARD_TIMEOUT_MS` | 10000 ms | `constants.ts` | timeout ของการคัดกรองหนึ่งครั้ง ส่งใน `TopicGuardRequest.timeoutMs` |
 | `GUARD_CONTEXT_TURNS` | 4 turn | `constants.ts` | บริบทก่อนข้อความล่าสุดที่ส่งให้การคัดกรอง |
+| `PROFILE_REFRESH_AFTER_MS` | 86400000 ms (24 ชั่วโมง) | `constants.ts` | ดึงโปรไฟล์ของผู้ใช้ที่มีอยู่แล้วใหม่เมื่อการลองครั้งล่าสุด (สำเร็จหรือไม่) เก่ากว่านี้ ([line-messaging](../specs/line-messaging.md#โปรไฟล์ของผู้ใช้)) |
+| `GUARD_REFUSAL_MAX_TOPICS` | 5 หัวข้อ | `constants.ts` | จำนวนหัวข้อที่ `guardRefusalText` บอกชื่อ หัวข้อที่เกินสรุปเป็น "และเรื่องอื่น ๆ" ข้อความจึงยาวไม่เกินราว 500 ตัวอักษร ต่ำกว่า `LINE_TEXT_MAX_CHARS` มาก ([topic-guard](../specs/topic-guard.md)) |
 
-ค่าเริ่มต้นของระบบที่ติดตั้งใหม่: kill switch ปิด, ขอบเขตหัวข้อปิดและไม่มีหัวข้อ, งบต่อวันตาม `DEFAULT_AI_DAILY_BUDGET_USD`, โมเดลตาม `DEFAULT_AI_MODEL`, คำลงท้ายตาม `DEFAULT_POLITE_PARTICLE`, ขอบเขตคำตอบตาม `DEFAULT_AI_ANSWER_MODE`, ไม่มีชื่อ AI และคำแนะนำสำหรับ AI ว่าง, ส่งการ์ดต้อนรับเมื่อเพิ่มเพื่อน (`welcomeEnabled` true) และข้อความวิธีทดสอบกับข้อความต้อนรับเป็นค่าเริ่มต้น, ไม่มี rich menu จนกว่าแอดมินกด publish, ลูกค้าใหม่มี AI ตอบแทนปิด ส่วน seed เปิด kill switch และคงงบไว้ที่ค่าเริ่มต้น ([data-model](data-model.md#ข้อมูลตัวอย่าง-seed))
+ค่าเริ่มต้นของระบบที่ติดตั้งใหม่: kill switch ปิด, ขอบเขตหัวข้อปิดและไม่มีหัวข้อ, งบต่อวันตาม `DEFAULT_AI_DAILY_BUDGET_USD`, โมเดลตาม `DEFAULT_AI_MODEL`, คำลงท้ายตาม `DEFAULT_POLITE_PARTICLE`, ขอบเขตคำตอบตาม `DEFAULT_AI_ANSWER_MODE`, ไม่มีชื่อ AI และคำแนะนำสำหรับ AI ว่าง, ส่งการ์ดต้อนรับเมื่อเพิ่มเพื่อน (`welcomeEnabled` true) และข้อความวิธีทดสอบกับข้อความต้อนรับเป็นค่าเริ่มต้น, ไม่มี rich menu จนกว่าแอดมินกด publish, ผู้ใช้ใหม่มี AI ตอบแทนปิด ส่วน seed เปิด kill switch และคงงบไว้ที่ค่าเริ่มต้น ([data-model](data-model.md#ข้อมูลตัวอย่าง-seed))
 
 ### 10.2 การจำกัดความถี่
 
@@ -1201,10 +1203,10 @@ Rate limit ทั้งหมดเป็นแบบหน้าต่างค
 | `RATE_LIMIT_SEND_MESSAGE` | `send_message` | 30 ครั้งต่อ 60 วินาที | IP | `SendAdminMessage`, `RetryMessage` |
 | `RATE_LIMIT_UPLOAD_TICKET` | `upload_ticket` | 20 ครั้งต่อ 60 วินาที | IP | `IssueUpload` |
 | `RATE_LIMIT_PDF_INGEST` | `pdf_ingest` | 5 ครั้งต่อ 3600 วินาที | IP | `IngestDocument` รวมการลองใหม่ |
-| `RATE_LIMIT_TYPING` | `typing` | 1 ครั้งต่อ 10 วินาที | id ของลูกค้า | `ShowTypingToCustomer` เกินแล้วข้ามเงียบ ๆ ไม่ใช่ error |
+| `RATE_LIMIT_TYPING` | `typing` | 1 ครั้งต่อ 10 วินาที | id ของผู้ใช้ | `ShowTypingToCustomer` เกินแล้วข้ามเงียบ ๆ ไม่ใช่ error |
 | `RATE_LIMIT_GUARD_TEST` | `guard_test` | 10 ครั้งต่อ 60 วินาที | IP | `TestTopicGuard` ทุกครั้งเรียกโมเดลและมีค่าใช้จ่าย |
 | `RATE_LIMIT_NOTE_CREATE` | `note_create` | 30 ครั้งต่อ 60 วินาที | IP | `AddContactNote` เท่ากับการส่งข้อความ |
-| `RATE_LIMIT_RICH_MENU_TAP` | `rich_menu_tap` | 3 ครั้งต่อ 10 วินาที | id ของลูกค้า | การกดปุ่มของ rich menu และการ์ดต้อนรับใน `ReceiveLineEvents` เกินแล้วทิ้งการกดนั้นเงียบ ๆ ไม่ใช่ error |
+| `RATE_LIMIT_RICH_MENU_TAP` | `rich_menu_tap` | 3 ครั้งต่อ 10 วินาที | id ของผู้ใช้ | การกดปุ่มของ rich menu และการ์ดต้อนรับใน `ReceiveLineEvents` เกินแล้วทิ้งการกดนั้นเงียบ ๆ ไม่ใช่ error |
 
 `RATE_LIMIT_SCALE` มาจาก environment variable ชื่อเดียวกัน ค่าเริ่มต้น 1 ส่งเข้าแกนกลางผ่าน `UseCaseConfig`
 
@@ -1251,10 +1253,11 @@ Rate limit ทั้งหมดเป็นแบบหน้าต่างค
 | ดาวน์โหลดไฟล์จาก LINE หนึ่งครั้ง | `LINE_CONTENT_TIMEOUT_MS` × 3 + 5 × 2 | 100 วินาที | ไม่เกิน `MEDIA_CONTENT_CALL_WORST_MS` |
 | ถามสถานะ transcoding หนึ่งครั้ง | `LINE_REQUEST_TIMEOUT_MS` ไม่ retry | 5 วินาที | ไม่เกิน `MEDIA_STATUS_CALL_WORST_MS` |
 | งาน `StoreInboundMedia` | วิดีโอที่พร้อมทันที: original + ภาพตัวอย่าง = 200 วินาที เมื่อ LINE ตอบ 202 งานรอ `MEDIA_NOT_READY_POLL_MS` และถามสถานะเฉพาะเมื่อเวลาที่ใช้ไป + 5 + 5 + การดาวน์โหลดที่เหลือไม่เกินงบ | `MEDIA_JOB_BUDGET_MS` 255 วินาที | น้อยกว่า `MEDIA_STUCK_AFTER_MS` |
-| Webhook ทั้งคำขอ | โปรไฟล์ `LINE_PROFILE_TIMEOUT_MS` 3 + งานที่นานที่สุด (งานใน `after()` ทำพร้อมกัน) | 262 วินาที (267 เมื่อ `AI_DEBOUNCE_MS` = 5000) | ไม่เกิน 0.9 × `WEBHOOK_MAX_DURATION_S` = 270 วินาที |
+| งานดึงโปรไฟล์ใหม่ (`RefreshContactProfile`) | `LINE_PROFILE_TIMEOUT_MS` 3 ไม่ retry | 3 วินาที | สั้นกว่างาน AI และงานสื่อ จึงไม่เปลี่ยนเวลาแย่ที่สุดของ webhook (`profileRefreshJobWorstMs`) |
+| Webhook ทั้งคำขอ | โปรไฟล์ `LINE_PROFILE_TIMEOUT_MS` 3 + งานที่นานที่สุด (งานใน `after()` ทำพร้อมกัน: AI, สื่อ หรือดึงโปรไฟล์ใหม่) | 262 วินาที (267 เมื่อ `AI_DEBOUNCE_MS` = 5000) | ไม่เกิน 0.9 × `WEBHOOK_MAX_DURATION_S` = 270 วินาที |
 | แปลง PDF | `callDeadlineMs(120000, 1)` 241 + count_tokens `callDeadlineMs(10000, 1)` 21 | 262 วินาที | ไม่เกิน 0.9 × `KNOWLEDGE_MAX_DURATION_S` = 270 วินาที และน้อยกว่า `KNOWLEDGE_STUCK_AFTER_MS` |
 
-ทางเลือกที่ไม่ใช้: ลด `AI_MAX_ROUNDS_PER_RUN` เป็น 1 (ข้อความที่ลูกค้าส่งระหว่างรอคำตอบจะกลายเป็นรอแอดมินแทนที่ AI ตอบต่อ ซึ่งเกิดบ่อยกว่า timeout มาก) และตัด retry ของการตอบแชท (529 ของผู้ให้บริการเกิดได้บ่อยและ retry หนึ่งครั้งแก้ได้) การเพิ่ม `maxDuration` ของ webhook จาก 120 เป็น 300 ไม่เปลี่ยนพฤติกรรมปกติ ส่วน `CLAUDE_REPLY_TIMEOUT_MS` ที่ลดลงกระทบเฉพาะคำตอบที่ช้ากว่า 25 วินาที ซึ่งเดิมก็เกินงบแล้ว ข้อความของแอดมินส่งในคำขอของหน้าเว็บ ซึ่งไม่ตั้ง `maxDuration` และใช้ค่าเริ่มต้นของแผน การส่งหนึ่งชิ้นใช้ไม่เกิน 50 วินาที
+ทางเลือกที่ไม่ใช้: ลด `AI_MAX_ROUNDS_PER_RUN` เป็น 1 (ข้อความที่ผู้ใช้ส่งระหว่างรอคำตอบจะกลายเป็นรอแอดมินแทนที่ AI ตอบต่อ ซึ่งเกิดบ่อยกว่า timeout มาก) และตัด retry ของการตอบแชท (529 ของผู้ให้บริการเกิดได้บ่อยและ retry หนึ่งครั้งแก้ได้) การเพิ่ม `maxDuration` ของ webhook จาก 120 เป็น 300 ไม่เปลี่ยนพฤติกรรมปกติ ส่วน `CLAUDE_REPLY_TIMEOUT_MS` ที่ลดลงกระทบเฉพาะคำตอบที่ช้ากว่า 25 วินาที ซึ่งเดิมก็เกินงบแล้ว ข้อความของแอดมินส่งในคำขอของหน้าเว็บ ซึ่งไม่ตั้ง `maxDuration` และใช้ค่าเริ่มต้นของแผน การส่งหนึ่งชิ้นใช้ไม่เกิน 50 วินาที
 
 ### 10.5 หน้าจอ
 
@@ -1264,7 +1267,7 @@ Rate limit ทั้งหมดเป็นแบบหน้าต่างค
 | `SEND_UNCONFIRMED_TIMEOUT_MS` | 15000 ms | `inbox.constants.ts` | ข้อความที่ไม่ได้คำตอบถูกถือว่าไม่สำเร็จหลังช่วงนี้ |
 | `QUOTE_HIGHLIGHT_MS` | 1600 ms | `inbox.constants.ts` | เวลาที่ฟองต้นทางถูกเน้นหลังกดกล่องอ้างอิง |
 | `GROUP_GAP_MS` | 300000 ms (5 นาที) | `inbox.constants.ts` | ข้อความห่างกันไม่เกินนี้อยู่กลุ่มเดียว |
-| `SEARCH_DEBOUNCE_MS` | 300 ms | `inbox.constants.ts` | ช่องค้นหาลูกค้า |
+| `SEARCH_DEBOUNCE_MS` | 300 ms | `inbox.constants.ts` | ช่องค้นหาผู้ใช้ |
 | `MARK_READ_DELAY_MS` | 1000 ms | `inbox.constants.ts` | หน่วงการล้างจำนวนยังไม่อ่าน |
 | `STICK_TO_BOTTOM_PX` | 80 px | `inbox.constants.ts` | ถือว่าอยู่ล่างสุดของแชท |
 | `LOAD_OLDER_THRESHOLD_PX` | 200 px | `inbox.constants.ts` | ระยะจากบนสุดที่เริ่มโหลดข้อความเก่า |
@@ -1283,8 +1286,8 @@ Rate limit ทั้งหมดเป็นแบบหน้าต่างค
 | `RAIL_WIDTH_EXPANDED` | 212px | `src/common/layout.constants.ts` | เมนูซ้าย |
 | `RAIL_WIDTH_COLLAPSED` | 56px | `layout.constants.ts` | เมนูซ้ายเมื่อพับ |
 | `RAIL_STRIP_HEIGHT` | 56px | `layout.constants.ts` | แถบเมนูบนเมื่อจอแคบ |
-| `LIST_WIDTH` | 296px | `layout.constants.ts` | รายชื่อลูกค้า |
-| `INFO_WIDTH` | 256px | `layout.constants.ts` | แผงข้อมูลลูกค้า |
+| `LIST_WIDTH` | 296px | `layout.constants.ts` | รายชื่อผู้ใช้ |
+| `INFO_WIDTH` | 256px | `layout.constants.ts` | แผงข้อมูลผู้ใช้ |
 | `THREAD_HEADER_HEIGHT` | 54px | `layout.constants.ts` | ส่วนหัวของแชท |
 | `AVATAR_LIST` | 44px | `layout.constants.ts` | รูปในรายชื่อ |
 | `AVATAR_HEADER` | 32px | `layout.constants.ts` | รูปในส่วนหัว |
@@ -1315,7 +1318,7 @@ Rate limit ทั้งหมดเป็นแบบหน้าต่างค
 | ไฟล์ของ Prisma client ใน standalone output | ครบโดยไม่ต้องตั้ง `outputFileTracingIncludes` |
 | Package ของ Radix ที่ component ใน `src/common/ui/` ใช้ | `@radix-ui/react-*` แยกตัว (component เขียนเองตามแบบของ shadcn ไม่ได้ใช้ CLI) |
 | `--font-sans` ของ `next/font` ชนะค่าเริ่มต้นของ Tailwind | rule นอก layer ชนะ `@layer theme` |
-| Host ใน CSP | `profile.line-scdn.net`, `stickershop.line-scdn.net`, `*.public.blob.vercel-storage.com`, `vercel.com` |
+| Host ใน CSP | `profile.line-scdn.net`, `sprofile.line-scdn.net`, `stickershop.line-scdn.net`, `*.public.blob.vercel-storage.com`, `vercel.com` |
 | Chromium รับ cookie `Secure` จาก `http://localhost` | รับ |
 | `git.deploymentEnabled` ใน `vercel.json` กับ Deploy Hook | Deploy Hook ยังทำงาน |
 | Subcommand ของ gitleaks | `git` |

@@ -108,6 +108,64 @@ export const describeContactRepositorySuite = (
       expect(await get(contactId(1))).toMatchObject({ displayName: null, pictureUrl: null });
     });
 
+    describe('claimProfileRefresh', () => {
+      const t = (iso: string) => at(iso);
+
+      it('claims a contact never fetched, then refuses until the stored attempt is stale', async () => {
+        await create(1);
+        const before = (await get(contactId(1))).updatedSeq;
+        expect(
+          await repo.claimProfileRefresh(
+            contactId(1),
+            t('2026-11-19T03:00:00.000Z'),
+            t('2026-11-18T03:00:00.000Z'),
+          ),
+        ).toBe(true);
+        // The claim writes the row, so polling sees the contact change.
+        expect(BigInt((await get(contactId(1))).updatedSeq)).toBeGreaterThan(BigInt(before));
+        // Stored 03:00 is later than staleBefore 02:59: not claimed.
+        expect(
+          await repo.claimProfileRefresh(
+            contactId(1),
+            t('2026-11-20T02:59:00.000Z'),
+            t('2026-11-19T02:59:00.000Z'),
+          ),
+        ).toBe(false);
+        // Stored 03:00 is not later than staleBefore 03:00: claimed again.
+        expect(
+          await repo.claimProfileRefresh(
+            contactId(1),
+            t('2026-11-20T03:00:00.000Z'),
+            t('2026-11-19T03:00:00.000Z'),
+          ),
+        ).toBe(true);
+      });
+
+      it('lets exactly one of concurrent claims win', async () => {
+        await create(1);
+        const results = await Promise.all(
+          Array.from({ length: 5 }, () =>
+            repo.claimProfileRefresh(
+              contactId(1),
+              t('2026-11-19T03:00:00.000Z'),
+              t('2026-11-18T03:00:00.000Z'),
+            ),
+          ),
+        );
+        expect(results.filter(Boolean)).toHaveLength(1);
+      });
+
+      it('claims nothing for an unknown contact', async () => {
+        expect(
+          await repo.claimProfileRefresh(
+            contactId(9),
+            t('2026-11-19T03:00:00.000Z'),
+            t('2026-11-18T03:00:00.000Z'),
+          ),
+        ).toBe(false);
+      });
+    });
+
     describe('setFollowStatus', () => {
       it('following sets followedAt', async () => {
         await create(1);

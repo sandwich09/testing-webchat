@@ -76,7 +76,7 @@ export const POLITE_PARTICLES = ['ค่ะ', 'ครับ'] as const;
 export type PoliteParticle = (typeof POLITE_PARTICLES)[number];
 
 /** Which "ข้อมูลที่ใช้ตอบ" block the prompt carries (ai-prompt section 2.2). */
-export const AI_ANSWER_MODES = ['knowledge_only', 'general'] as const;
+export const AI_ANSWER_MODES = ['general', 'knowledge_only'] as const;
 export type AiAnswerMode = (typeof AI_ANSWER_MODES)[number];
 
 export const SEND_CHANNELS = ['reply', 'push'] as const;

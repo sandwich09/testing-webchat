@@ -11,13 +11,13 @@
 | แนวปฏิบัติ | สิ่งที่ระบบนี้ทำ | อยู่ที่ไหน | ทดสอบด้วย |
 | --- | --- | --- | --- |
 | Input validation | AI ตอบเฉพาะข้อความตัวอักษร ชนิดอื่นขึ้นรอแอดมิน, webhook ตรวจ signature และขนาด body ก่อนทำอย่างอื่น, ข้อความรัวถูกรวมก่อนเรียกโมเดล, ประวัติจำกัด `AI_HISTORY_LIMIT` ข้อความ | `shouldAiReply` ใน `ai-decision.logic.ts`, `ReceiveLineEvents`, `GenerateAiReply` | unit กลุ่ม "เงื่อนไข" และ "การรวมข้อความและล็อก" ของ `GenerateAiReply`, test ของ `ReceiveLineEvents`, E2E เส้นที่ 1 และ 3 |
-| Prompt-injection defence | ข้อความของลูกค้าและเนื้อหา PDF อยู่ในตำแหน่งข้อมูล คำสั่งระบบสั่งให้ถือเป็นข้อมูล ตัวคั่นถูก escape, ขอบเขตหัวข้อคัดกรองด้วยการเรียกโมเดลแยกที่ถือข้อความลูกค้าเป็นข้อมูลและตอบไม่ผ่านเมื่อไม่แน่ใจ | `buildSystemInstructions`, `formatKnowledgeBase`, `buildGuardClassifierPrompt`, port `TopicGuard` ([ai-prompt ข้อ 2 และ 9](../specs/ai-prompt.md#9-prompt-ของขอบเขตหัวข้อ)) | unit ของฟังก์ชันใน `ai-prompt.logic.ts` และ `topic-guard.logic.ts`, unit กลุ่ม "ขอบเขตหัวข้อ" ของ `GenerateAiReply`, ชุดทดสอบของ port `TopicGuard`, E2E เส้นที่ 9, ข้อ C2 และ G4 ของชุดคำถามวัดคุณภาพ |
+| Prompt-injection defence | ข้อความของผู้ใช้และเนื้อหา PDF อยู่ในตำแหน่งข้อมูล คำสั่งระบบสั่งให้ถือเป็นข้อมูล ตัวคั่นถูก escape, ขอบเขตหัวข้อคัดกรองด้วยการเรียกโมเดลแยกที่ถือข้อความผู้ใช้เป็นข้อมูลและตอบไม่ผ่านเมื่อไม่แน่ใจ | `buildSystemInstructions`, `formatKnowledgeBase`, `buildGuardClassifierPrompt`, port `TopicGuard` ([ai-prompt ข้อ 2 และ 9](../specs/ai-prompt.md#9-prompt-ของขอบเขตหัวข้อ)) | unit ของฟังก์ชันใน `ai-prompt.logic.ts` และ `topic-guard.logic.ts`, unit กลุ่ม "ขอบเขตหัวข้อ" ของ `GenerateAiReply`, ชุดทดสอบของ port `TopicGuard`, E2E เส้นที่ 9, ข้อ C2 และ G4 ของชุดคำถามวัดคุณภาพ |
 
 ## ชั้นข้อมูล (data)
 
 | แนวปฏิบัติ | สิ่งที่ระบบนี้ทำ | อยู่ที่ไหน | ทดสอบด้วย |
 | --- | --- | --- | --- |
-| Data privacy | โมเดลเห็นเฉพาะประวัติของแชทนั้น (แยกตามลูกค้า) ระบบมีบัญชี LINE OA เดียวจึงไม่มีการแยกข้อมูลระหว่างบัญชี, ตัวคัดกรองได้เฉพาะหัวข้อ ข้อความล่าสุด และบริบทไม่เกิน `GUARD_CONTEXT_TURNS` turn, log ไม่มีข้อความ ชื่อ prompt หรือคำตอบของ AI, credential ของ LINE เข้ารหัส | `MessageRepository.recentForAi`, `guardContextTurns`, port `Logger` ([ADR 0016](../adr/0016-logging-without-pii-and-status-in-db.md)), `SecretCipher` | unit "คำขอที่โมเดลได้รับ" และ "คำขอที่ `TopicGuard` ได้รับ" ของ `GenerateAiReply`, ชุดทดสอบของ port `Logger` (ทิ้ง key ที่ไม่อนุญาต), test ของ `SetLineCredentials` |
+| Data privacy | โมเดลเห็นเฉพาะประวัติของแชทนั้น (แยกตามผู้ใช้) ระบบมีบัญชี LINE OA เดียวจึงไม่มีการแยกข้อมูลระหว่างบัญชี, ตัวคัดกรองได้เฉพาะหัวข้อ ข้อความล่าสุด และบริบทไม่เกิน `GUARD_CONTEXT_TURNS` turn, log ไม่มีข้อความ ชื่อ prompt หรือคำตอบของ AI, credential ของ LINE เข้ารหัส | `MessageRepository.recentForAi`, `guardContextTurns`, port `Logger` ([ADR 0016](../adr/0016-logging-without-pii-and-status-in-db.md)), `SecretCipher` | unit "คำขอที่โมเดลได้รับ" และ "คำขอที่ `TopicGuard` ได้รับ" ของ `GenerateAiReply`, ชุดทดสอบของ port `Logger` (ทิ้ง key ที่ไม่อนุญาต), test ของ `SetLineCredentials` |
 
 ## ชั้นผลลัพธ์ (output)
 
@@ -30,13 +30,13 @@
 
 | แนวปฏิบัติ | สิ่งที่ระบบนี้ทำ | อยู่ที่ไหน | ทดสอบด้วย |
 | --- | --- | --- | --- |
-| Least privilege | โมเดลไม่มีเครื่องมือ ไม่ค้นเว็บ ไม่แก้ข้อมูล ผลของโมเดลเป็นข้อความที่เสนอเท่านั้น backend เป็นผู้ตัดสินทุกการส่ง (kill switch, สวิตช์รายลูกค้า, การติดตาม ตรวจซ้ำก่อนส่ง) ข้อกำหนด "อนุมัติก่อนลงมือ" จึงเป็นจริงด้วยการไม่ให้สิทธิ์ลงมือใดเลย ไม่ใช่ด้วยขั้นตอนอนุมัติ | คำขอของ adapter ไม่ส่ง `tools` ([domain-and-ports](../architecture/domain-and-ports.md#adapter-ของ-claude)), ข้อ 12 ของ `replyOnce` และ `sendGuardRefusal` | adapter test ของ `TopicGuard` ตรวจว่าคำขอไม่มี `tools` (ของการตอบแชทเป็นข้อกำหนดในตารางคำขอที่ตรวจตอน review ยังไม่มี test เฉพาะ), unit กลุ่ม "ตรวจซ้ำก่อนส่ง" ของ `GenerateAiReply`, E2E เส้นที่ 4 |
+| Least privilege | โมเดลไม่มีเครื่องมือ ไม่ค้นเว็บ ไม่แก้ข้อมูล ผลของโมเดลเป็นข้อความที่เสนอเท่านั้น backend เป็นผู้ตัดสินทุกการส่ง (kill switch, สวิตช์รายผู้ใช้, การติดตาม ตรวจซ้ำก่อนส่ง) ข้อกำหนด "อนุมัติก่อนลงมือ" จึงเป็นจริงด้วยการไม่ให้สิทธิ์ลงมือใดเลย ไม่ใช่ด้วยขั้นตอนอนุมัติ | คำขอของ adapter ไม่ส่ง `tools` ([domain-and-ports](../architecture/domain-and-ports.md#adapter-ของ-claude)), ข้อ 12 ของ `replyOnce` และ `sendGuardRefusal` | adapter test ของ `TopicGuard` ตรวจว่าคำขอไม่มี `tools` (ของการตอบแชทเป็นข้อกำหนดในตารางคำขอที่ตรวจตอน review ยังไม่มี test เฉพาะ), unit กลุ่ม "ตรวจซ้ำก่อนส่ง" ของ `GenerateAiReply`, E2E เส้นที่ 4 |
 
 ## ชั้นส่งต่อให้คน (human-in-the-loop)
 
 | แนวปฏิบัติ | สิ่งที่ระบบนี้ทำ | อยู่ที่ไหน | ทดสอบด้วย |
 | --- | --- | --- | --- |
-| Human-in-the-loop | ลูกค้าใหม่เริ่มด้วย AI ตอบแทนปิด, kill switch, AI หยุดเมื่อแอดมินตอบเอง, ทุกความล้มเหลวและทุกเรื่องที่ AI ไม่รู้ขึ้นรอแอดมินพร้อมเหตุผล, การคัดกรองที่ล้มเหลวปิดแบบปลอดภัยแล้วขึ้นรอแอดมิน, การตั้งหัวข้อเป็นของแอดมิน | `raiseHandoff`, `SendAdminMessage`, `SetContactAi`, `UpdateSettings` | unit ของ `SendAdminMessage`, `SetContactAi` และ `GenerateAiReply`, E2E เส้นที่ 3, 4 และ 9 |
+| Human-in-the-loop | ผู้ใช้ใหม่เริ่มด้วย AI ตอบแทนปิด, kill switch, AI หยุดเมื่อแอดมินตอบเอง, ทุกความล้มเหลวและทุกเรื่องที่ AI ไม่รู้ขึ้นรอแอดมินพร้อมเหตุผล, การคัดกรองที่ล้มเหลวปิดแบบปลอดภัยแล้วขึ้นรอแอดมิน, การตั้งหัวข้อเป็นของแอดมิน | `raiseHandoff`, `SendAdminMessage`, `SetContactAi`, `UpdateSettings` | unit ของ `SendAdminMessage`, `SetContactAi` และ `GenerateAiReply`, E2E เส้นที่ 3, 4 และ 9 |
 
 ## ชั้นการเฝ้าดู (monitoring)
 
@@ -54,7 +54,7 @@
 
 - ขอบเขตหัวข้อเป็นตัวคัดกรองที่ใช้ prompt ไม่ปิดสนิท ผู้ที่ตั้งใจอาจผ่านได้ และอาจกันข้อความที่อยู่ในหัวข้อจริง ([topic-guard](../specs/topic-guard.md#สิ่งที่ไม่ทำและข้อจำกัด))
 - ไม่มีการตรวจคำตอบกับคลังความรู้แบบกำหนดผลได้แน่นอน คำตอบที่ผิดแต่ตรง schema ยังถูกส่งได้
-- ระบบมีบัญชี LINE OA เดียว จึงมีเฉพาะการแยกประวัติรายลูกค้า ไม่มีการแยกข้อมูลระหว่างบัญชี
+- ระบบมีบัญชี LINE OA เดียว จึงมีเฉพาะการแยกประวัติรายผู้ใช้ ไม่มีการแยกข้อมูลระหว่างบัญชี
 - ไม่มีขั้นตอนอนุมัติก่อนส่ง เพราะ AI ไม่มีสิทธิ์ลงมือ และข้อความที่ AI ตอบถูกส่งทันทีเมื่อผ่านทุกเงื่อนไข
 - ตัวชี้วัดของการประเมินมาจากคำถามจำนวนน้อยและรันด้วยมือเท่านั้น ไม่มีการเฝ้าดูคุณภาพบน production แบบอัตโนมัติ
 - ไม่มีการแจ้งเตือน และไม่มีหน้าจอที่รวมตัวเลขของทุกชั้น ต้องเรียก `GET /api/system/guardrails` เอง ตัวเลขที่มาจากบรรทัดเหตุการณ์นับครั้งที่แชทขึ้นรอแอดมิน ไม่ใช่จำนวนข้อความ

@@ -707,7 +707,7 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 
 - [x] test ตรวจว่า `ERROR_CODES` มีรหัสเท่ากับตารางใน error-catalog รวมสองรหัสใหม่ และทุกรหัสมีข้อความใน `error-messages.ts`
 - [x] ชุดค่าของ `UsageKind`, `UsageOutcome`, `RateLimitAction`, `EventCode` ตรงกับ domain-and-ports, api-contract, data-model และ ui-screens ทุกตัว
-- [x] `buildGuardRulesBlock` และ `buildGuardClassifierPrompt` คืนผลเดิมทุกไบต์เมื่อ input เดิม และแทน `<` `>` ในข้อความของลูกค้า
+- [x] `buildGuardRulesBlock` และ `buildGuardClassifierPrompt` คืนผลเดิมทุกไบต์เมื่อ input เดิม และแทน `<` `>` ในข้อความของผู้ใช้
 - [x] migration `init` ไม่เปลี่ยน (`git diff` ของโฟลเดอร์นั้นว่าง) และ `pnpm db:deploy` บนฐานที่มี `init` อยู่แล้วผ่าน แถว Settings เดิมได้ค่าเริ่มต้นของสามคอลัมน์ใหม่
 - [x] ชุดทดสอบของ `TopicGuard`, `SettingsRepository`, `UsageRepository` และ `MessageRepository` ผ่านกับตัวปลอม และสามตัวหลังผ่านกับ Postgres
 - [x] test เดิมของ ticket ที่จบแล้วยังผ่านทั้งหมดโดยไม่ข้ามหรือลบ
@@ -771,7 +771,7 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 | เขียนได้ | `src/core/use-cases/receive-line-events.use-case.ts`, `store-inbound-media.use-case.ts` และ `.spec.ts` |
 | อ่านก่อน | [use-cases: ReceiveLineEvents](../architecture/use-cases.md#receivelineevents), [StoreInboundMedia](../architecture/use-cases.md#storeinboundmedia), [line-messaging](../specs/line-messaging.md) |
 
-ขั้นตอน: เขียนทั้งสอง use case ตามขั้นตอน รวม `fetchProfile` เฉพาะลูกค้าใหม่ก่อนตอบ
+ขั้นตอน: เขียนทั้งสอง use case ตามขั้นตอน รวม `fetchProfile` เฉพาะผู้ใช้ใหม่ก่อนตอบ
 
 เกณฑ์รับ:
 
@@ -795,7 +795,7 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 เกณฑ์รับ:
 
 - [x] รายการ test ทุกกลุ่ม (เงื่อนไข, ขอบเขตหัวข้อ, การรวมข้อความและล็อก, ผลของโมเดล, ตรวจซ้ำก่อนส่ง, การส่ง) มีครบ
-- [x] ข้อความที่ถูกกันไม่เรียก `KnowledgeSource` และ `ChatModel` ไม่ขึ้นรอแอดมิน และการคัดกรองที่ล้มเหลวไม่ส่งอะไรให้ลูกค้า
+- [x] ข้อความที่ถูกกันไม่เรียก `KnowledgeSource` และ `ChatModel` ไม่ขึ้นรอแอดมิน และการคัดกรองที่ล้มเหลวไม่ส่งอะไรให้ผู้ใช้
 - [x] `needsAdmin` true ส่ง `handoffText` ไม่ใช่ `reply` ของโมเดล และเหตุผลเป็น `ai_` + `handoffReason`
 - [x] โมเดลที่ไม่อยู่ในตารางราคาถูกคิดราคาสูงสุดและ log `ai.price_unknown_model`
 
@@ -910,7 +910,7 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 2. ป้าย `too_large` ที่ถูกต้อง: `StoreInboundMedia` ถือว่า error ของการอ่านไฟล์เป็นการเกินขนาดเฉพาะเมื่อ `Content-Length` เกินเพดาน หรือ error มีรหัส `media.too_large` ตามสัญญาของ `MessagingGateway` การขาดกลางทางอื่น (เช่น connection reset) เป็นความล้มเหลวธรรมดา
 3. ลองใหม่ของเอกสารแบบ atomic: `KnowledgeRepository.restartProcessing` เป็น compare-and-set บน `status = failed` และคืน `knowledge.not_retryable` เมื่อเอกสารไม่อยู่ในสถานะ `failed` (รวมผู้แพ้ของการลองใหม่สองครั้งพร้อมกัน) จึงเริ่มการแปลงได้ครั้งเดียว การอัปโหลดที่ไม่ได้ขอลองใหม่แต่แพ้ compare-and-set นี้ได้ `knowledge.duplicate` เหมือนกรณีที่ไม่มีการแข่งกัน
 4. ตัวช่วยช่วงเดือนร่วม: `GetUsageReport` และ `GetContactUsage` ใช้ `monthRangeOf` ใน `src/core/use-cases/shared/month-range.ts` ตัวเดียว (ห่อ `bangkokMonthRange` ของ domain และ throw เมื่อเดือนผิดรูปแบบ เพราะ route ตรวจรูปแบบแล้ว) แทนตัวช่วยที่เขียนซ้ำในแต่ละไฟล์
-5. ตรวจประวัติของรอบที่ 2: ใน `GenerateAiReply` คำตอบของ AI จากรอบก่อนของงานเดียวกันถูกวางในประวัติต่อจากแถวสุดท้ายที่รอบนั้นเห็น ข้อความของลูกค้าที่มาถึงระหว่างการเรียกโมเดลของรอบก่อนจึงอยู่หลังคำตอบนั้นและเป็น turn สุดท้าย แถวอื่นคงลำดับ `seq` และข้อความที่โมเดลเห็นแล้วในประวัติของรอบนั้นไม่นับเป็นข้อความใหม่ที่ทำให้เริ่มรอบถัดไป
+5. ตรวจประวัติของรอบที่ 2: ใน `GenerateAiReply` คำตอบของ AI จากรอบก่อนของงานเดียวกันถูกวางในประวัติต่อจากแถวสุดท้ายที่รอบนั้นเห็น ข้อความของผู้ใช้ที่มาถึงระหว่างการเรียกโมเดลของรอบก่อนจึงอยู่หลังคำตอบนั้นและเป็น turn สุดท้าย แถวอื่นคงลำดับ `seq` และข้อความที่โมเดลเห็นแล้วในประวัติของรอบนั้นไม่นับเป็นข้อความใหม่ที่ทำให้เริ่มรอบถัดไป
 6. บันทึก error ของการทดลองขอบเขตหัวข้อ: `TestTopicGuard` บันทึกความล้มเหลวทั้งจาก port และจากผลที่ `guardVerdictOf` ตัดสินว่าล้มเหลว ด้วย `SettingsRepository.recordAiError` และ log `guard.failed` เพื่อให้ส่วนสถานะระบบแสดง
 
 เกณฑ์รับ:
@@ -919,7 +919,7 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 - [x] งาน `store_media` สองงานของข้อความเดียวกันจบด้วยผลเดียว และไฟล์ของงานที่แพ้ถูกลบ
 - [x] stream ที่ขาดกลางทางโดยไม่มี `Content-Length` และไม่มีรหัส `media.too_large` ได้ `failed` ไม่ใช่ `too_large`
 - [x] การลองใหม่สองครั้งพร้อมกันของเอกสารเดียวเริ่มการแปลงครั้งเดียว อีกครั้งได้ `knowledge.not_retryable`
-- [x] รอบที่ 2 ของ `GenerateAiReply` ได้ประวัติที่ turn สุดท้ายเป็นข้อความของลูกค้าที่มาถึงระหว่างรอบแรก
+- [x] รอบที่ 2 ของ `GenerateAiReply` ได้ประวัติที่ turn สุดท้ายเป็นข้อความของผู้ใช้ที่มาถึงระหว่างรอบแรก
 - [x] ผลการทดลองขอบเขตหัวข้อที่ล้มเหลว (ทั้งจาก port และจาก verdict) อยู่ใน `lastAiError` ของสถานะระบบ
 - [x] ชุดทดสอบของ `MessageRepository` และ `KnowledgeRepository` ที่เพิ่มแถวของ compare-and-set ผ่านกับตัวปลอมและกับ Postgres
 - [x] test เดิมของ ticket ที่จบแล้วยังผ่านทั้งหมดโดยไม่ข้ามหรือลบ
@@ -1000,7 +1000,7 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 | Wave | 5 |
 | พึ่ง | T-1.7, T-1.8, T-2.8, T-4.2, T-4.3 |
 | เขียนได้ | `src/features/inbox/list/{ContactList,ContactSearch,ContactListTabs,ContactRow,ContactListSkeleton}.tsx`, `src/features/inbox/list/inbox.list.logic.ts` และ `inbox.list.logic.spec.ts` (ฟังก์ชันล้วนของรายชื่อ แยกจาก `inbox.logic.ts` ตาม [ui-screens ข้อ 8.2](../specs/ui-screens.md#82-srcfeaturesinboxinboxlogicts)) |
-| อ่านก่อน | [ui-screens ข้อ 4](../specs/ui-screens.md#4-รายชื่อลูกค้า), [webchat-inbox: รายชื่อลูกค้า](../specs/webchat-inbox.md#รายชื่อลูกค้า), [ux-writing](../guidelines/ux-writing.md) |
+| อ่านก่อน | [ui-screens ข้อ 4](../specs/ui-screens.md#4-รายชื่อผู้ใช้), [webchat-inbox: รายชื่อผู้ใช้](../specs/webchat-inbox.md#รายชื่อผู้ใช้), [ux-writing](../guidelines/ux-writing.md) |
 
 ขั้นตอน: สร้าง component ตามข้อ 4.1 ถึง 4.7 โดยใช้ `useContacts` จาก T-2.8
 
@@ -1211,7 +1211,7 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 - [ ] ลายเซ็น ชื่อ field ค่าของ enum และรหัส error ตรงกับเอกสารเจ้าของเรื่องทุกตัว ไม่มีค่าใหม่ที่ไม่ได้ถาม
 - [ ] ไม่มีค่าตัวเลขเขียนตายตัวที่ควรเป็น constant และไม่มี constant ใหม่ที่ไม่อยู่ใน project-setup
 - [ ] ไม่มี dependency ใหม่ และ `package.json` ไม่เปลี่ยน (ยกเว้น T-0.1)
-- [ ] Log ใช้ port `Logger` ชื่อเหตุการณ์อยู่ใน `LogEvent` และไม่มีเนื้อหาข้อความ ชื่อลูกค้า token หรือ secret ([ADR 0016](../adr/0016-logging-without-pii-and-status-in-db.md))
+- [ ] Log ใช้ port `Logger` ชื่อเหตุการณ์อยู่ใน `LogEvent` และไม่มีเนื้อหาข้อความ ชื่อผู้ใช้ token หรือ secret ([ADR 0016](../adr/0016-logging-without-pii-and-status-in-db.md))
 - [ ] ไม่มีการเรียกบริการภายนอกจริงใน test หรือระหว่างทำ ticket
 - [ ] ticket หน้าจอ: ถ้อยคำมาจาก constant ตาม [ux-writing](../guidelines/ux-writing.md) ไม่มีคำลงท้าย และมีภาพหน้าจอที่ 390 และ 1280 ซึ่งผู้ตรวจเปิดดูแล้ว
 - [ ] ผู้ทำรายงานครบตามข้อ 1.4 และความกำกวมที่พบถูกส่งต่อเป็นการแก้เอกสาร

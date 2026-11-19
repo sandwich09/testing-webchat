@@ -57,7 +57,7 @@ const T0 = new Date('2026-11-18T03:00:00.000Z');
 const DEBOUNCE_MS = 2000;
 const TOPICS = ['มุกตลกไทย', 'มีมจากละครและซีรีส์'];
 /** The refusal for the default particle ค่ะ. */
-const REFUSAL = guardRefusalText('ค่ะ');
+const REFUSAL = guardRefusalText('ค่ะ', TOPICS);
 const CUSTOMER_NAME = 'คุณสมหญิง ใจดี';
 const LINE_USER = 'U-secret-line-user' as LineUserId; // brand: test id
 const REPLY_TOKEN = 'reply-token-1';
@@ -655,9 +655,21 @@ describe('GenerateAiReply', () => {
       await run(m.id);
 
       const [refusal] = await aiMessages();
-      expect(refusal?.text).toBe(guardRefusalText('ครับ'));
+      expect(refusal?.text).toBe(guardRefusalText('ครับ', TOPICS));
       expect(gateway.replies[0]?.parts).toEqual([
-        { type: 'text', text: 'คุยได้เฉพาะหัวข้อที่กำหนดไว้นะครับ' },
+        { type: 'text', text: 'ตอนนี้คุยได้เฉพาะเรื่อง “มุกตลกไทย” และ “มีมจากละครและซีรีส์” นะครับ' },
+      ]);
+    });
+
+    it('blocked after the topics changed: the next refusal names the saved topics', async () => {
+      await settings.update({ guardTopics: ['การศึกษา'] });
+      const m = await customerSays('ร้านเปิดกี่โมงคะ');
+      topicGuard.enqueueBlocked();
+
+      await run(m.id);
+
+      expect(gateway.replies[0]?.parts).toEqual([
+        { type: 'text', text: 'ตอนนี้คุยได้เฉพาะเรื่อง “การศึกษา” นะคะ' },
       ]);
     });
 
@@ -881,7 +893,7 @@ describe('GenerateAiReply', () => {
     });
 
     it('guard logs hold no customer text, topic or refusal text', async () => {
-      const m1 = await customerSays('ข้อความลับของลูกค้า');
+      const m1 = await customerSays('ข้อความลับของผู้ใช้');
       topicGuard.enqueueBlocked();
       await run(m1.id);
       const m2 = await customerSays('อีกข้อความลับ');
@@ -1688,7 +1700,7 @@ describe('GenerateAiReply', () => {
     });
 
     it('request: model, shop instructions, history limit, no events or failed sends, now', async () => {
-      await settings.update({ aiModel: 'claude-sonnet-5-5', aiInstructions: 'เรียกลูกค้าว่าคุณพี่' });
+      await settings.update({ aiModel: 'claude-sonnet-5-5', aiInstructions: 'เรียกผู้ใช้ว่าคุณพี่' });
       knowledgeSource.setDocuments([
         {
           id: ids.documentId(),
@@ -1701,7 +1713,7 @@ describe('GenerateAiReply', () => {
       ]);
       // 30 messages that count for the history, plus an event line and a failed send.
       for (let i = 0; i < 15; i += 1) {
-        await customerSays(`ลูกค้า ${String(i)}`);
+        await customerSays(`ผู้ใช้ ${String(i)}`);
         if (i === 10) {
           await shopSaid('ส่งไม่สำเร็จ', 'failed');
           await messages.insertEvent({
@@ -1736,13 +1748,13 @@ describe('GenerateAiReply', () => {
       const req = chatModel.requests[0];
       expect(req?.model).toBe('claude-sonnet-5-5');
       expect(req?.maxTokens).toBe(AI_MAX_TOKENS);
-      expect(req?.systemInstructions).toContain('เรียกลูกค้าว่าคุณพี่');
+      expect(req?.systemInstructions).toContain('เรียกผู้ใช้ว่าคุณพี่');
       expect(req?.knowledgeText).toContain('เค้กปอนด์ละ 500 บาท');
       expect(req?.now).toEqual(clock.now());
       const texts = req?.history.flatMap((t) => t.text.split('\n')) ?? [];
       expect(texts.length).toBeLessThanOrEqual(AI_HISTORY_LIMIT);
       expect(texts).not.toContain('ส่งไม่สำเร็จ');
-      expect(texts).not.toContain('ลูกค้า 0');
+      expect(texts).not.toContain('ผู้ใช้ 0');
       expect(req?.history.at(-1)).toEqual({ role: 'customer', text: 'คำถามล่าสุด' });
       expect(req?.history[0]?.role).toBe('customer');
     });
@@ -1758,7 +1770,7 @@ describe('GenerateAiReply', () => {
 
     it('logs hold no message text, names, tokens or prompt content', async () => {
       await settings.update({ aiInstructions: 'คำแนะนำลับของร้าน' });
-      const m = await customerSays('ข้อความส่วนตัวของลูกค้า');
+      const m = await customerSays('ข้อความส่วนตัวของผู้ใช้');
       replyOk('คำตอบลับของ AI');
 
       await run(m.id);

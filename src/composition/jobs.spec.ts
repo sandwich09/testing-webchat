@@ -37,6 +37,10 @@ const setup = (overrides: Partial<JobDeps> = {}) => {
       calls.push(`welcome:${input.contactId}:${input.replyToken}:${c.requestId}`);
       return Promise.resolve(ok({ outcome: 'disabled' as const }));
     },
+    refreshContactProfile: (input, c) => {
+      calls.push(`profile:${input.contactId}:${c.requestId}`);
+      return Promise.resolve(ok({ outcome: 'refreshed' as const }));
+    },
     extractDocument: (job) => {
       calls.push(`extract:${job.documentId}:${String(job.bytes.byteLength)}:${job.model}`);
       return Promise.resolve();
@@ -47,6 +51,15 @@ const setup = (overrides: Partial<JobDeps> = {}) => {
 };
 
 describe('scheduleLineFollowUps', () => {
+  it('runs a profile refresh after the response as its own job', async () => {
+    const { jobs, tasks, calls } = setup();
+    jobs.scheduleLineFollowUps([{ kind: 'refresh_profile', contactId: 'c9' as ContactId }], ctx);
+    expect(calls).toEqual([]);
+    expect(tasks).toHaveLength(1);
+    for (const task of tasks) await task();
+    expect(calls).toEqual(['profile:c9:req-7']);
+  });
+
   it('runs nothing before the response, then each follow-up as its own job', async () => {
     const { jobs, tasks, calls } = setup();
     jobs.scheduleLineFollowUps(

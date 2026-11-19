@@ -1,10 +1,11 @@
 'use client';
 
-// LINE Official Account section of the settings page (ui-screens 9.4). The channel secret and the
-// access token are only ever typed here: no value from the server is put into these fields, and
-// both are emptied after a successful save. The Channel ID is not secret: it is shown as saved.
-import { Loader2 } from 'lucide-react';
-import { useId, useRef, useState, type SyntheticEvent } from 'react';
+// Card "การเชื่อมต่อ" of the LINE tab (ui-screens 9.4). A saved value is shown locked: the Channel
+// ID as saved (it is not secret), the channel secret and the access token as a fixed mask (no
+// value from the server is put into these fields). The pencil button opens one field, empty; only
+// the open fields are sent, and every field locks again after a successful save.
+import { Loader2, Pencil, X } from 'lucide-react';
+import { useEffect, useId, useRef, useState, type SyntheticEvent } from 'react';
 
 import { errorCodeOf } from '@/common/common.api';
 import { copy as commonCopy } from '@/common/common.constants';
@@ -21,7 +22,15 @@ import { LINE_CHANNEL_ID_MAX_CHARS, type SettingsDto } from '@/contracts';
 
 import { copy } from './settings.constants';
 import { useSaveLineCredentials, useTestLineConnection } from './settings.hooks';
-import { validateLineCredentials, type LineCredentialField } from './settings.logic';
+import {
+  lineCredentialsSendable,
+  lineCredentialsToSend,
+  lineFieldLocked,
+  validateLineCredentials,
+  type LineCredentialField,
+  type LineCredentialFieldState,
+} from './settings.logic';
+import { SaveButton } from './SettingsFormParts';
 import { SettingsRow } from './SettingsRow';
 import { SettingsSection } from './SettingsSection';
 
@@ -197,16 +206,16 @@ function WebhookRow({ url }: { url: string }) {
     <SettingsRow
       label={copy.line.webhookUrl}
       description={copy.line.webhookUrlDesc}
-      wideControl
-      className="medium:flex-col medium:items-stretch"
+      layout="column"
     >
       <div className="flex items-center gap-2">
+        {/* Read-only, not disabled: it can never be edited, but it can still be selected. */}
         <Input
           readOnly
           aria-label={copy.line.webhookUrl}
           value={url}
           data-testid={testIds.lineWebhookUrl}
-          className="font-mono text-[14px] medium:text-[14px]"
+          className={cn('font-mono text-[14px] medium:text-[14px]', LOCKED_FIELD)}
           onFocus={(event) => {
             event.currentTarget.select();
           }}
@@ -214,6 +223,7 @@ function WebhookRow({ url }: { url: string }) {
         <Button
           type="button"
           data-testid={testIds.lineWebhookCopy}
+          className="medium:h-10"
           onClick={() => {
             void copyUrl();
           }}
@@ -246,59 +256,112 @@ function SetupSteps() {
   );
 }
 
+type CredentialFieldView = {
+  name: LineCredentialField;
+  label: string;
+  description: string;
+  testId: string;
+  editTestId: string;
+  /** A secret is a password field and is shown masked; the Channel ID is plain digits. */
+  secret: boolean;
+};
+
+const CREDENTIAL_FIELDS: readonly CredentialFieldView[] = [
+  {
+    name: 'channelId',
+    label: copy.line.channelId,
+    description: copy.line.channelIdDesc,
+    testId: testIds.lineChannelId,
+    editTestId: testIds.lineChannelIdEdit,
+    secret: false,
+  },
+  {
+    name: 'channelSecret',
+    label: copy.line.channelSecret,
+    description: copy.line.channelSecretDesc,
+    testId: testIds.lineChannelSecret,
+    editTestId: testIds.lineChannelSecretEdit,
+    secret: true,
+  },
+  {
+    name: 'channelAccessToken',
+    label: copy.line.accessToken,
+    description: copy.line.accessTokenDesc,
+    testId: testIds.lineAccessToken,
+    editTestId: testIds.lineAccessTokenEdit,
+    secret: true,
+  },
+];
+
+/** Looks of a field that cannot be typed in (locked credential, Webhook URL). */
+const LOCKED_FIELD = 'bg-rail text-muted';
+
 function CredentialRow({
-  label,
-  description = copy.line.credentialsDesc,
-  secret = true,
-  testId,
-  value,
+  field,
+  state,
+  savedText,
   placeholder,
   errorText,
   errorId,
   onChange,
+  onToggleEdit,
   inputRef,
 }: {
-  label: string;
-  description?: string;
-  /** A secret is a password field; the Channel ID is plain digits. */
-  secret?: boolean;
-  testId: string;
-  value: string;
+  field: CredentialFieldView;
+  state: LineCredentialFieldState;
+  /** What a locked field shows: the saved Channel ID, or the fixed mask of a secret. */
+  savedText: string;
   placeholder: string;
   errorText: string | null;
   errorId: string;
   onChange: (value: string) => void;
-  inputRef: React.RefObject<HTMLInputElement | null>;
+  onToggleEdit: () => void;
+  inputRef: (node: HTMLInputElement | null) => void;
 }) {
+  const locked = lineFieldLocked(state);
   return (
-    <SettingsRow
-      label={label}
-      description={description}
-      wideControl
-      className="medium:flex-col medium:items-stretch"
-    >
+    <SettingsRow label={field.label} description={field.description} layout="column">
       <div className="flex flex-col gap-1">
-        <Input
-          ref={inputRef}
-          type={secret ? 'password' : 'text'}
-          inputMode={secret ? undefined : 'numeric'}
-          maxLength={secret ? undefined : LINE_CHANNEL_ID_MAX_CHARS}
-          autoComplete="off"
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-          data-1p-ignore=""
-          data-lpignore="true"
-          aria-label={label}
-          aria-invalid={errorText !== null || undefined}
-          aria-describedby={errorText !== null ? errorId : undefined}
-          placeholder={placeholder}
-          data-testid={testId}
-          value={value}
-          onChange={(event) => {
-            onChange(event.target.value);
-          }}
-        />
+        <div className="flex items-center gap-2">
+          <Input
+            ref={inputRef}
+            // A locked secret shows the fixed mask as text: no real value and no length reaches the page.
+            type={field.secret && !locked ? 'password' : 'text'}
+            inputMode={field.secret ? undefined : 'numeric'}
+            maxLength={field.secret ? undefined : LINE_CHANNEL_ID_MAX_CHARS}
+            disabled={locked}
+            autoComplete="off"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            data-1p-ignore=""
+            data-lpignore="true"
+            aria-label={field.label}
+            aria-invalid={errorText !== null || undefined}
+            aria-describedby={errorText !== null ? errorId : undefined}
+            placeholder={locked ? undefined : placeholder}
+            data-testid={field.testId}
+            data-state={locked ? 'locked' : 'editing'}
+            className={cn(locked && cn(LOCKED_FIELD, 'disabled:opacity-100'))}
+            value={locked ? savedText : state.value}
+            onChange={(event) => {
+              onChange(event.target.value);
+            }}
+          />
+          {state.saved ? (
+            <Button
+              type="button"
+              size="icon"
+              aria-label={fillField(locked ? copy.line.edit : copy.line.cancelEdit, field.label)}
+              data-testid={field.editTestId}
+              data-state={locked ? 'locked' : 'editing'}
+              className="medium:size-10"
+              onClick={onToggleEdit}
+            >
+              {locked ? <Pencil aria-hidden="true" /> : <X aria-hidden="true" />}
+            </Button>
+          ) : null}
+        </div>
         {errorText !== null ? (
           <p id={errorId} role="alert" className="text-sub text-danger">
             {errorText}
@@ -307,6 +370,11 @@ function CredentialRow({
       </div>
     </SettingsRow>
   );
+}
+
+/** "แก้ไข Channel ID" from the template of the edit or cancel button. */
+export function fillField(template: string, field: string): string {
+  return template.replace('{field}', field);
 }
 
 function BusyButton({
@@ -324,76 +392,108 @@ function BusyButton({
   );
 }
 
+type CredentialStates = Record<LineCredentialField, LineCredentialFieldState>;
+
+/** Every field locked when a value is saved for it, open and empty otherwise. */
+function initialStates(line: SettingsDto['line']): CredentialStates {
+  const saved = {
+    channelId: line.configured && line.channelId !== null && line.channelId !== '',
+    channelSecret: line.configured,
+    channelAccessToken: line.configured,
+  };
+  return {
+    channelId: { saved: saved.channelId, editing: false, value: '' },
+    channelSecret: { saved: saved.channelSecret, editing: false, value: '' },
+    channelAccessToken: { saved: saved.channelAccessToken, editing: false, value: '' },
+  };
+}
+
 function CredentialsForm({ line }: { line: SettingsDto['line'] }) {
   const save = useSaveLineCredentials();
   const test = useTestLineConnection();
-  // Not secret: starts from the saved value and stays as typed after a save.
-  const [channelId, setChannelId] = useState(line.channelId ?? '');
-  const [secret, setSecret] = useState('');
-  const [token, setToken] = useState('');
+  // The saved state comes from the settings; only `editing` and `value` are this form's own.
+  const [edits, setEdits] = useState<
+    Record<LineCredentialField, Pick<LineCredentialFieldState, 'editing' | 'value'>>
+  >({
+    channelId: { editing: false, value: '' },
+    channelSecret: { editing: false, value: '' },
+    channelAccessToken: { editing: false, value: '' },
+  });
   const [invalid, setInvalid] = useState<{
     field: LineCredentialField;
     code: 'required' | 'invalid';
   } | null>(null);
   const [result, setResult] = useState<LineResult | null>(null);
-  const channelIdRef = useRef<HTMLInputElement>(null);
-  const secretRef = useRef<HTMLInputElement>(null);
-  const tokenRef = useRef<HTMLInputElement>(null);
-  const channelIdErrorId = useId();
-  const secretErrorId = useId();
-  const tokenErrorId = useId();
+  const inputs = useRef<Partial<Record<LineCredentialField, HTMLInputElement | null>>>({});
+  const focusNext = useRef<LineCredentialField | null>(null);
+  const errorIdBase = useId();
   const reasonId = useId();
 
-  const placeholder = line.configured
-    ? copy.line.secretPlaceholderSet
-    : copy.line.secretPlaceholderEmpty;
+  const base = initialStates(line);
+  const states: CredentialStates = {
+    channelId: { ...base.channelId, ...edits.channelId },
+    channelSecret: { ...base.channelSecret, ...edits.channelSecret },
+    channelAccessToken: { ...base.channelAccessToken, ...edits.channelAccessToken },
+  };
+  const toSend = lineCredentialsToSend(states);
+  const sendable = lineCredentialsSendable(toSend);
   const busy = save.isPending || test.isPending;
   const canTest = line.configured;
 
+  // A field opened for editing gets focus once it is enabled.
+  useEffect(() => {
+    const target = focusNext.current;
+    if (target === null) return;
+    focusNext.current = null;
+    inputs.current[target]?.focus();
+  }, [edits]);
+
+  const setField = (
+    name: LineCredentialField,
+    next: Partial<{ editing: boolean; value: string }>,
+  ) => {
+    setEdits((current) => ({ ...current, [name]: { ...current[name], ...next } }));
+  };
+
+  const toggleEdit = (name: LineCredentialField) => {
+    const opening = !states[name].editing;
+    // Opening empties the field; cancelling puts the saved value back (the field locks again).
+    setField(name, { editing: opening, value: '' });
+    if (invalid?.field === name) setInvalid(null);
+    if (opening) focusNext.current = name;
+  };
+
   const onSave = (event: SyntheticEvent) => {
     event.preventDefault();
-    if (busy) return;
-    const check = validateLineCredentials({
-      channelId,
-      channelSecret: secret,
-      channelAccessToken: token,
-    });
+    if (busy || !sendable) return;
+    const check = validateLineCredentials(toSend);
     if (!check.ok) {
       setInvalid({ field: check.field, code: check.code });
-      const refs = {
-        channelId: channelIdRef,
-        channelSecret: secretRef,
-        channelAccessToken: tokenRef,
-      };
-      refs[check.field].current?.focus();
+      inputs.current[check.field]?.focus();
       return;
     }
     setInvalid(null);
     setResult(null);
-    save.mutate(
-      {
-        channelId: channelId.trim(),
-        channelSecret: secret.trim(),
-        channelAccessToken: token.trim(),
+    save.mutate(check.body, {
+      onSuccess: (info) => {
+        // The values the admin typed do not stay in the page once they are saved: every field
+        // locks again and shows the saved Channel ID or the mask.
+        setEdits({
+          channelId: { editing: false, value: '' },
+          channelSecret: { editing: false, value: '' },
+          channelAccessToken: { editing: false, value: '' },
+        });
+        // An unchecked secret is told by the status row, which loads again after the save.
+        showToast(
+          'success',
+          info.secretStatus === 'verified' ? copy.line.savedToast : commonCopy.toast.saved,
+        );
       },
-      {
-        onSuccess: (info) => {
-          // The secrets the admin typed do not stay in the page once they are saved.
-          setChannelId(channelId.trim());
-          setSecret('');
-          setToken('');
-          // An unchecked secret is told by the status row, which loads again after the save.
-          showToast(
-            'success',
-            info.secretStatus === 'verified' ? copy.line.savedToast : commonCopy.toast.saved,
-          );
-        },
-        // What was typed stays so it can be fixed and saved again.
-        onError: (error) => {
-          setResult(lineFailureResult(error));
-        },
+      // What was typed stays so it can be fixed and saved again.
+      onError: (error) => {
+        setResult(lineFailureResult(error));
       },
-    );
+    });
   };
 
   const onTest = () => {
@@ -411,54 +511,44 @@ function CredentialsForm({ line }: { line: SettingsDto['line'] }) {
 
   return (
     <form noValidate autoComplete="off" onSubmit={onSave}>
-      <CredentialRow
-        label={copy.line.channelId}
-        description={copy.line.channelIdDesc}
-        secret={false}
-        testId={testIds.lineChannelId}
-        value={channelId}
-        placeholder={copy.line.channelIdPlaceholder}
-        errorText={
-          invalid?.field === 'channelId' ? credentialErrorText('channelId', invalid.code) : null
-        }
-        errorId={channelIdErrorId}
-        inputRef={channelIdRef}
-        onChange={(next) => {
-          setChannelId(next);
-          setInvalid(null);
-        }}
-      />
-      <CredentialRow
-        label={copy.line.channelSecret}
-        testId={testIds.lineChannelSecret}
-        value={secret}
-        placeholder={placeholder}
-        errorText={invalid?.field === 'channelSecret' ? credentialErrorText('channelSecret') : null}
-        errorId={secretErrorId}
-        inputRef={secretRef}
-        onChange={(next) => {
-          setSecret(next);
-          setInvalid(null);
-        }}
-      />
-      <CredentialRow
-        label={copy.line.accessToken}
-        testId={testIds.lineAccessToken}
-        value={token}
-        placeholder={placeholder}
-        errorText={
-          invalid?.field === 'channelAccessToken' ? credentialErrorText('channelAccessToken') : null
-        }
-        errorId={tokenErrorId}
-        inputRef={tokenRef}
-        onChange={(next) => {
-          setToken(next);
-          setInvalid(null);
-        }}
-      />
+      {CREDENTIAL_FIELDS.map((field) => {
+        const state = states[field.name];
+        return (
+          <CredentialRow
+            key={field.name}
+            field={field}
+            state={state}
+            savedText={field.secret ? copy.line.savedMask : (line.channelId ?? '')}
+            placeholder={
+              field.secret
+                ? state.saved
+                  ? copy.line.secretPlaceholderSet
+                  : copy.line.secretPlaceholderEmpty
+                : copy.line.channelIdPlaceholder
+            }
+            errorText={
+              invalid?.field === field.name ? credentialErrorText(field.name, invalid.code) : null
+            }
+            errorId={`${errorIdBase}-${field.name}`}
+            inputRef={(node) => {
+              inputs.current[field.name] = node;
+            }}
+            onChange={(value) => {
+              setField(field.name, { value });
+              setInvalid(null);
+            }}
+            onToggleEdit={() => {
+              toggleEdit(field.name);
+            }}
+          />
+        );
+      })}
       <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 py-3.5">
         {!canTest ? (
-          <p id={reasonId} className="min-w-0 flex-1 text-sub text-muted">
+          <p
+            id={reasonId}
+            className="w-full min-w-0 text-sub text-muted medium:w-auto medium:flex-1"
+          >
             {copy.line.testNeedsCredentials}
           </p>
         ) : null}
@@ -472,14 +562,12 @@ function CredentialsForm({ line }: { line: SettingsDto['line'] }) {
         >
           {copy.line.test}
         </BusyButton>
-        <BusyButton
-          type="submit"
+        <SaveButton
           pending={save.isPending}
-          aria-disabled={busy || undefined}
-          data-testid={testIds.lineSave}
-        >
-          {copy.line.save}
-        </BusyButton>
+          dirty={sendable}
+          label={copy.line.save}
+          testId={testIds.lineSave}
+        />
       </div>
       <p
         role="status"
@@ -531,7 +619,7 @@ function LineBody({ line }: { line: SettingsDto['line'] }) {
   );
 }
 
-/** LINE Official Account settings (ui-screens 9.4). */
+/** Card "การเชื่อมต่อ" of the LINE tab (ui-screens 9.4). */
 export function LineSettingsSection() {
   const query = useSettings();
   const settings = query.data;

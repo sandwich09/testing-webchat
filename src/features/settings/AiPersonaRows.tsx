@@ -1,7 +1,7 @@
 'use client';
 
-// The AI name and answer scope rows of the AI section (ui-screens 9.3). Each row saves through its
-// own `useUpdateSettings` instance, like the other rows of the section.
+// The AI name and polite particle rows of the AI tab, and the answer scope row of the knowledge tab
+// (ui-screens 9.3 and 9.5). Each row saves through its own `useUpdateSettings` instance.
 import { Check } from 'lucide-react';
 import { useId, useRef, useState, type KeyboardEvent, type SyntheticEvent } from 'react';
 
@@ -14,7 +14,9 @@ import { Input } from '@/common/ui/input';
 import {
   AI_ANSWER_MODES,
   AI_NAME_MAX_CHARS,
+  POLITE_PARTICLES,
   type AiAnswerMode,
+  type PoliteParticle,
   type SettingsDto,
 } from '@/contracts';
 
@@ -32,6 +34,11 @@ export function aiNameErrorText(): string {
 /** Whether the typed name differs from the saved one (null), ignoring surrounding spaces. */
 export function aiNameDirty(draft: string | null, saved: string | null): boolean {
   return draft !== null && draft.trim() !== (saved ?? '');
+}
+
+/** `copy.ai.particleOption` key of a particle value. */
+export function particleLabel(particle: PoliteParticle): string {
+  return particle === 'ค่ะ' ? copy.ai.particleOption.ka : copy.ai.particleOption.krub;
 }
 
 /** Label of an answer scope option. */
@@ -81,13 +88,9 @@ export function AiNameRow({ settings }: { settings: SettingsDto }) {
   };
 
   return (
-    <SettingsRow label={copy.ai.aiName} description={copy.ai.aiNameDesc} wideControl>
-      <form
-        noValidate
-        onSubmit={onSubmit}
-        className="flex flex-col items-start gap-1 medium:items-end"
-      >
-        <div className="flex w-full items-center gap-2 medium:w-auto">
+    <SettingsRow label={copy.ai.aiName} description={copy.ai.aiNameDesc} layout="column">
+      <form noValidate onSubmit={onSubmit} className="flex flex-col gap-1">
+        <div className="flex items-center gap-2">
           <Input
             ref={inputRef}
             type="text"
@@ -98,7 +101,7 @@ export function AiNameRow({ settings }: { settings: SettingsDto }) {
             aria-describedby={errorText !== null ? errorId : undefined}
             placeholder={copy.ai.aiNamePlaceholder}
             data-testid={testIds.settingsAiName}
-            className="min-w-0 flex-1 medium:w-[220px] medium:flex-none"
+            className="min-w-0 flex-1"
             value={value}
             onChange={(event) => {
               setDraft(event.target.value);
@@ -106,12 +109,105 @@ export function AiNameRow({ settings }: { settings: SettingsDto }) {
               if (mutation.isError) mutation.reset();
             }}
           />
-          {dirty ? (
-            <SaveButton pending={mutation.isPending} testId={testIds.settingsAiNameSave} />
-          ) : null}
+          <SaveButton
+            pending={mutation.isPending}
+            dirty={dirty}
+            testId={testIds.settingsAiNameSave}
+          />
         </div>
         <FieldError id={errorId} message={errorText} />
       </form>
+    </SettingsRow>
+  );
+}
+
+/**
+ * Polite particle as a two-option segmented control that fills the control column
+ * (`role="radiogroup"`, arrow keys, Home and End move and choose).
+ */
+export function ParticleRow({ settings }: { settings: SettingsDto }) {
+  const mutation = useUpdateSettings();
+  const errorId = useId();
+  const labelId = useId();
+  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  const shown: PoliteParticle =
+    mutation.isPending && mutation.variables.aiPoliteParticle !== undefined
+      ? mutation.variables.aiPoliteParticle
+      : settings.ai.politeParticle;
+
+  const choose = (next: PoliteParticle) => {
+    if (mutation.isPending || next === settings.ai.politeParticle) return;
+    mutation.mutate(
+      { aiPoliteParticle: next },
+      {
+        onSuccess: () => {
+          showToast('success', commonCopy.toast.saved);
+        },
+      },
+    );
+  };
+
+  const onKeyDown = (event: KeyboardEvent, index: number) => {
+    const target = nextRadioIndex(event.key, index, POLITE_PARTICLES.length);
+    if (target === null) return;
+    event.preventDefault();
+    const particle = POLITE_PARTICLES[target];
+    if (particle === undefined) return;
+    refs.current[target]?.focus();
+    choose(particle);
+  };
+
+  return (
+    <SettingsRow
+      label={copy.ai.particle}
+      labelId={labelId}
+      description={copy.ai.particleDesc}
+      layout="column"
+    >
+      <div className="flex flex-col gap-1">
+        <div
+          role="radiogroup"
+          aria-labelledby={labelId}
+          aria-describedby={mutation.isError ? errorId : undefined}
+          aria-busy={mutation.isPending || undefined}
+          data-testid={testIds.settingsParticle}
+          className="flex h-11 w-full gap-1 rounded-full border border-line bg-surface p-1 medium:h-10"
+        >
+          {POLITE_PARTICLES.map((particle, index) => {
+            const checked = particle === shown;
+            return (
+              <button
+                key={particle}
+                ref={(node) => {
+                  refs.current[index] = node;
+                }}
+                type="button"
+                role="radio"
+                aria-checked={checked}
+                tabIndex={checked ? 0 : -1}
+                data-value={particle}
+                className={cn(
+                  'flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-full text-sub font-bold transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-accent-strong/30',
+                  checked ? 'bg-accent-strong text-white' : 'text-fg hover:bg-selected',
+                )}
+                onClick={() => {
+                  choose(particle);
+                }}
+                onKeyDown={(event) => {
+                  onKeyDown(event, index);
+                }}
+              >
+                {checked ? <Check aria-hidden="true" className="size-4" /> : null}
+                {particleLabel(particle)}
+              </button>
+            );
+          })}
+        </div>
+        <FieldError
+          id={errorId}
+          message={mutation.isError ? saveFailureText(mutation.error) : null}
+        />
+      </div>
     </SettingsRow>
   );
 }
@@ -153,15 +249,15 @@ export function AiAnswerModeRow({ settings }: { settings: SettingsDto }) {
       label={copy.ai.answerMode}
       labelId={labelId}
       description={copy.ai.answerModeDesc}
-      wideControl
+      layout="stacked"
     >
-      <div className="flex flex-col items-stretch gap-1 medium:items-end">
+      <div className="flex flex-col items-stretch gap-1">
         <div
           role="radiogroup"
           aria-labelledby={labelId}
           aria-describedby={mutation.isError ? errorId : undefined}
           data-testid={testIds.settingsAnswerMode}
-          className="grid w-full gap-2 medium:w-[460px] medium:grid-cols-2"
+          className="grid w-full gap-2 medium:grid-cols-2"
         >
           {AI_ANSWER_MODES.map((mode, index) => {
             const checked = mode === shown;

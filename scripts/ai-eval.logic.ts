@@ -777,7 +777,7 @@ function renderRun(j: Judged): string {
   );
   if (out !== null) lines.push('คำตอบของโมเดล:', '', fenced(out.reply), '');
   if (j.run.visibleText !== null && j.run.blockedBy !== null) {
-    lines.push('ข้อความที่ลูกค้าได้รับ:', '', fenced(j.run.visibleText), '');
+    lines.push('ข้อความที่ผู้ใช้ได้รับ:', '', fenced(j.run.visibleText), '');
   }
   return lines.join('\n');
 }

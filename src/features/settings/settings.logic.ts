@@ -83,27 +83,65 @@ export function validateAiName(
 /** Field of the LINE credentials form that a check refers to. */
 export type LineCredentialField = 'channelId' | 'channelSecret' | 'channelAccessToken';
 
+/** The three LINE fields in the order of the form. */
+export const LINE_CREDENTIAL_FIELDS: readonly LineCredentialField[] = [
+  'channelId',
+  'channelSecret',
+  'channelAccessToken',
+];
+
+/** The LINE values the form sends: only the fields that are open for typing. */
+export type LineCredentialsInput = Partial<Record<LineCredentialField, string>>;
+
 /**
- * All three LINE values are required (after trim), in the order of the form; the Channel ID is
- * digits only, at most LINE_CHANNEL_ID_MAX_CHARS (the contract's LINE_CHANNEL_ID_PATTERN).
+ * Checks the fields that are open (present in `input`), in the order of the form: each one is
+ * required after trim, and the Channel ID is digits only, at most LINE_CHANNEL_ID_MAX_CHARS (the
+ * contract's LINE_CHANNEL_ID_PATTERN). A locked field is left out and is not checked: the server
+ * keeps its stored value. `body` is what is sent, trimmed.
  */
-export function validateLineCredentials(input: {
-  channelId: string;
-  channelSecret: string;
-  channelAccessToken: string;
-}): { ok: true } | { ok: false; field: LineCredentialField; code: 'required' | 'invalid' } {
-  const channelId = input.channelId.trim();
-  if (channelId === '') return { ok: false, field: 'channelId', code: 'required' };
-  if (!LINE_CHANNEL_ID_PATTERN.test(channelId)) {
-    return { ok: false, field: 'channelId', code: 'invalid' };
+export function validateLineCredentials(
+  input: LineCredentialsInput,
+):
+  | { ok: true; body: LineCredentialsInput }
+  | { ok: false; field: LineCredentialField; code: 'required' | 'invalid' } {
+  const body: LineCredentialsInput = {};
+  for (const field of LINE_CREDENTIAL_FIELDS) {
+    const raw = input[field];
+    if (raw === undefined) continue;
+    const value = raw.trim();
+    if (value === '') return { ok: false, field, code: 'required' };
+    if (field === 'channelId' && !LINE_CHANNEL_ID_PATTERN.test(value)) {
+      return { ok: false, field, code: 'invalid' };
+    }
+    body[field] = value;
   }
-  if (input.channelSecret.trim() === '') {
-    return { ok: false, field: 'channelSecret', code: 'required' };
+  return { ok: true, body };
+}
+
+/** A LINE field: whether a value is saved for it, whether the admin opened it, and what is typed. */
+export type LineCredentialFieldState = { saved: boolean; editing: boolean; value: string };
+
+/** A field with a saved value stays locked until the admin presses its edit button. */
+export function lineFieldLocked(
+  field: Pick<LineCredentialFieldState, 'saved' | 'editing'>,
+): boolean {
+  return field.saved && !field.editing;
+}
+
+/** What the form sends: the values of the fields that are not locked. */
+export function lineCredentialsToSend(
+  fields: Readonly<Record<LineCredentialField, LineCredentialFieldState>>,
+): LineCredentialsInput {
+  const out: LineCredentialsInput = {};
+  for (const name of LINE_CREDENTIAL_FIELDS) {
+    if (!lineFieldLocked(fields[name])) out[name] = fields[name].value;
   }
-  if (input.channelAccessToken.trim() === '') {
-    return { ok: false, field: 'channelAccessToken', code: 'required' };
-  }
-  return { ok: true };
+  return out;
+}
+
+/** Save is possible once an open field has something typed in it. */
+export function lineCredentialsSendable(input: LineCredentialsInput): boolean {
+  return Object.values(input).some((value) => value.trim() !== '');
 }
 
 /** Months for the usage picker, newest first: value "2026-11", label "พ.ย. 2569". */

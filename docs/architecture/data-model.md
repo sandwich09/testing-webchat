@@ -31,7 +31,7 @@
 | aiInstructions | คำแนะนำสำหรับ AI ที่แอดมินเขียนเอง (บล็อก `<custom_instructions>`) ค่าเริ่มต้นว่าง |
 | aiName | ชื่อ AI ที่ตัดช่องว่างแล้ว ไม่เกิน `AI_NAME_MAX_CHARS` null เมื่อไม่ตั้ง |
 | aiAnswerMode | ขอบเขตคำตอบ enum `AiAnswerMode`: `knowledge_only` หรือ `general` ค่าเริ่มต้น `DEFAULT_AI_ANSWER_MODE` (`general`) |
-| howToText | ข้อความของปุ่ม "วิธีทดสอบ" ตัดช่องว่างหัวท้าย ไม่เกิน `HOW_TO_TEXT_MAX_CHARS` ค่าว่าง (ค่าเริ่มต้น) คือส่งข้อความเริ่มต้นตามคำลงท้าย ([line-messaging](../specs/line-messaging.md#เมื่อลูกค้ากดปุ่ม)) |
+| howToText | ข้อความของปุ่ม "วิธีทดสอบ" ตัดช่องว่างหัวท้าย ไม่เกิน `HOW_TO_TEXT_MAX_CHARS` ค่าว่าง (ค่าเริ่มต้น) คือส่งข้อความเริ่มต้นตามคำลงท้าย ([line-messaging](../specs/line-messaging.md#เมื่อผู้ใช้กดปุ่ม)) |
 | welcomeEnabled | ส่งการ์ดต้อนรับเมื่อมี follow event ค่าเริ่มต้น true |
 | welcomeText | เนื้อการ์ดต้อนรับ ไม่เกิน `WELCOME_TEXT_MAX_CHARS` ค่าว่างคือข้อความเริ่มต้น |
 | richMenuId, richMenuPublishedAt | Rich menu ที่แอปตั้งเป็นเมนูเริ่มต้นที่ LINE และเวลาที่ publish null เมื่อไม่มี id ไม่ถูกส่งออกทาง API |
@@ -43,18 +43,19 @@
 
 ### Contact
 
-ลูกค้าหนึ่งคนบน LINE เท่ากับหนึ่งแชท
+ผู้ใช้หนึ่งคนบน LINE เท่ากับหนึ่งแชท
 
 | Field | หมายเหตุ |
 | --- | --- |
 | lineUserId | unique |
 | displayName, pictureUrl | จาก profile API อาจว่างได้ |
-| followStatus, followedAt | `following` หรือ `unfollowed` และเวลาที่เพิ่มเพื่อนล่าสุด ใช้ในแผงข้อมูลลูกค้า |
-| followStatusAt | เวลาของ event (follow, unfollow หรือข้อความของลูกค้า) ที่ตั้ง `followStatus` ปัจจุบัน `setFollowStatus` เปลี่ยนสถานะเฉพาะเมื่อ event ใหม่ไม่เก่ากว่าค่านี้ event ที่มาไม่เรียงจึงไม่ทำให้สถานะย้อน (migration ที่สิบเอ็ด) แถวเดิมเป็น NULL ซึ่ง event แรกเปลี่ยนได้ |
-| aiEnabled | สวิตช์ AI ตอบแทนรายลูกค้า ลูกค้าใหม่เป็น false จำค่าไว้แม้ kill switch ปิด และกลายเป็น false เมื่อแอดมินส่งข้อความ ([ai-reply](../specs/ai-reply.md#เมื่อแอดมินตอบเอง)) |
+| followStatus, followedAt | `following` หรือ `unfollowed` และเวลาที่เพิ่มเพื่อนล่าสุด ใช้ในแผงข้อมูลผู้ใช้ |
+| followStatusAt | เวลาของ event (follow, unfollow หรือข้อความของผู้ใช้) ที่ตั้ง `followStatus` ปัจจุบัน `setFollowStatus` เปลี่ยนสถานะเฉพาะเมื่อ event ใหม่ไม่เก่ากว่าค่านี้ event ที่มาไม่เรียงจึงไม่ทำให้สถานะย้อน (migration ที่สิบเอ็ด) แถวเดิมเป็น NULL ซึ่ง event แรกเปลี่ยนได้ |
+| profileFetchedAt | เวลาที่ระบบลองดึงโปรไฟล์จาก LINE ครั้งล่าสุด สำเร็จหรือไม่ก็ตาม ตั้งด้วย `claimProfileRefresh` (กฎของ repository ข้อ 19) ก่อนเรียก LINE ใช้ตัดสินว่าต้องดึงใหม่หรือยัง (ทุก `PROFILE_REFRESH_AFTER_MS`) ไม่อยู่ใน entity `Contact` ของ domain และไม่ออกทาง API (migration ที่สิบสอง) แถวเดิมเป็น NULL ซึ่ง event ถัดไปของผู้ใช้ดึงใหม่ |
+| aiEnabled | สวิตช์ AI ตอบแทนรายผู้ใช้ ผู้ใช้ใหม่เป็น false จำค่าไว้แม้ kill switch ปิด และกลายเป็น false เมื่อแอดมินส่งข้อความ ([ai-reply](../specs/ai-reply.md#เมื่อแอดมินตอบเอง)) |
 | needsAdmin, needsAdminReason | สถานะรอแอดมิน และเหตุผลเป็นค่าของ `HandoffReason`: `customer_sent_image`, `customer_sent_video`, `customer_sent_non_text`, `budget_reached`, `ai_not_in_knowledge`, `ai_needs_human_action`, `ai_unsafe_or_offtopic`, `ai_other`, `ai_failed`, `ai_timeout` ข้อความไทยอยู่ใน [error-catalog](error-catalog.md#เหตุผลของสถานะรอแอดมิน) |
-| aiState, aiStateAt | `idle` หรือ `replying` ใช้ตรวจงานที่ค้าง และเป็น lock ต่อลูกค้า |
-| lastMessageAt | เวลาข้อความขาเข้าล่าสุดของลูกค้า เป็นค่าที่รายชื่อใช้เรียง (`coalesce(lastMessageAt, createdAt)` ใหม่ไปเก่า แล้ว id) และเวลาที่แถวของรายชื่อแสดง ตั้งจาก `recordInbound` เท่านั้น ข้อความของแอดมินหรือ AI, บรรทัดเหตุการณ์, การอ่าน และสวิตช์ไม่แก้ค่านี้ null ก่อนข้อความแรกของลูกค้า |
+| aiState, aiStateAt | `idle` หรือ `replying` ใช้ตรวจงานที่ค้าง และเป็น lock ต่อผู้ใช้ |
+| lastMessageAt | เวลาข้อความขาเข้าล่าสุดของผู้ใช้ เป็นค่าที่รายชื่อใช้เรียง (`coalesce(lastMessageAt, createdAt)` ใหม่ไปเก่า แล้ว id) และเวลาที่แถวของรายชื่อแสดง ตั้งจาก `recordInbound` เท่านั้น ข้อความของแอดมินหรือ AI, บรรทัดเหตุการณ์, การอ่าน และสวิตช์ไม่แก้ค่านี้ null ก่อนข้อความแรกของผู้ใช้ |
 | unreadCount, lastMessagePreview, lastMessageBy, lastMessageType | ใช้ในรายชื่อ ข้อความล่าสุดของใครก็ได้ `lastMessagePreview` มีค่าเฉพาะข้อความตัวอักษร ชนิดอื่นหน้าเว็บแสดงคำตาม `lastMessageType` |
 | replyToken, replyTokenExpiresAt | token ล่าสุดที่ยังไม่ได้ใช้ |
 | createdAt | |
@@ -81,7 +82,7 @@ Index: `lastMessageAt`, และ `needsAdmin` กับ `unreadCount` สำห
 | lineMessageId | unique ใช้กันข้อความขาเข้าซ้ำ |
 | webhookEventId | unique: `webhookEventId` ของ LINE บนแถวขาเข้าที่ไม่มี `lineMessageId` (การกดปุ่ม) ใช้กันการกดที่ LINE ส่งซ้ำ (migration ที่สิบเอ็ด) null สำหรับแถวอื่น |
 | quotedLineMessageId | ขาเข้า: id ของ LINE ที่ข้อความนี้ตอบกลับ (`message.quotedMessageId`) null เมื่อไม่มี หาข้อความต้นทางตอนอ่าน |
-| lineSentIds | ขาออก: `sentMessages[].id` ที่ LINE คืนตามลำดับส่วนของข้อความ (`text[]` ค่าเริ่มต้นว่าง) ใช้หาข้อความที่ลูกค้าตอบกลับ index แบบ GIN |
+| lineSentIds | ขาออก: `sentMessages[].id` ที่ LINE คืนตามลำดับส่วนของข้อความ (`text[]` ค่าเริ่มต้นว่าง) ใช้หาข้อความที่ผู้ใช้ตอบกลับ index แบบ GIN |
 | deliveryStatus, deliveryError | `pending`, `sent`, `failed` เฉพาะข้อความขาออก `deliveryError` เป็นรหัสจาก [error-catalog](error-catalog.md) |
 | retryKey | ใช้กับ LINE ทุกครั้งที่ส่งข้อความเดิม เท่ากับ id ของข้อความขาออก |
 | createdAt, sentAt | |
@@ -95,7 +96,7 @@ Index: `(contactId, seq)`, `(contactId, updatedSeq)` และ GIN บน `lineS
 
 ### ContactNote
 
-โน้ตของแอดมินเกี่ยวกับลูกค้า ([webchat-inbox](../specs/webchat-inbox.md#โน้ตของแอดมิน)) ไม่ถูกส่งไป LINE หรือโมเดล และไม่อยู่ใน log
+โน้ตของแอดมินเกี่ยวกับผู้ใช้ ([webchat-inbox](../specs/webchat-inbox.md#โน้ตของแอดมิน)) ไม่ถูกส่งไป LINE หรือโมเดล และไม่อยู่ใน log
 
 | Field | หมายเหตุ |
 | --- | --- |
@@ -104,7 +105,7 @@ Index: `(contactId, seq)`, `(contactId, updatedSeq)` และ GIN บน `lineS
 | text | ตัดช่องว่างแล้ว 1 ถึง `CONTACT_NOTE_MAX_CHARS` ตัว |
 | createdAt | จาก `Clock` |
 
-Index: `(contactId, createdAt DESC)` สำหรับรายการใหม่ไปเก่าของลูกค้าหนึ่งคน
+Index: `(contactId, createdAt DESC)` สำหรับรายการใหม่ไปเก่าของผู้ใช้หนึ่งคน
 
 ### WebhookEvent
 
@@ -130,7 +131,7 @@ Index: `(contactId, createdAt DESC)` สำหรับรายการให�
 | Field | หมายเหตุ |
 | --- | --- |
 | kind | `reply`, `ingest` หรือ `guard` (การคัดกรองขอบเขตหัวข้อ รวมการทดลองจากหน้าตั้งค่า) |
-| contactId, messageId | มีค่าเมื่อ kind เป็น `reply` หรือ `guard` (`messageId` ว่างเมื่อไม่ได้ส่งข้อความ, `guard` ที่ถูกกันชี้ข้อความปฏิเสธ, การทดลองจากหน้าตั้งค่าไม่มีทั้งสองค่า) และถูกตั้งเป็นว่างเมื่อลบลูกค้าหรือข้อความ เพื่อคงยอดรวม |
+| contactId, messageId | มีค่าเมื่อ kind เป็น `reply` หรือ `guard` (`messageId` ว่างเมื่อไม่ได้ส่งข้อความ, `guard` ที่ถูกกันชี้ข้อความปฏิเสธ, การทดลองจากหน้าตั้งค่าไม่มีทั้งสองค่า) และถูกตั้งเป็นว่างเมื่อลบผู้ใช้หรือข้อความ เพื่อคงยอดรวม |
 | documentId | มีค่าเมื่อ kind เป็น `ingest` ถูกตั้งเป็นว่างเมื่อลบไฟล์ |
 | provider, model | โมเดลที่ API รายงานว่าตอบจริง |
 | inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens | จาก usage ของ API |
@@ -142,7 +143,7 @@ Index: `(contactId, createdAt DESC)` สำหรับรายการให�
 
 | Field | หมายเหตุ |
 | --- | --- |
-| key | primary key แถวเดียวต่อ key ในรูป `{action}:{keyedHash}` ของ IP หรือของ id ของลูกค้าสำหรับ loading ฝั่ง LINE |
+| key | primary key แถวเดียวต่อ key ในรูป `{action}:{keyedHash}` ของ IP หรือของ id ของผู้ใช้สำหรับ loading ฝั่ง LINE |
 | windowStart, count | หน้าต่างปัจจุบันของ key นั้น |
 
 ## ความสัมพันธ์
@@ -295,6 +296,17 @@ CREATE INDEX "Contact_ai_replying_idx" ON "Contact" ("aiStateAt") WHERE "aiState
 - `Message.webhookEventId`: key ของแถวขาเข้าที่ไม่มี `lineMessageId` (การกดปุ่ม) ทำให้ `insertInboundIfAbsent` กันซ้ำได้ (กฎของ repository ข้อ 1) แถวอื่นเป็น NULL ซึ่ง unique index ไม่นับ
 - `Message.mediaFailure`: เหตุผลของสื่อขาเข้าที่ `failed` แถวเดิมเป็น NULL ซึ่งหน้าเว็บแสดงข้อความเดิมของชนิดนั้น
 - ลบคำสั่งของ `"Message"."seq"` กับ `DROP SEQUENCE "change_seq"` ที่ Prisma สร้างเกินมาด้วยมือ โค้ดรุ่นก่อนไม่อ่านคอลัมน์ใหม่และทำงานกับตารางหลัง migration ได้
+
+### Migration ที่สิบสอง: วันที่ดึงโปรไฟล์ของ LINE
+
+`contact_profile_fetched_at` ([ADR 0031](../adr/0031-settings-tabs-user-wording-and-neutral-prompt.md)) เพิ่มอย่างเดียว ไฟล์อยู่ที่ [`prisma/migrations/20261119130000_contact_profile_fetched_at/migration.sql`](../../prisma/migrations/20261119130000_contact_profile_fetched_at/migration.sql):
+
+```sql
+ALTER TABLE "Contact" ADD COLUMN     "profileFetchedAt" TIMESTAMPTZ(3);
+```
+
+- `Contact.profileFetchedAt`: เวลาที่ลองดึงโปรไฟล์ครั้งล่าสุด (กฎของ repository ข้อ 19) แถวเดิมเป็น NULL ผู้ใช้ที่มีอยู่แล้วจึงได้โปรไฟล์ใหม่เมื่อส่ง event ถัดไปหลัง deploy ([line-messaging](../specs/line-messaging.md#โปรไฟล์ของผู้ใช้))
+- ลบคำสั่งของ `"Message"."seq"` กับ `DROP SEQUENCE "change_seq"` ที่ Prisma สร้างเกินมาด้วยมือ เหมือน migration ก่อนหน้า โค้ดรุ่นก่อนไม่อ่านคอลัมน์ใหม่และทำงานกับตารางหลัง migration ได้
 
 ## Prisma schema
 
@@ -480,6 +492,8 @@ model Contact {
   followStatus        FollowStatus   @default(following)
   followedAt          DateTime?      @db.Timestamptz(3)
   followStatusAt      DateTime?      @db.Timestamptz(3)
+  /// Time of the latest LINE profile fetch attempt (success or not); null before the first.
+  profileFetchedAt    DateTime?      @db.Timestamptz(3)
   aiEnabled           Boolean        @default(false)
   needsAdmin          Boolean        @default(false)
   needsAdminReason    HandoffReason?
@@ -636,7 +650,7 @@ model RateLimitBucket {
    - id แปลงเป็น branded type ของ domain
 6. **Type ของ Prisma ไม่ออกนอก adapter:** method ของ repository รับและคืนเฉพาะ type ของ domain `src/adapters/prisma/index.ts` export เฉพาะ factory ของ repository ไม่ export client หรือ type ที่ generate
 7. **เวลาจาก `Clock`:** ทุก method ที่เขียนเวลารับค่าจาก use case ไม่มี `@updatedAt` และ `@default(now())` ใน schema
-8. **Lock ของ AI ต่อลูกค้า:** conditional update ที่มีรอบเดียวชนะ
+8. **Lock ของ AI ต่อผู้ใช้:** conditional update ที่มีรอบเดียวชนะ
    - `tryAcquireAiLock`: `updateMany({ where: { id, aiState: 'idle' }, data: { aiState: 'replying', aiStateAt: now } })` ซึ่งเป็น `UPDATE "Contact" SET ... WHERE "id" = $1 AND "aiState" = 'idle'` Postgres ล็อกแถวระหว่าง UPDATE รอบที่มาทีหลังจึงเห็น `replying` และได้ `count` เป็น 0 คืน `count === 1`
    - รอบที่ได้ false ถอนตัว การตอบข้อความที่มาระหว่างถือ lock เป็นหน้าที่ของผู้ถือ lock ตาม `AI_MAX_ROUNDS_PER_RUN` ใน [use-cases](use-cases.md#generateaireply)
    - `releaseAiLock`: `updateMany({ where: { id }, data: { aiState: 'idle', aiStateAt: null } })`
@@ -682,10 +696,11 @@ model RateLimitBucket {
     - `failStuckDeliveries(contactId, staleBefore)`: `UPDATE "Message" SET "deliveryStatus" = 'failed', "deliveryError" = 'line.send_interrupted' WHERE "contactId" = $1 AND "deliveryStatus" = 'pending' AND COALESCE("deliveryAttemptAt", "createdAt") < $2` `GetMessages` เรียกทุกครั้งด้วย `now - SEND_STUCK_AFTER_MS`
     - `markSent`, `markFailed`, `markReady` และ `markFailed` ของ KbDocument ไม่มีเงื่อนไขบนสถานะ ถ้างานที่ยังไม่ตายจบหลังการคืนสภาพ ผลจริงของมันเขียนทับ failed แต่เวลาของข้อ 10.1 มากกว่าเวลาแย่ที่สุดของทุกงาน ([project-setup ข้อ 10.4](project-setup.md#104-adapter-และ-route)) กรณีนี้จึงไม่เกิดเมื่อค่าเป็นไปตาม test ของ `timing-budget.spec.ts`
 14. **Push ครั้งแรก:** `recordFirstPush(id, at)` คือ `UPDATE "Message" SET "firstPushAt" = $at WHERE "id" = $id AND "firstPushAt" IS NULL` คำสั่งเดียว ผู้เรียกพร้อมกันได้ค่าเดียว และการส่งอีกครั้งไม่เลื่อนค่า `deliverOutbound` เรียกก่อน push ทุกครั้ง
-15. **สถานะการติดตามตามเวลาของ event:** `setFollowStatus(id, status, at)` คือ `updateMany` คำสั่งเดียวที่ `where` มี `"followStatusAt" IS NULL OR "followStatusAt" <= $at` และสถานะที่ต่างจากที่ขอ (หรือ `following` ของแถวที่ยังไม่มี `followedAt`) แล้วตั้ง `followStatusAt = $at` คืน true เมื่อแถวเปลี่ยน unfollow ที่เก่ากว่า follow หรือข้อความล่าสุดของลูกค้า และ follow หรือข้อความที่เก่ากว่า unfollow จึงไม่เปลี่ยนสถานะ ไม่ว่ามาถึงลำดับใด
+15. **สถานะการติดตามตามเวลาของ event:** `setFollowStatus(id, status, at)` คือ `updateMany` คำสั่งเดียวที่ `where` มี `"followStatusAt" IS NULL OR "followStatusAt" <= $at` และสถานะที่ต่างจากที่ขอ (หรือ `following` ของแถวที่ยังไม่มี `followedAt`) แล้วตั้ง `followStatusAt = $at` คืน true เมื่อแถวเปลี่ยน unfollow ที่เก่ากว่า follow หรือข้อความล่าสุดของผู้ใช้ และ follow หรือข้อความที่เก่ากว่า unfollow จึงไม่เปลี่ยนสถานะ ไม่ว่ามาถึงลำดับใด
 16. **ข้อความล่าสุดที่ AI ตอบ:** `latestInbound` เลือกแถวขาเข้าล่าสุดตาม seq ที่ `eventCode` เป็น NULL หรือไม่อยู่ใน `customer.tapped_admin`, `customer.tapped_how_to` (เขียนด้วย `OR` เพราะ `NOT IN` ตัดแถวที่เป็น NULL ทิ้งด้วย)
 17. **Rich menu ที่ publish:** `replaceRichMenu(expectedId, menu)` คือ `updateMany` คำสั่งเดียวที่ `where` มี `"richMenuId" IS NOT DISTINCT FROM $expectedId` การ publish สองครั้งที่เริ่มจากเมนูเดียวกันจึงบันทึกได้ครั้งเดียว ([use-cases PublishRichMenu](use-cases.md#publishrichmenu-และ-removerichmenu))
 18. **สื่อขาเข้าที่ไม่สำเร็จ:** `setMediaStatus(id, "failed", failure)` ตั้ง `mediaFailure` พร้อมกันในคำสั่งเดียวกับ compare-and-set บน `pending` (`too_large` ไม่มีเหตุผลเพิ่ม เพราะสถานะบอกอยู่แล้ว)
+19. **การดึงโปรไฟล์วันละครั้ง:** `claimProfileRefresh(id, now, staleBefore)` คือ `updateMany` คำสั่งเดียวที่ `where` มี `"profileFetchedAt" IS NULL OR "profileFetchedAt" <= $staleBefore` แล้วตั้ง `profileFetchedAt = $now` คืน true เมื่อแถวเปลี่ยน ผู้เรียกพร้อมกันของผู้ใช้คนเดียวได้ true เพียงหนึ่ง (คำสั่งที่สองอ่าน `where` ใหม่หลังคำสั่งแรก commit) จึงเรียก LINE ครั้งเดียว ([pitfalls M2](../guidelines/pitfalls-and-prevention.md)) การเขียนนี้เลื่อน `updatedSeq` ด้วย trigger เหมือนการแก้แถวอื่น
 
 ## ข้อมูลตัวอย่าง (seed)
 
@@ -713,23 +728,23 @@ model RateLimitBucket {
 | guardEnabled, guardTopics | ปิด, `มุกตลกไทย`, `มีมจากละครและซีรีส์`, `มุกจากภาพยนตร์` (ตัวอย่างสำหรับเดโม เปิดเองที่หน้าตั้งค่า) |
 | lastWebhookAt | 1 นาทีก่อนรัน |
 
-### ลูกค้า 7 คน
+### ผู้ใช้ 7 คน
 
 ทุกคนไม่มี `pictureUrl` หน้าเว็บจึงแสดงตัวอักษรแรกของชื่อ และ `lineUserId` เป็นค่าปลอมรูปแบบ `U` ตามด้วย hex 32 ตัว เช่น `U00000000000000000000000000000001`
 
 | # | ชื่อ | สถานะ | AI ตอบแทน | ยังไม่อ่าน | ข้อความ (เก่าไปใหม่, เวลาก่อนรัน seed) |
 | --- | --- | --- | --- | --- | --- |
-| 1 | มะลิ ใจดี | ติดตามอยู่, รอแอดมิน (`ai_needs_human_action`) | เปิด | 1 | ลูกค้า "สวัสดีค่ะ ร้านเปิดกี่โมงคะ" (50 นาที) · AI "ร้านเปิดทุกวัน 08:00–18:00 ค่ะ" (50 นาที) · ลูกค้า "รับจัดเลี้ยงนอกสถานที่ไหมคะ" (6 นาที) · AI "ขออนุญาตให้แอดมินมาตอบเรื่องนี้นะคะ" (6 นาที) · บรรทัดเหตุการณ์ `handoff.ai_needs_human_action` (6 นาที) |
-| 2 | พีช | ติดตามอยู่ | ปิด | 2 | ลูกค้า "มีเค้กส้มไหมคะ" (2 นาที) · ลูกค้า "วันนี้ยังเหลือไหม" (1 นาที) |
-| 3 | Somchai K. | ติดตามอยู่ | ปิด | 0 | ลูกค้า "จองโต๊ะ 4 คน บ่ายสองได้ไหมครับ" (3 ชั่วโมง) · แอดมิน "ได้ค่ะ จองไว้ให้แล้ว" ส่งแล้ว (3 ชั่วโมง) · ลูกค้า "ขอบคุณครับ" (3 ชั่วโมง) |
-| 4 | ป้าแดง | ติดตามอยู่ | ปิด | 1 | ลูกค้า "ขอบคุณที่ส่งไวนะจ๊ะ" (เมื่อวาน) · ลูกค้าส่งสติกเกอร์ (เมื่อวาน) |
-| 5 | ต้นข้าว | ติดตามอยู่ | ปิด | 0 | ลูกค้าส่งรูป `ready` (2 วันก่อน) · แอดมิน "ลาเต้เย็นแก้วนี้ 65 บาทค่ะ" ส่งแล้ว (2 วันก่อน) |
-| 6 | นนท์ | เลิกติดตามแล้ว | ปิด | 0 | ลูกค้า "ยกเลิกออเดอร์ครับ" (4 วันก่อน) · แอดมิน "รับทราบค่ะ" ส่งแล้ว (4 วันก่อน) |
-| 7 | แพรวา | ติดตามอยู่ | ปิด | 0 | ลูกค้า "ส่งเมนูให้หน่อยค่ะ" (9 วันก่อน) · แอดมิน "เดี๋ยวส่งให้นะคะ" ส่งไม่สำเร็จ `deliveryError` เป็น `line.push_failed` และ `firstPushAt` เท่ากับเวลาของข้อความ (9 วันก่อน) จึงเลยหน้าต่างของ retry key แล้ว ฟองแสดงเหตุผล `message.retry_expired` และไม่มีปุ่มส่งอีกครั้ง |
+| 1 | มะลิ ใจดี | ติดตามอยู่, รอแอดมิน (`ai_needs_human_action`) | เปิด | 1 | ผู้ใช้ "สวัสดีค่ะ ร้านเปิดกี่โมงคะ" (50 นาที) · AI "ร้านเปิดทุกวัน 08:00–18:00 ค่ะ" (50 นาที) · ผู้ใช้ "รับจัดเลี้ยงนอกสถานที่ไหมคะ" (6 นาที) · AI "ขออนุญาตให้แอดมินมาตอบเรื่องนี้นะคะ" (6 นาที) · บรรทัดเหตุการณ์ `handoff.ai_needs_human_action` (6 นาที) |
+| 2 | พีช | ติดตามอยู่ | ปิด | 2 | ผู้ใช้ "มีเค้กส้มไหมคะ" (2 นาที) · ผู้ใช้ "วันนี้ยังเหลือไหม" (1 นาที) |
+| 3 | Somchai K. | ติดตามอยู่ | ปิด | 0 | ผู้ใช้ "จองโต๊ะ 4 คน บ่ายสองได้ไหมครับ" (3 ชั่วโมง) · แอดมิน "ได้ค่ะ จองไว้ให้แล้ว" ส่งแล้ว (3 ชั่วโมง) · ผู้ใช้ "ขอบคุณครับ" (3 ชั่วโมง) |
+| 4 | ป้าแดง | ติดตามอยู่ | ปิด | 1 | ผู้ใช้ "ขอบคุณที่ส่งไวนะจ๊ะ" (เมื่อวาน) · ผู้ใช้ส่งสติกเกอร์ (เมื่อวาน) |
+| 5 | ต้นข้าว | ติดตามอยู่ | ปิด | 0 | ผู้ใช้ส่งรูป `ready` (2 วันก่อน) · แอดมิน "ลาเต้เย็นแก้วนี้ 65 บาทค่ะ" ส่งแล้ว (2 วันก่อน) |
+| 6 | นนท์ | เลิกติดตามแล้ว | ปิด | 0 | ผู้ใช้ "ยกเลิกออเดอร์ครับ" (4 วันก่อน) · แอดมิน "รับทราบค่ะ" ส่งแล้ว (4 วันก่อน) |
+| 7 | แพรวา | ติดตามอยู่ | ปิด | 0 | ผู้ใช้ "ส่งเมนูให้หน่อยค่ะ" (9 วันก่อน) · แอดมิน "เดี๋ยวส่งให้นะคะ" ส่งไม่สำเร็จ `deliveryError` เป็น `line.push_failed` และ `firstPushAt` เท่ากับเวลาของข้อความ (9 วันก่อน) จึงเลยหน้าต่างของ retry key แล้ว ฟองแสดงเหตุผล `message.retry_expired` และไม่มีปุ่มส่งอีกครั้ง |
 
 - สติกเกอร์ของป้าแดงใช้ `stickerPackageId` `446` และ `stickerId` `1988` ซึ่งเป็นตัวอย่างที่พบในเอกสารของ LINE (ต้องยืนยันว่าแสดงได้ ถ้าไม่ได้หน้าเว็บแสดงป้ายแทน)
-- ข้อความของลูกค้าทุกข้อความมี `lineMessageId` ปลอมที่ไม่ซ้ำ ข้อความขาออกมี `retryKey` เท่ากับ id บรรทัดเหตุการณ์มี `direction` `internal`, `author` `system`, `type` `event` และ `eventCode` ตามตาราง
-- `lastMessagePreview`, `lastMessageBy`, `lastMessageType` และ `unreadCount` ของแต่ละคนตรงกับข้อความสุดท้ายในตาราง ส่วน `lastMessageAt` คือเวลาของข้อความสุดท้ายของลูกค้า รายชื่อจึงเรียงตามข้อความของลูกค้า
+- ข้อความของผู้ใช้ทุกข้อความมี `lineMessageId` ปลอมที่ไม่ซ้ำ ข้อความขาออกมี `retryKey` เท่ากับ id บรรทัดเหตุการณ์มี `direction` `internal`, `author` `system`, `type` `event` และ `eventCode` ตามตาราง
+- `lastMessagePreview`, `lastMessageBy`, `lastMessageType` และ `unreadCount` ของแต่ละคนตรงกับข้อความสุดท้ายในตาราง ส่วน `lastMessageAt` คือเวลาของข้อความสุดท้ายของผู้ใช้ รายชื่อจึงเรียงตามข้อความของผู้ใช้
 
 ### คลังความรู้
 

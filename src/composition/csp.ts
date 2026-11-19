@@ -23,7 +23,7 @@ export const buildContentSecurityPolicy = (
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${options.development ? " 'unsafe-eval'" : ''}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https://profile.line-scdn.net https://stickershop.line-scdn.net https://*.public.blob.vercel-storage.com",
+    "img-src 'self' data: blob: https://profile.line-scdn.net https://sprofile.line-scdn.net https://stickershop.line-scdn.net https://*.public.blob.vercel-storage.com",
     "media-src 'self' blob: https://*.public.blob.vercel-storage.com",
     "font-src 'self'",
     "connect-src 'self' https://vercel.com https://*.public.blob.vercel-storage.com",

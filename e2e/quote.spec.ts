@@ -14,7 +14,7 @@ test('journey 10: a LINE reply that quotes a message shows the quoted block', as
   request,
 }) => {
   const suffix = uniqueSuffix();
-  const name = `ลูกค้าตอบกลับ ${suffix}`;
+  const name = `ผู้ใช้ตอบกลับ ${suffix}`;
   const first = `ข้อความแรก ${suffix}`;
   const v = await createContactWithMessage(request, { displayName: name, text: first });
   await openChat(page, name);

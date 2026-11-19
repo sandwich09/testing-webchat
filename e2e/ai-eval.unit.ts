@@ -12,6 +12,7 @@ import {
   computeMetrics,
   EVAL_AI_NAME,
   EVAL_CUSTOM_INSTRUCTIONS,
+  EVAL_GUARD_TOPICS,
   EVAL_QUESTIONS,
   extractAmounts,
   extractTimes,
@@ -45,7 +46,7 @@ const SYSTEM = buildSystemInstructions({
   aiInstructions: EVAL_CUSTOM_INSTRUCTIONS,
 });
 /** The refusal the eval expects, for its particle ค่ะ. */
-const REFUSAL = guardRefusalText('ค่ะ');
+const REFUSAL = guardRefusalText('ค่ะ', EVAL_GUARD_TOPICS);
 const CTX: CheckContext = deepFreeze({ systemInstructions: SYSTEM, previousReply: null });
 const USAGE = deepFreeze({
   inputTokens: 0,

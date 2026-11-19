@@ -5,7 +5,6 @@ import {
   emptyState,
   filterQuery,
   nextRowIndex,
-  nextTabIndex,
   parseFilter,
   tabbableRowId,
   unreadAriaText,
@@ -51,7 +50,7 @@ describe('emptyState', () => {
   it('prefers the search text, with the typed text in it', () => {
     expect(emptyState('unread', 'มะลิ', true)).toEqual({
       kind: 'search',
-      text: 'ไม่พบลูกค้าชื่อ “มะลิ”',
+      text: 'ไม่พบผู้ใช้ชื่อ “มะลิ”',
     });
   });
 
@@ -79,17 +78,6 @@ describe('nextRowIndex', () => {
   it('ignores other keys and empty lists', () => {
     expect(nextRowIndex('a', 0, 3)).toBeNull();
     expect(nextRowIndex('ArrowDown', 0, 0)).toBeNull();
-  });
-});
-
-describe('nextTabIndex', () => {
-  it('wraps around', () => {
-    expect(nextTabIndex('ArrowRight', 2, 3)).toBe(0);
-    expect(nextTabIndex('ArrowLeft', 0, 3)).toBe(2);
-    expect(nextTabIndex('ArrowRight', 0, 3)).toBe(1);
-    expect(nextTabIndex('Home', 2, 3)).toBe(0);
-    expect(nextTabIndex('End', 0, 3)).toBe(2);
-    expect(nextTabIndex('ArrowDown', 0, 3)).toBeNull();
   });
 });
 
