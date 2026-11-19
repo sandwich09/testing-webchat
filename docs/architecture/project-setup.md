@@ -286,7 +286,7 @@ Path ของหน้าเว็บ (`/welcome`, `/chats`, `/chats/[contactId
     "migrations:destructive": "tsx scripts/check-migrations-destructive.ts",
     "migrations:applied": "tsx scripts/check-applied-migrations.ts",
     "docs:check": "tsx scripts/docs-check.ts",
-    "vercel-build": "if [ \"$VERCEL_ENV\" = \"production\" ]; then prisma migrate deploy; fi && prisma generate && next build",
+    "vercel-build": "if [ \"$VERCEL_ENV\" = \"production\" ]; then pnpm migrations:applied && prisma migrate deploy; fi && prisma generate && next build",
     "postinstall": "prisma generate"
   }
 }
@@ -306,7 +306,7 @@ Path ของหน้าเว็บ (`/welcome`, `/chats`, `/chats/[contactId
 | `vercel-build` | หัวข้อ 9 |
 | `migrations:immutable` | ล้มเมื่อการเปลี่ยนแก้ ลบ เปลี่ยนชื่อ หรือเพิ่มไฟล์ใน `prisma/migrations/<name>/` ที่มีอยู่แล้วบน base เพิ่ม directory ใหม่ได้ base คือ first parent ของ HEAD เมื่ออยู่บน `main` และ merge base กับ `origin/main` เมื่ออยู่ branch อื่น (ต้องมีประวัติครบ: `git fetch origin main`) ส่ง `--base <ref>` หรือ `CHECK_BASE_REF` เพื่อเลือก base เอง ตรวจรวมไฟล์ที่ยังไม่ commit กฎอยู่ใน `scripts/migrations.logic.ts` |
 | `migrations:destructive` | ล้มเมื่อไฟล์ `.sql` ใดของ migration ใน tree (ทุกไฟล์ทุกรอบ ไม่ใช่เฉพาะที่การเปลี่ยนนี้เพิ่ม) มี `DROP TABLE`, `DROP COLUMN`, `ALTER COLUMN ... TYPE`, `RENAME`, `TRUNCATE` หรือ `DELETE FROM` ที่ไม่มี `WHERE` (ไม่นับใน comment และ string literal) โดยไม่มีบรรทัดยืนยันรูปแบบ `-- approved-destructive: <เหตุผล>` อยู่ต้นบรรทัด เหตุผลต้องไม่ว่าง ใส่ได้หลังเจ้าของงานอนุมัติแล้วเท่านั้น ตาม `AGENTS.md` migration ที่ห้ามีบรรทัดนี้อยู่แล้ว |
-| `migrations:applied` | อ่าน `_prisma_migrations` ของฐานข้อมูลที่ `DIRECT_URL` (หรือ `DATABASE_URL`) ชี้ แล้วล้มเมื่อ migration ที่ apply แล้วหายจาก `prisma/migrations/` หรือ checksum (SHA-256 ของ `migration.sql`) ไม่ตรง ซึ่ง `prisma migrate deploy` ไม่ตรวจ ([deploy](../runbooks/deploy.md#ตรวจ-migration-ที่-apply-แล้ว)) ไม่อยู่ใน CI เพราะ CI ไม่มีฐานข้อมูลของ production |
+| `migrations:applied` | อ่าน `_prisma_migrations` ของฐานข้อมูลที่ `DIRECT_URL` (หรือ `DATABASE_URL`) ชี้ แล้วล้มเมื่อ migration ที่ apply แล้วหายจาก `prisma/migrations/` หรือ checksum (SHA-256 ของ `migration.sql`) ไม่ตรง ซึ่ง `prisma migrate deploy` ไม่ตรวจ ([deploy](../runbooks/deploy.md#ตรวจ-migration-ที่-apply-แล้ว)) รันใน `vercel-build` ของ production ก่อน `prisma migrate deploy` ([ADR 0029](../adr/0029-applied-migrations-check-in-production-build.md)) ไม่อยู่ใน CI เพราะ CI ไม่มีฐานข้อมูลของ production |
 | `docs:check` | ล้มเมื่อลิงก์ relative หรือ `#anchor` ใน `docs/**`, `README.md` และ `AGENTS.md` ชี้ไปไม่ถึง (anchor ใช้กฎ slug ของ GitHub รวมอักษรไทย) เมื่อค่าในตารางหัวข้อ 10 ไม่ตรงกับค่าคงที่ในโค้ด หรือเมื่อ YAML ในหัวข้อ 8 ไม่เหมือน `.github/workflows/ci.yml` พิมพ์ไฟล์และบรรทัดของทุกจุดที่ไม่ตรง อ่านโค้ดเป็นข้อความ (ไม่ import) จึงไม่ต้องมี build ส่ง `--root <dir>` เพื่อตรวจสำเนาของ repo ที่อยู่ในโฟลเดอร์อื่น |
 | `postinstall` | สร้าง client ของ Prisma หลังติดตั้ง Docker ข้ามด้วย `--ignore-scripts` แล้วสั่ง `db:generate` เอง |
 
@@ -1103,7 +1103,7 @@ jobs:
 
 `vercel.json` ตั้ง `buildCommand` เป็น `pnpm vercel-build` ซึ่งทำตามลำดับ:
 
-1. ถ้า `VERCEL_ENV` เป็น `production` รัน `prisma migrate deploy` (ใช้ `DIRECT_URL`)
+1. ถ้า `VERCEL_ENV` เป็น `production` รัน `pnpm migrations:applied` แล้วจึง `prisma migrate deploy` (ทั้งคู่ใช้ `DIRECT_URL`) ถ้า migration ที่ apply แล้วถูกแก้หรือหายจากไฟล์ build ล้มก่อนแตะฐานข้อมูล ([ADR 0029](../adr/0029-applied-migrations-check-in-production-build.md))
 2. `prisma generate`
 3. `next build`
 

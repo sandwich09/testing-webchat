@@ -28,7 +28,7 @@
     "migrations:destructive": "tsx scripts/check-migrations-destructive.ts",
     "migrations:applied": "tsx scripts/check-applied-migrations.ts",
     "docs:check": "tsx scripts/docs-check.ts",
-    "vercel-build": "if [ \"$VERCEL_ENV\" = \"production\" ]; then prisma migrate deploy; fi && prisma generate && next build",
+    "vercel-build": "if [ \"$VERCEL_ENV\" = \"production\" ]; then pnpm migrations:applied && prisma migrate deploy; fi && prisma generate && next build",
     "postinstall": "prisma generate"
   },
   "dependencies": {
