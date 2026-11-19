@@ -2,7 +2,9 @@
 
 > สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-18
 
-ระบบทั้งหมดของ [แผนการสร้าง](implementation-plan.md) ขั้นที่ 1 ถึง 6 แตกเป็น 46 ticket ให้ developer หรือ coding agent หยิบไปหนึ่ง ticket แล้วสร้างได้เลยโดยไม่ต้องคุยเพิ่ม ผู้ทำหลายคนทำงานพร้อมกันใน repo checkout เดียว โดยมี lead ตรวจทุก ticket และเป็นผู้ commit
+ระบบทั้งหมดของ [แผนการสร้าง](implementation-plan.md) ขั้นที่ 1 ถึง 6 แตกเป็น 46 ticket ให้ผู้พัฒนาหยิบไปหนึ่ง ticket แล้วสร้างได้เลยโดยไม่ต้องคุยเพิ่ม ผู้ทำหลายคนทำงานพร้อมกันใน repo checkout เดียว โดยมีผู้พัฒนาที่ตรวจงาน (ผู้ตรวจ) ตรวจทุก ticket และเป็นผู้ commit
+
+> ticket ทั้งหมดในเอกสารนี้ทำเสร็จแล้ว เอกสารเก็บไว้เป็นบันทึกการแบ่งงานตามที่สร้างจริง สิ่งที่ถูกตัดภายหลัง (ข้อความสำเร็จรูป, แผง Guardrails ในหน้าตั้งค่า และข้อความปฏิเสธที่ตั้งเองของขอบเขตหัวข้อ ตาม [ADR 0024](../adr/0024-scope-reductions.md)) ยังปรากฏใน ticket เดิม แต่ไม่มีในโค้ดแล้ว และงานที่เพิ่มหลัง ticket ชุดนี้ (rich menu การ์ดต้อนรับ ข้อความที่ตอบกลับ โน้ต เสียงขาเข้า และการแก้ตาม [ADR 0028](../adr/0028-review-fixes-concurrency-polling-and-ci.md)) อยู่ใน [implementation-plan](implementation-plan.md) สภาพปัจจุบันให้ดูที่ spec และเอกสารสถาปัตยกรรม
 
 เอกสารนี้กำหนดเฉพาะการแบ่งงาน ลำดับ และการตรวจรับ พฤติกรรมและค่าทั้งหมดอยู่ในเอกสารที่แต่ละ ticket ลิงก์ไป ถ้าสองที่ขัดกัน เอกสารเจ้าของเรื่องใน [README](../README.md#กฎของเอกสาร) ชนะ
 
@@ -11,9 +13,9 @@
 ### 1.1 Path ที่แต่ละ ticket เป็นเจ้าของ
 
 1. แต่ละ ticket มีรายการ path (glob) ที่เขียนได้ในช่อง "เขียนได้" ticket สอง ticket ที่รันพร้อมกันได้ไม่มี path ซ้ำกัน
-2. ผู้ทำห้ามแก้ไฟล์นอก path ของ ticket ตัวเอง ถ้าต้องแก้ ให้หยุดแล้วรายงาน lead
+2. ผู้ทำห้ามแก้ไฟล์นอก path ของ ticket ตัวเอง ถ้าต้องแก้ ให้หยุดแล้วรายงานผู้ตรวจ
 3. ไฟล์ร่วมมีเจ้าของคนเดียวตามตาราง 1.2 ticket อื่นอ่านได้แต่ห้ามแก้
-4. **Stub แล้วส่งต่อ:** ticket ของ wave ก่อนอาจสร้างไฟล์เป็น stub ที่มีชื่อ export และลายเซ็นสุดท้าย (body เป็น `throw new Error("not implemented")` หรือ component ที่คืน `null`) เพื่อให้ ticket อื่น compile ได้ เมื่อ ticket นั้นจบ ความเป็นเจ้าของไฟล์ส่งต่อให้ ticket ที่ระบุ และผู้สร้าง stub ไม่แตะไฟล์นั้นอีก ลายเซ็นของ stub ห้ามเปลี่ยนโดยไม่ถาม lead
+4. **Stub แล้วส่งต่อ:** ticket ของ wave ก่อนอาจสร้างไฟล์เป็น stub ที่มีชื่อ export และลายเซ็นสุดท้าย (body เป็น `throw new Error("not implemented")` หรือ component ที่คืน `null`) เพื่อให้ ticket อื่น compile ได้ เมื่อ ticket นั้นจบ ความเป็นเจ้าของไฟล์ส่งต่อให้ ticket ที่ระบุ และผู้สร้าง stub ไม่แตะไฟล์นั้นอีก ลายเซ็นของ stub ห้ามเปลี่ยนโดยไม่ถามผู้ตรวจ
 5. ไฟล์ test (`*.spec.ts`) อยู่ข้างไฟล์ที่ทดสอบ และเป็นของ ticket เดียวกับไฟล์นั้น
 
 ### 1.2 ไฟล์ร่วมและเจ้าของ
@@ -23,7 +25,7 @@
 | `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml` | T-0.1 | ติดตั้ง dependency ทุกตัวใน [project-setup](../architecture/project-setup.md#2-dependency) รวม `heic-to` และ package ที่ component แบบ shadcn ใน `src/common/ui/` ใช้ ครั้งเดียว หลังจากนั้นไม่มี ticket ใดแก้ |
 | `eslint.config.mjs`, `tsconfig.json`, `vitest.config.ts`, `playwright.config.ts`, `next.config.ts`, `prettier.config.mjs`, `postcss.config.mjs`, `prisma.config.ts`, `components.json`, `vercel.json` | T-0.1 | |
 | `Dockerfile`, `docker/entrypoint.sh`, `docker-compose.yml`, `.env.example` | T-0.1 แล้วส่งต่อให้ T-4.3 | |
-| `.github/workflows/ci.yml` | T-4.3 | การแก้ต้องได้รับอนุญาตจากเจ้าของงานตาม `AGENTS.md` lead เป็นผู้ขอ |
+| `.github/workflows/ci.yml` | T-4.3 | การแก้ต้องได้รับอนุญาตจากเจ้าของงานตาม `AGENTS.md` ผู้ตรวจเป็นผู้ขอ |
 | `prisma/schema.prisma`, `prisma/migrations/**` | T-0.6 | |
 | `src/adapters/prisma/index.ts` | T-0.6 | export factory ของ repository ทุกตัวที่ T-0.6 สร้างเป็น stub |
 | `src/core/domain/index.ts`, `constants.ts`, `error-codes.ts`, `pricing.constants.ts`, `*.model.ts` | T-0.2 | |
@@ -42,10 +44,10 @@
 
 - ติดตั้งหรืออัปเกรด dependency ที่ไม่อยู่ใน [project-setup](../architecture/project-setup.md#2-dependency) หรือเกินกว่าที่ T-0.1 ติดตั้งไว้
 - เรียกบริการภายนอกจริง (LINE, Claude, Vercel Blob, Vercel, Neon) ทุก test ใช้ตัวปลอมหรือ stub
-- Commit, push หรือเปิด PR lead เป็นผู้ commit
+- Commit, push หรือเปิด PR ผู้ตรวจเป็นผู้ commit
 - ข้าม ปิด หรือลบ test เพื่อให้ผ่าน
 - แก้เอกสารใน `docs/` ถ้าพบว่าเอกสารผิดหรือไม่พอ ให้รายงานตามข้อ 1.4
-- เดาเมื่อ spec ไม่ได้บอก ให้หยุดแล้วถาม lead พร้อมเสนอทางเลือก
+- เดาเมื่อ spec ไม่ได้บอก ให้หยุดแล้วถามผู้ตรวจพร้อมเสนอทางเลือก
 
 ### 1.4 สิ่งที่ผู้ทำต้องรายงานเมื่อจบ ticket
 
@@ -85,7 +87,7 @@ ticket ในแต่ละ wave รันพร้อมกันได้ เ
 | 3 | Use case ทุกตัว สคริปต์วัดคุณภาพ AI และงานเสริมความทนทาน | T-3.1, T-3.2, T-3.3, T-3.4, T-3.5, T-3.6, T-3.7, T-3.8 → T-3.9 | ทุกตัวหลัง T-2.9, T-3.8 หลัง T-2.10, T-3.9 หลัง T-3.1 ถึง T-3.7 |
 | 4 | ประกอบระบบ, route และ seed | T-4.1 → T-4.2, และ T-4.3 ขนานกับทั้งสอง | T-4.1 หลัง T-2.10, T-4.2 หลัง T-4.1 |
 | 5 | หน้าจอแต่ละส่วน | T-5.1, T-5.2, T-5.3, T-5.4, T-5.5, T-5.6 | |
-| 6 | E2E ทั้ง 9 เส้น | T-6.1 → T-6.2 | T-6.2 หลัง T-6.1 |
+| 6 | E2E ทั้ง 9 เส้นแรก (ภายหลังเพิ่มเป็น 15 เส้น ดู [test-strategy](../qa/test-strategy.md#เส้นทาง-e2e)) | T-6.1 → T-6.2 | T-6.2 หลัง T-6.1 |
 | 7 | รวมระบบและเกณฑ์ "พร้อม" | T-7.1 | |
 
 ### 2.2 กราฟ
@@ -359,7 +361,7 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 - [x] `computeCost` ของโมเดลที่ไม่อยู่ในตารางใช้ราคาสูงสุดของแต่ละประเภทและคืน `priceKnown: false`
 - [x] `bangkokDayRange` ข้ามเที่ยงคืนตามเวลาไทยถูกต้องขณะ `TZ=UTC`
 - [x] `effectiveLimit("unlock", 10)` เท่ากับค่าเดิม และ action อื่นคูณ 10
-- [x] `isAtLimit` และ `isRateLimited` ทดสอบค่าขอบทั้งสองด้าน
+- [x] `isRateLimited` ทดสอบค่าขอบทั้งสองด้าน
 
 ตรวจ: V0, VC
 
@@ -407,7 +409,7 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 - [x] `ensure`, `insert*IfAbsent`, `tryAcquireAiLock`, `consumeReplyToken`, `markPendingIfFailed` ให้ผู้ชนะคนเดียวเมื่อเรียกพร้อมกัน
 - [x] `listChangedAfter` คืนข้อความที่สถานะเปลี่ยนแม้ `seq` ต่ำกว่า cursor
 - [x] `recoverStuckAiStates` คืน id ของแถวที่คืนสภาพและตั้งเหตุผล `ai_timeout`
-- [x] `RateLimitRepository.peek` ไม่เพิ่ม count
+- [x] `RateLimitRepository.refund` คืนหนึ่งครั้งของหน้าต่างเดียวกัน ไม่ต่ำกว่า 0 และ `hit`/`refund` พร้อมกันได้ count ที่ถูกต้อง
 
 ตรวจ: V0
 
@@ -506,7 +508,7 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 | เขียนได้ | `app/welcome/page.tsx`, `src/features/access/**` ยกเว้น `access.constants.ts` |
 | อ่านก่อน | [access-gate](../specs/access-gate.md), [ui-screens ข้อ 2](../specs/ui-screens.md#2-หน้ายินดีต้อนรับ), [ui-screens ข้อ 8.4](../specs/ui-screens.md#84-srcfeaturesaccessaccesslogicts) |
 
-ขั้นตอน: `access.api.ts` (`unlock`, `lock` ผ่าน `fetch` ตรงในไฟล์ `*.api.ts` จนกว่า T-2.8 จะมี `apiFetch` แล้ว lead ให้เปลี่ยนใน T-7.1), `access.logic.ts`, `WelcomePage.tsx`, `AccessForm.tsx` ตามข้อ 2
+ขั้นตอน: `access.api.ts` (`unlock`, `lock` ผ่าน `fetch` ตรงในไฟล์ `*.api.ts` จนกว่า T-2.8 จะมี `apiFetch` แล้วผู้ตรวจให้เปลี่ยนใน T-7.1), `access.logic.ts`, `WelcomePage.tsx`, `AccessForm.tsx` ตามข้อ 2
 
 เกณฑ์รับ:
 
@@ -525,7 +527,7 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 | เขียนได้ | `src/core/use-cases/shared/**` |
 | อ่านก่อน | [use-cases: ขั้นตอนร่วม](../architecture/use-cases.md#ขั้นตอนร่วม), [line-messaging: ส่งข้อความ](../specs/line-messaging.md#ส่งข้อความ), [ADR 0010](../adr/0010-reply-token-first-and-idempotency.md) |
 
-ขั้นตอน: `loadLineAccess`, `deliverOutbound`, `raiseHandoff`, `hitRateLimit`, `checkRateLimit` พร้อม test ด้วยตัวปลอม
+ขั้นตอน: `loadLineAccess`, `deliverOutbound`, `raiseHandoff`, `hitRateLimit`, `refundRateLimit` พร้อม test ด้วยตัวปลอม
 
 เกณฑ์รับ:
 
@@ -566,7 +568,7 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 | เขียนได้ | `src/adapters/prisma/{settings,knowledge,usage,canned-reply,webhook-event,rate-limit}.repository.ts`, mapper ของแต่ละตัว, `knowledge-source.adapter.ts` และ `.spec.ts` |
 | อ่านก่อน | [data-model: กฎของ repository](../architecture/data-model.md#กฎของ-repository) ข้อ 5, 7, 11, 12, [domain-and-ports: Repository](../architecture/domain-and-ports.md#repository), [KnowledgeSource](../architecture/domain-and-ports.md#knowledgesource) |
 
-ขั้นตอน: เขียนทุก method, `hit` และ `peek` ด้วย SQL ในข้อ 11, `KnowledgeSource` ที่ query ตาราง KbDocument ตรงแล้วใช้ `formatKnowledgeBase`
+ขั้นตอน: เขียนทุก method, `hit` และ `refund` ด้วย SQL ในข้อ 11, `KnowledgeSource` ที่ query ตาราง KbDocument ตรงแล้วใช้ `formatKnowledgeBase`
 
 เกณฑ์รับ:
 
@@ -662,7 +664,7 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 | --- | --- |
 | Wave | 2 |
 | พึ่ง | T-0.4, T-1.7, T-1.8 |
-| เขียนได้ | `src/common/common.api.ts`, `common.hooks.ts`, `query-keys.ts`, `polling.ts`, `AppProviders.tsx`, `AppShell.tsx`, `src/features/inbox/inbox.api.ts`, `inbox.hooks.ts`, `src/features/settings/settings.api.ts`, `settings.hooks.ts`, และ helper ล้วนเพิ่มเติมใน `src/features/inbox/inbox.send.logic.ts` พร้อม `.spec.ts` (ไฟล์นี้ lead อนุญาตเพื่อให้ state ของการส่งทดสอบได้) |
+| เขียนได้ | `src/common/common.api.ts`, `common.hooks.ts`, `query-keys.ts`, `polling.ts`, `AppProviders.tsx`, `AppShell.tsx`, `src/features/inbox/inbox.api.ts`, `inbox.hooks.ts`, `src/features/settings/settings.api.ts`, `settings.hooks.ts`, และ helper ล้วนเพิ่มเติมใน `src/features/inbox/inbox.send.logic.ts` พร้อม `.spec.ts` (ไฟล์นี้ผู้ตรวจอนุญาตเพื่อให้ state ของการส่งทดสอบได้) |
 | อ่านก่อน | [ui-screens ข้อ 1.6, 7](../specs/ui-screens.md#16-การเรียก-api), [api-contract: protocol ของ polling](../architecture/api-contract.md#protocol-ของ-polling) |
 
 ขั้นตอน:
@@ -709,7 +711,7 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 - [x] migration `init` ไม่เปลี่ยน (`git diff` ของโฟลเดอร์นั้นว่าง) และ `pnpm db:deploy` บนฐานที่มี `init` อยู่แล้วผ่าน แถว Settings เดิมได้ค่าเริ่มต้นของสามคอลัมน์ใหม่
 - [x] ชุดทดสอบของ `TopicGuard`, `SettingsRepository`, `UsageRepository` และ `MessageRepository` ผ่านกับตัวปลอม และสามตัวหลังผ่านกับ Postgres
 - [x] test เดิมของ ticket ที่จบแล้วยังผ่านทั้งหมดโดยไม่ข้ามหรือลบ
-- [x] หลัง ticket นี้มี port 20 ตัวและ `use-cases/index.ts` export factory 34 ตัวตามรายชื่อใน backend (ตัวเลข 19 และ 32 ในเกณฑ์ของ T-0.3 เป็นของตอนที่ T-0.3 จบ)
+- [x] หลัง ticket นี้มี port 20 ตัวและ `use-cases/index.ts` export factory 34 ตัวตามรายชื่อใน backend (ตัวเลข 19 และ 32 ในเกณฑ์ของ T-0.3 เป็นของตอนที่ T-0.3 จบ ปัจจุบัน export factory 39 ตัวหลังตัดข้อความสำเร็จรูปและเพิ่มโน้ตกับ rich menu)
 
 ตรวจ: V0, VA และ `docker compose up -d --wait db` แล้ว `pnpm db:deploy` exit 0
 
@@ -753,7 +755,7 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 เกณฑ์รับ:
 
 - [x] รายการ test ของทุกหัวข้อใน use-cases มี test ตรงกันหนึ่งต่อหนึ่ง
-- [x] `UnlockAccess` นับเฉพาะรหัสผิดด้วย `checkRateLimit` แล้ว `hitRateLimit`
+- [x] `UnlockAccess` นับทุกครั้งด้วย `hitRateLimit` ก่อนเทียบรหัสแล้ว `refundRateLimit` เมื่อรหัสถูก (คำขอพร้อมกันถูกเทียบไม่เกินค่าจำกัด)
 - [x] `GetSettings` คืน `todayCost`, `guardBlockedToday` และ `pollIntervalMs`
 - [x] `UpdateSettings` เปิดขอบเขตหัวข้อโดยไม่มีหัวข้อได้ `settings.guard_topics_required` และไม่มีการเขียน
 - [x] `TestTopicGuard` บันทึก AiUsage kind guard ทุกครั้งที่ API ตอบ และใช้หัวข้อที่บันทึกไว้
@@ -961,7 +963,7 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 
 เกณฑ์รับ:
 
-- [x] มี route ครบ 34 endpoint และไม่มี endpoint อื่น (ภายหลังเหลือ 30 เมื่อตัดข้อความสำเร็จรูป [ADR 0024](../adr/0024-scope-reductions.md)) รวม `POST /api/settings/guard/test` และ `GET /api/system/guardrails`
+- [x] มี route ครบ 34 endpoint และไม่มี endpoint อื่น (ภายหลังเหลือ 30 เมื่อตัดข้อความสำเร็จรูป [ADR 0024](../adr/0024-scope-reductions.md) และปัจจุบันมี 35 หลังเพิ่มโน้ตและ rich menu ตาม [backend](../architecture/backend.md#api)) รวม `POST /api/settings/guard/test` และ `GET /api/system/guardrails`
 - [x] Webhook อ่าน raw body ก่อน parse และงานหลังตอบผ่าน `runJob`
 - [x] `PUT` และ `GET /api/local-storage/*key` ตอบ 404 เมื่อ `FILE_STORAGE` ไม่ใช่ `local`
 - [x] Route ไม่ import อะไรนอกจาก `src/composition` และ `src/contracts`
@@ -981,7 +983,7 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 
 1. `seed.ts` ตามทุกตารางในหัวข้อ seed (kill switch เปิด งบเท่าค่าเริ่มต้น ขอบเขตหัวข้อปิดพร้อมหัวข้อตัวอย่างสามหัวข้อ) แบบ idempotent
 2. ตรวจว่า compose ตรงกับ stubs-and-fixtures ทุกค่า (`stub`, `STUB_PORT`, `STUB_PUBLIC_URL`, `/__control/health`, `RATE_LIMIT_SCALE` ตามค่าใน project-setup ข้อ 7.3)
-3. `ci.yml` ตามข้อ 8 โดยใส่ `<SHA>` เป็นค่าตัวแทนจนกว่า lead จะได้ SHA จริง (ห้ามเดา)
+3. `ci.yml` ตามข้อ 8 โดยใส่ `<SHA>` เป็นค่าตัวแทนจนกว่าผู้ตรวจจะได้ SHA จริง (ห้ามเดา)
 
 เกณฑ์รับ:
 
@@ -1044,7 +1046,7 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 1. `Composer`, `AttachmentTray`, `CannedReplyPicker` ตามข้อ 5.7 ถึง 5.10
 2. `useAttachment` ตามข้อ 7.6, `useTypingPing` ตามข้อ 5.8
 3. `composer/inbox.media.ts` ตามข้อ 8.3 รวม `convertHeicToJpeg` ที่โหลด `import("heic-to/csp")` เฉพาะตอนเลือกไฟล์ HEIC
-4. ยืนยัน CSP ที่ `heic-to/csp` ต้องใช้ใน Chrome และ Firefox แล้วรายงานให้ lead แก้ project-setup
+4. ยืนยัน CSP ที่ `heic-to/csp` ต้องใช้ใน Chrome และ Firefox แล้วรายงานให้ผู้ตรวจแก้ project-setup
 
 เกณฑ์รับ:
 
@@ -1166,15 +1168,15 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 | --- | --- |
 | Wave | 7 |
 | พึ่ง | ทุก ticket |
-| เขียนได้ | `README.md` และไฟล์ที่ lead มอบให้แก้เป็นรายไฟล์ตามผลการตรวจ (รวมการเปลี่ยน `access.api.ts` ไปใช้ `apiFetch`) |
+| เขียนได้ | `README.md` และไฟล์ที่ผู้ตรวจมอบให้แก้เป็นรายไฟล์ตามผลการตรวจ (รวมการเปลี่ยน `access.api.ts` ไปใช้ `apiFetch`) |
 | อ่านก่อน | หัวข้อ 5 ของเอกสารนี้, [แผนการสร้าง ขั้นที่ 6](implementation-plan.md#ขั้นที่-6-เก็บงานและส่ง) |
 
 ขั้นตอน:
 
 1. รันทุกชุดตรวจในหัวข้อ 5 และรายงานผล
-2. แก้สิ่งที่ axe รายงานตามที่ lead มอบ
+2. แก้สิ่งที่ axe รายงานตามที่ผู้ตรวจมอบ
 3. README: URL ทั้งสาม (ให้เจ้าของงานเติม), วิธีรันด้วย `docker compose up`, รหัสเข้าใช้ของเครื่อง dev, ข้อจำกัดที่รู้ และรายการในหัวข้อ 5.2
-4. รายงานรายการเอกสารที่ไม่ตรงกับโค้ด เพื่อให้ lead แก้และเปลี่ยนสถานะ spec เป็น "สร้างแล้ว"
+4. รายงานรายการเอกสารที่ไม่ตรงกับโค้ด เพื่อให้ผู้ตรวจแก้และเปลี่ยนสถานะ spec เป็น "สร้างแล้ว"
 
 เกณฑ์รับ: ทุกข้อในหัวข้อ 5.1
 
@@ -1201,7 +1203,7 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 
 ตรวจ: V0, VA, VB, VC, VE
 
-## 4. รายการตรวจของ lead ต่อ ticket
+## 4. รายการตรวจของผู้ตรวจต่อ ticket
 
 - [ ] ไฟล์ที่เปลี่ยนอยู่ใน path "เขียนได้" ทั้งหมด และไม่มีไฟล์ร่วมถูกแก้โดยผู้ที่ไม่ใช่เจ้าของ
 - [ ] `pnpm lint` ผ่านโดยไม่มี `eslint-disable` ใหม่ ขอบเขตของ hexagonal ตาม [code-style](../guidelines/code-style.md) ถูกเคารพ
@@ -1211,7 +1213,7 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 - [ ] ไม่มี dependency ใหม่ และ `package.json` ไม่เปลี่ยน (ยกเว้น T-0.1)
 - [ ] Log ใช้ port `Logger` ชื่อเหตุการณ์อยู่ใน `LogEvent` และไม่มีเนื้อหาข้อความ ชื่อลูกค้า token หรือ secret ([ADR 0016](../adr/0016-logging-without-pii-and-status-in-db.md))
 - [ ] ไม่มีการเรียกบริการภายนอกจริงใน test หรือระหว่างทำ ticket
-- [ ] ticket หน้าจอ: ถ้อยคำมาจาก constant ตาม [ux-writing](../guidelines/ux-writing.md) ไม่มีคำลงท้าย และมีภาพหน้าจอที่ 390 และ 1280 ซึ่ง lead เปิดดูแล้ว
+- [ ] ticket หน้าจอ: ถ้อยคำมาจาก constant ตาม [ux-writing](../guidelines/ux-writing.md) ไม่มีคำลงท้าย และมีภาพหน้าจอที่ 390 และ 1280 ซึ่งผู้ตรวจเปิดดูแล้ว
 - [ ] ผู้ทำรายงานครบตามข้อ 1.4 และความกำกวมที่พบถูกส่งต่อเป็นการแก้เอกสาร
 
 ## 5. เกณฑ์ "พร้อม"

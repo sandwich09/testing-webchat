@@ -5,10 +5,12 @@ import type { RequestContext, UseCase, VerifyAccessInput } from '@/core/use-case
 import { WEBHOOK_STATUS_OVERRIDES, type HttpErrorCode } from './http-errors';
 import { clientIpOf, parseJsonBody, parseParams, parseQuery } from './http-request';
 import { errorResponse, isRouteFailure, readAccessToken, type RouteFailure } from './http-response';
+import { isAllowedOrigin } from './request-origin';
 
 /**
  * Who may call a route (api-contract "การเข้าระบบ" and "ต้นทาง"):
- * - `cookie`: VerifyAccess on the `twa_access` cookie, and Origin = APP_BASE_URL unless GET/HEAD.
+ * - `cookie`: VerifyAccess on the `twa_access` cookie, and `isAllowedOrigin` unless GET/HEAD
+ *   (Origin equals the request's own origin or the origin of APP_BASE_URL).
  * - `open`: no cookie (health, unlock, local-storage), Origin still checked unless GET/HEAD.
  * - `webhook`: POST /api/line/webhook only. No cookie, no Origin; the use case checks the LINE
  *   signature, and `line.not_configured` / `line.credentials_unreadable` answer 401.
@@ -50,7 +52,7 @@ export interface RouteDeps {
   verifyAccess: UseCase<VerifyAccessInput, void, 'access.unauthorized'>;
   ids: Pick<IdGenerator, 'requestId'>;
   logger: Logger;
-  /** Origin of APP_BASE_URL. */
+  /** Origin of APP_BASE_URL; same-origin requests pass too (request-origin.ts). */
   appOrigin: string;
 }
 
@@ -97,7 +99,7 @@ export const makeWithRoute =
 
     const run = async (): Promise<RouteOutcome> => {
       if (options.access !== 'webhook' && !isSafeMethod(request.method)) {
-        if (request.headers.get('origin') !== deps.appOrigin) {
+        if (!isAllowedOrigin(request, deps.appOrigin)) {
           deps.logger.log('warn', 'http.origin.rejected', log);
           return { ok: false, error: { code: 'request.origin_forbidden' } };
         }

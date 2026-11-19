@@ -1,12 +1,16 @@
 // API functions of the settings page (ui-screens 1.6): one function per endpoint, every answer
 // checked with its schema from src/contracts through `apiFetch`.
-import { apiFetch, apiFetchNoContent } from '@/common/common.api';
+import { apiFetch, apiFetchNoContent, uploadTimeoutMs } from '@/common/common.api';
 import {
+  CLIENT_TIMEOUT_LINE_CHECK_MS,
+  CLIENT_TIMEOUT_RICH_MENU_PUBLISH_MS,
+  CLIENT_TIMEOUT_RICH_MENU_REMOVE_MS,
   contactUsageResponseSchema,
   getDocumentResponseSchema,
   ingestDocumentResponseSchema,
   KNOWLEDGE_FILE_FIELD,
   lineBotInfoResponseSchema,
+  richMenuResponseSchema,
   listDocumentsResponseSchema,
   retryDocumentResponseSchema,
   systemStatusResponseSchema,
@@ -55,12 +59,35 @@ export function saveLineCredentials(body: {
     method: 'PUT',
     body,
     schema: lineBotInfoResponseSchema,
+    timeoutMs: CLIENT_TIMEOUT_LINE_CHECK_MS,
   });
 }
 
 /** POST /api/settings/line/test */
 export function testLineConnection(): Promise<LineBotInfo> {
-  return apiFetch('/api/settings/line/test', { method: 'POST', schema: lineBotInfoResponseSchema });
+  return apiFetch('/api/settings/line/test', {
+    method: 'POST',
+    schema: lineBotInfoResponseSchema,
+    timeoutMs: CLIENT_TIMEOUT_LINE_CHECK_MS,
+  });
+}
+
+/** POST /api/settings/rich-menu: publish. Answers the settings read again. */
+export function publishRichMenu(): Promise<SettingsDto> {
+  return apiFetch('/api/settings/rich-menu', {
+    method: 'POST',
+    schema: richMenuResponseSchema,
+    timeoutMs: CLIENT_TIMEOUT_RICH_MENU_PUBLISH_MS,
+  });
+}
+
+/** DELETE /api/settings/rich-menu: remove. Answers the settings read again. */
+export function removeRichMenu(): Promise<SettingsDto> {
+  return apiFetch('/api/settings/rich-menu', {
+    method: 'DELETE',
+    schema: richMenuResponseSchema,
+    timeoutMs: CLIENT_TIMEOUT_RICH_MENU_REMOVE_MS,
+  });
 }
 
 /** GET /api/knowledge/documents */
@@ -74,6 +101,7 @@ export function uploadKbDocument(file: File): Promise<DocumentDto> {
     method: 'POST',
     body: pdfForm(file),
     schema: ingestDocumentResponseSchema,
+    timeoutMs: uploadTimeoutMs(file.size),
   });
 }
 
@@ -93,6 +121,7 @@ export function retryKbDocument(id: string, file: File): Promise<DocumentDto> {
     method: 'POST',
     body: pdfForm(file),
     schema: retryDocumentResponseSchema,
+    timeoutMs: uploadTimeoutMs(file.size),
   });
 }
 

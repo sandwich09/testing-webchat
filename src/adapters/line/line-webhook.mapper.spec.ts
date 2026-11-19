@@ -72,7 +72,27 @@ describe('parseLineWebhook with the shared fixtures', () => {
         isRedelivery: false,
         userId: vars.userId,
         replyToken: vars.replyToken,
-        message: { type: 'text', lineMessageId: vars.messageId, text: 'มีโต๊ะว่างไหม' },
+        message: {
+          type: 'text',
+          lineMessageId: vars.messageId,
+          text: 'มีโต๊ะว่างไหม',
+          quotedLineMessageId: null,
+        },
+      },
+    ]);
+  });
+
+  it('postback: the data and the reply token', () => {
+    const vars = newFixtureVars({ postbackData: 'tw1:ai_on' });
+    expect(parse(renderFixture('postback', vars))).toEqual([
+      {
+        kind: 'postback',
+        webhookEventId: vars.webhookEventId,
+        timestamp: new Date(vars.timestamp),
+        isRedelivery: false,
+        userId: vars.userId,
+        replyToken: vars.replyToken,
+        data: 'tw1:ai_on',
       },
     ]);
   });
@@ -95,13 +115,36 @@ describe('parseLineWebhook with the shared fixtures', () => {
     ['message-video', { type: 'video', hostedByLine: true }, 'vid'],
     ['message-image-too-large', { type: 'image', hostedByLine: true }, 'bigimg'],
     ['message-image-gone', { type: 'image', hostedByLine: true }, 'gone'],
-    ['message-audio', { type: 'other', otherKind: 'audio' }, ''],
+    ['message-audio', { type: 'audio', hostedByLine: true, durationMs: 4000 }, 'aud'],
     ['message-file', { type: 'other', otherKind: 'file' }, ''],
     ['message-location', { type: 'other', otherKind: 'location' }, ''],
   ])('%s', (name, message, prefix) => {
     const vars = newFixtureVars();
     expect(parse(renderFixture(name, vars))).toMatchObject([
       { kind: 'message', message: { ...message, lineMessageId: `${prefix}${vars.messageId}` } },
+    ]);
+  });
+
+  it('reads an audio duration tolerantly and an external audio as not hosted by LINE', () => {
+    const audio = (message: Record<string, unknown>) =>
+      parse(
+        JSON.stringify({
+          events: [
+            {
+              type: 'message',
+              webhookEventId: 'e1',
+              timestamp: 1,
+              source: { type: 'user', userId: 'U1' },
+              message: { id: 'a1', type: 'audio', ...message },
+            },
+          ],
+        }),
+      );
+    expect(audio({ duration: 'x', contentProvider: { type: 'external' } })).toMatchObject([
+      { message: { type: 'audio', durationMs: null, hostedByLine: false } },
+    ]);
+    expect(audio({ duration: -1, contentProvider: { type: 'line' } })).toMatchObject([
+      { message: { type: 'audio', durationMs: null, hostedByLine: true } },
     ]);
   });
 

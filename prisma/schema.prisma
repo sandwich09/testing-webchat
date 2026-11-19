@@ -14,6 +14,11 @@ enum PoliteParticle {
   khrap
 }
 
+enum AiAnswerMode {
+  knowledge_only
+  general
+}
+
 enum FollowStatus {
   following
   unfollowed
@@ -35,6 +40,8 @@ enum HandoffReason {
   ai_other
   ai_failed
   ai_timeout
+  customer_asked_admin
+  ai_unavailable
 }
 
 enum MessageDirection {
@@ -54,6 +61,7 @@ enum MessageType {
   text
   image
   video
+  audio
   sticker
   other
   event
@@ -71,6 +79,14 @@ enum MediaStatus {
   ready
   failed
   too_large
+}
+
+/// Why inbound media is `failed` (MEDIA_FAILURES in enums.model.ts); `too_large` is a status.
+enum MediaFailure {
+  unsupported_type
+  external_source
+  download_failed
+  interrupted
 }
 
 enum DeliveryStatus {
@@ -112,12 +128,25 @@ model Settings {
   lineSecretVerifiedAt DateTime?      @db.Timestamptz(3)
   aiEnabled            Boolean        @default(false)
   aiProvider           String         @default("claude")
-  aiModel              String         @default("claude-opus-5-5")
+  aiModel              String         @default("claude-sonnet-5-5")
   aiDailyBudgetUsd     Decimal        @default(2) @db.Decimal(18, 9)
   aiPoliteParticle     PoliteParticle @default(kha)
   aiInstructions       String         @default("")
+  // Name the AI calls itself; null when none.
+  aiName               String?
+  aiAnswerMode         AiAnswerMode   @default(general)
   guardEnabled         Boolean        @default(false)
   guardTopics          String[]       @default([])
+  // Text of the rich menu button "วิธีทดสอบ"; '' sends the default text.
+  howToText            String         @default("")
+  // Welcome card on follow events.
+  welcomeEnabled       Boolean        @default(true)
+  welcomeText          String         @default("")
+  // The rich menu this app published as the default one, and when; null when none.
+  richMenuId           String?
+  richMenuPublishedAt  DateTime?      @db.Timestamptz(3)
+  richMenuError        String?
+  richMenuErrorAt      DateTime?      @db.Timestamptz(3)
   lastWebhookAt        DateTime?      @db.Timestamptz(3)
   lastLineError        String?
   lastLineErrorAt      DateTime?      @db.Timestamptz(3)
@@ -133,6 +162,8 @@ model Contact {
   pictureUrl          String?
   followStatus        FollowStatus   @default(following)
   followedAt          DateTime?      @db.Timestamptz(3)
+  /// Event time of the follow, unfollow or customer message that last set followStatus.
+  followStatusAt      DateTime?      @db.Timestamptz(3)
   aiEnabled           Boolean        @default(false)
   needsAdmin          Boolean        @default(false)
   needsAdminReason    HandoffReason?
@@ -150,6 +181,7 @@ model Contact {
 
   messages Message[]
   aiUsages AiUsage[]
+  notes    ContactNote[]
 
   @@index([lastMessageAt(sort: Desc)])
   @@index([needsAdmin])
@@ -158,37 +190,60 @@ model Contact {
 }
 
 model Message {
-  id                String           @id @db.Uuid
-  seq               BigInt           @unique @default(dbgenerated("nextval('change_seq')"))
-  updatedSeq        BigInt           @default(0)
-  contactId         String           @db.Uuid
-  direction         MessageDirection
-  author            MessageAuthor
-  type              MessageType
-  otherKind         OtherKind?
-  eventCode         String?
-  text              String?
-  mediaUrl          String?
-  previewUrl        String?
-  mediaStatus       MediaStatus?
-  stickerPackageId  String?
-  stickerId         String?
-  lineMessageId     String?          @unique
-  deliveryStatus    DeliveryStatus?
-  deliveryError     String?
-  retryKey          String?          @db.Uuid
-  createdAt         DateTime         @db.Timestamptz(3)
-  sentAt            DateTime?        @db.Timestamptz(3)
+  id                  String           @id @db.Uuid
+  seq                 BigInt           @unique @default(dbgenerated("nextval('change_seq')"))
+  updatedSeq          BigInt           @default(0)
+  contactId           String           @db.Uuid
+  direction           MessageDirection
+  author              MessageAuthor
+  type                MessageType
+  otherKind           OtherKind?
+  eventCode           String?
+  text                String?
+  mediaUrl            String?
+  previewUrl          String?
+  mediaStatus         MediaStatus?
+  /// Set with mediaStatus `failed`; null on rows stored before it existed (reason unknown).
+  mediaFailure        MediaFailure?
+  // Inbound audio: message.duration of the LINE event, in milliseconds.
+  mediaDurationMs     Int?
+  stickerPackageId    String?
+  stickerId           String?
+  lineMessageId       String?          @unique
+  /// Unique key of an inbound row without a lineMessageId (a tap): the LINE webhook event id.
+  webhookEventId      String?          @unique
+  // Inbound: the LINE message id the customer quoted with LINE's reply.
+  quotedLineMessageId String?
+  // Outbound: LINE message ids of the parts LINE accepted (sentMessages), in part order.
+  lineSentIds         String[]         @default([])
+  deliveryStatus      DeliveryStatus?
+  deliveryError       String?
+  retryKey            String?          @db.Uuid
+  createdAt           DateTime         @db.Timestamptz(3)
+  sentAt              DateTime?        @db.Timestamptz(3)
   // When the current delivery attempt started: the insert of a pending row or the last retry.
-  deliveryAttemptAt DateTime?        @db.Timestamptz(3)
+  deliveryAttemptAt   DateTime?        @db.Timestamptz(3)
   // When the first push with retryKey was attempted; never moves (LINE_RETRY_KEY_WINDOW_MS).
-  firstPushAt       DateTime?        @db.Timestamptz(3)
+  firstPushAt         DateTime?        @db.Timestamptz(3)
 
   contact  Contact   @relation(fields: [contactId], references: [id], onDelete: Restrict)
   aiUsages AiUsage[]
 
   @@index([contactId, seq])
   @@index([contactId, updatedSeq])
+  @@index([lineSentIds], type: Gin)
+}
+
+// Admin-only notes about a contact: never sent to LINE or to the AI model, never logged.
+model ContactNote {
+  id        String   @id @db.Uuid
+  contactId String   @db.Uuid
+  text      String
+  createdAt DateTime @db.Timestamptz(3)
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([contactId, createdAt(sort: Desc)])
 }
 
 model WebhookEvent {

@@ -3,10 +3,13 @@ import {
   LINE_MAX_PARTS_PER_REQUEST,
   LINE_RETRY_KEY_WINDOW_MS,
   LINE_TEXT_MAX_CHARS,
+  PREVIEW_TEXT_MAX_CHARS,
+  PREVIEW_TEXT_MAX_UNITS,
   REPLY_TOKEN_USABLE_MS,
 } from './constants';
 import {
   chooseSendChannel,
+  graphemeCount,
   isRetryKeyExpired,
   lineSecretStatus,
   previewOf,
@@ -211,6 +214,16 @@ describe('previewOf', () => {
     expect(out.text).toBe('ก็'.repeat(100));
     expect(previewOf({ type: 'text', text: 'x'.repeat(100) }).text).toBe('x'.repeat(100));
     expect(previewOf({ type: 'text', text: 'x'.repeat(101) }).text).toBe('x'.repeat(100));
+  });
+
+  it('also stops at PREVIEW_TEXT_MAX_UNITS code units, at a grapheme boundary', () => {
+    const stacked = `a${'\u0301'.repeat(2000)}`;
+    const out = previewOf({ type: 'text', text: `${'b'.repeat(10)}${stacked}c` }).text ?? '';
+    // The long cluster does not fit whole, so the preview ends before it.
+    expect(out).toBe('b'.repeat(10));
+    const devanagari = previewOf({ type: 'text', text: 'क्षि'.repeat(150) }).text ?? '';
+    expect(devanagari.length).toBeLessThanOrEqual(PREVIEW_TEXT_MAX_UNITS);
+    expect(graphemeCount(devanagari)).toBeLessThanOrEqual(PREVIEW_TEXT_MAX_CHARS);
   });
 
   it('gives null text for other types and for null text', () => {

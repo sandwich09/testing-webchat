@@ -1,13 +1,14 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { createServer, type Server } from 'node:http';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { LineAccessToken, LineMessageId, LineUserId, OutboundLinePart } from '@/core/domain';
-import { IMAGE_MAX_BYTES, VIDEO_MAX_BYTES } from '@/core/domain';
+import { IMAGE_MAX_BYTES, VIDEO_MAX_BYTES, buildWelcomeCard, richMenuSpec } from '@/core/domain';
 import { describeMessagingGatewaySuite, type MessagingGatewayHarness } from '@/adapters/fakes';
 import { ADAPTER_TEST_STUB_URL } from '../../../test-support/adapters.constants';
 import {
   STUB_CHANNEL_ACCESS_TOKEN,
+  STUB_OTHER_CHANNEL_ACCESS_TOKEN,
   STUB_CHANNEL_ID,
   STUB_CHANNEL_SECRET,
 } from '../../../e2e/fixtures/line/credentials';
@@ -17,10 +18,13 @@ import {
   LINE_PROFILE_TIMEOUT_MS,
   LINE_REQUEST_TIMEOUT_MS,
 } from './line.constants';
+import { toFlexWelcome, toLineRichMenu } from './line-flex.mapper';
 import type { FetchFn } from './line-http';
+import { RICH_MENU_IMAGE_PNG_BASE64 } from './rich-menu-image.generated';
 import {
   createLineMessagingGateway,
   LineContentTooLargeError,
+  sentIdsOf,
   toLineRetryKey,
 } from './line-messaging-gateway.adapter';
 
@@ -105,6 +109,25 @@ const seeded = new Map<string, Seeded>();
 let contentServer: Server;
 let contentBase = '';
 
+/** Rich menu pictures go to the stub's data host: the suite's data base is this server. */
+const forwardToStub = (req: IncomingMessage, res: ServerResponse): void => {
+  const chunks: Buffer[] = [];
+  req.on('data', (c: Buffer) => chunks.push(c));
+  req.on('end', () => {
+    void fetch(`${STUB}${req.url ?? ''}`, {
+      method: req.method,
+      headers: {
+        authorization: req.headers.authorization ?? '',
+        'content-type': req.headers['content-type'] ?? '',
+      },
+      body: Buffer.concat(chunks),
+    }).then(async (answer) => {
+      res.writeHead(answer.status, { 'content-type': 'application/json' });
+      res.end(Buffer.from(await answer.arrayBuffer()));
+    });
+  });
+};
+
 const startContentServer = (): Promise<void> =>
   new Promise((resolve) => {
     contentServer = createServer((req, res) => {
@@ -112,6 +135,10 @@ const startContentServer = (): Promise<void> =>
       const token = auth.replace(/^Bearer\s+/i, '');
       if (!/^Bearer\s+\S+/i.test(auth) || token === INVALID_TOKEN) {
         res.writeHead(401, { 'content-type': 'application/json' }).end('{"message":"auth"}');
+        return;
+      }
+      if ((req.url ?? '').startsWith('/line-data/v2/bot/richmenu/')) {
+        forwardToStub(req, res);
         return;
       }
       const m = /^\/line-data\/v2\/bot\/message\/([^/]+)\/content(\/preview|\/transcoding)?$/.exec(
@@ -186,6 +213,7 @@ const makeHarness = async (): Promise<MessagingGatewayHarness> => {
     channelSecret: STUB_CHANNEL_SECRET,
     validToken: TOKEN,
     invalidToken: INVALID_TOKEN,
+    otherChannelToken: STUB_OTHER_CHANNEL_ACCESS_TOKEN as LineAccessToken, // brand: stub token
     knownUserId,
     unknownUserId: `Unoprofile${hex()}` as LineUserId,
     freshReplyToken: () => Promise.resolve(hex()),
@@ -208,6 +236,14 @@ const makeHarness = async (): Promise<MessagingGatewayHarness> => {
     channelId: STUB_CHANNEL_ID,
     failNextSecretCheck: () =>
       failNext({ endpoint: 'oauth-token', match: { channelId: STUB_CHANNEL_ID }, status: 503 }),
+    richMenuState: async () => {
+      const res = await fetch(`${STUB}/__control/line/rich-menus`);
+      const state = (await res.json()) as {
+        menus: { richMenuId: string }[];
+        defaultRichMenuId: string | null;
+      };
+      return { ids: state.menus.map((m) => m.richMenuId), defaultId: state.defaultRichMenuId };
+    },
   };
 };
 
@@ -235,7 +271,9 @@ describe('LINE adapter: push', () => {
     const key = randomUUID();
     await failNext({ endpoint: 'push', match: { to }, status: 500, times: 2 });
     const result = await gatewayFor().push(TOKEN, to, text('hi'), key);
-    expect(result).toEqual({ ok: true, value: { alreadyAccepted: false } });
+    expect(result).toMatchObject({ ok: true, value: { alreadyAccepted: false } });
+    // The stub answers sentMessages with one id per message, as LINE does.
+    expect(result.ok ? result.value.sentIds : []).toHaveLength(1);
     const pushes = await recorded({ endpoint: 'push', to });
     const header = toLineRetryKey(key);
     expect(pushes.map((p) => [p.status, p.headers.xLineRetryKey])).toEqual([
@@ -255,7 +293,7 @@ describe('LINE adapter: push', () => {
       text('hi'),
       randomUUID(),
     );
-    expect(result).toEqual({ ok: true, value: { alreadyAccepted: true } });
+    expect(result).toEqual({ ok: true, value: { alreadyAccepted: true, sentIds: [] } });
     const pushes = await recorded({ endpoint: 'push', to });
     expect(pushes.map((p) => p.status)).toEqual([200, 409]);
   });
@@ -286,7 +324,7 @@ describe('LINE adapter: push', () => {
     });
     noSleep.calls.length = 0;
     const result = await gatewayFor().push(TOKEN, to, text('hi'), randomUUID());
-    expect(result).toEqual({ ok: true, value: { alreadyAccepted: false } });
+    expect(result).toMatchObject({ ok: true, value: { alreadyAccepted: false } });
     expect(noSleep.calls).toEqual([2000]);
   });
 
@@ -382,9 +420,39 @@ describe('LINE adapter: parseEvents', () => {
     ]);
   });
 
+  it('message-text-quote carries the quoted LINE message id', () => {
+    const vars = newFixtureVars({ quotedMessageId: '468789577898262530' });
+    const result = gatewayFor().parseEvents(renderFixture('message-text-quote', vars));
+    const [event] = result.ok ? result.value : [];
+    expect(event?.kind === 'message' && event.message).toEqual({
+      type: 'text',
+      lineMessageId: vars.messageId,
+      text: 'hello',
+      quotedLineMessageId: '468789577898262530',
+    });
+  });
+
   it('leaves out an event without webhookEventId', () => {
     const result = gatewayFor().parseEvents(JSON.stringify({ events: [{ type: 'follow' }] }));
     expect(result).toEqual({ ok: true, value: [] });
+  });
+});
+
+describe('sentIdsOf', () => {
+  it('reads the ids of sentMessages in order and skips entries without a string id', () => {
+    expect(sentIdsOf({ sentMessages: [{ id: '1', quoteToken: 'q' }, { id: '2' }] })).toEqual([
+      '1',
+      '2',
+    ]);
+    expect(sentIdsOf({ sentMessages: [{ id: 3 }, {}, null, { id: '' }, { id: '4' }] })).toEqual([
+      '4',
+    ]);
+  });
+
+  it('gives no ids for a body without sentMessages', () => {
+    for (const body of [null, undefined, 'x', {}, { sentMessages: 'x' }, []]) {
+      expect(sentIdsOf(body)).toEqual([]);
+    }
   });
 });
 
@@ -409,7 +477,7 @@ describe('toLineRetryKey', () => {
 
   it('is accepted by the stub, which takes version 4 and 5 keys only', async () => {
     const to = newUser();
-    expect(await gatewayFor().push(TOKEN, to, text('hi'), MESSAGE_ID)).toEqual({
+    expect(await gatewayFor().push(TOKEN, to, text('hi'), MESSAGE_ID)).toMatchObject({
       ok: true,
       value: { alreadyAccepted: false },
     });
@@ -426,6 +494,7 @@ describe('LINE adapter: reply', () => {
       { type: 'text', text: 'สอง' },
     ]);
     expect(result.ok).toBe(true);
+    expect(result.ok ? result.value.sentIds : []).toHaveLength(2);
     const items = (await recorded({ endpoint: 'reply' })).filter(
       (r) => (r.body as { replyToken?: string }).replyToken === replyToken,
     );
@@ -689,17 +758,25 @@ describe('LINE adapter: verifyChannelSecret', () => {
       return fetch(input, init);
     };
 
-  it('asks for a client-credentials token as form fields and revokes it at once', async () => {
+  it('asks for a client-credentials token as form fields, reads its bot, and revokes it at once', async () => {
     const calls: FormCall[] = [];
     const result = await gatewayFor({ fetch: recordingFetch(calls) }).verifyChannelSecret(
       STUB_CHANNEL_ID,
       STUB_CHANNEL_SECRET,
     );
-    expect(result).toEqual({ ok: true, value: undefined });
+    expect(result).toEqual({
+      ok: true,
+      value: { bot: { botUserId: 'Ustub00000000000000000000000000000', basicId: '@000stub' } },
+    });
     expect(calls.map((c) => c.url)).toEqual([
       `${STUB}/line/v2/oauth/accessToken`,
+      `${STUB}/line/v2/bot/info`,
       `${STUB}/line/v2/oauth/revoke`,
     ]);
+    // The bot is read with the token LINE just issued, never with another one.
+    expect(
+      String(calls[1]?.headers['authorization'] ?? calls[1]?.headers['Authorization']),
+    ).toMatch(/^Bearer stub-issued-/);
     const form = new URLSearchParams(calls[0]?.body);
     expect(Object.fromEntries(form)).toEqual({
       grant_type: 'client_credentials',
@@ -710,7 +787,7 @@ describe('LINE adapter: verifyChannelSecret', () => {
     // The stub answers 200 to a revoke only for a token it issued and has not revoked yet.
     const revokes = await recorded({ endpoint: 'oauth-revoke' });
     expect(revokes.at(-1)?.status).toBe(200);
-    expect(new URLSearchParams(calls[1]?.body).get('access_token')).toMatch(/^stub-issued-/);
+    expect(new URLSearchParams(calls[2]?.body).get('access_token')).toMatch(/^stub-issued-/);
   });
 
   it('never records the secret or the issued token in what the stub keeps', async () => {
@@ -771,7 +848,11 @@ describe('LINE adapter: showLoading and getBotInfo', () => {
   it('maps the bot info of the stub', async () => {
     expect(await gatewayFor().getBotInfo(TOKEN)).toEqual({
       ok: true,
-      value: { botName: 'ต้นหอม คาเฟ่ (ทดสอบ)', basicId: '@000stub' },
+      value: {
+        botName: 'ต้นหอม คาเฟ่ (ทดสอบ)',
+        basicId: '@000stub',
+        botUserId: 'Ustub00000000000000000000000000000',
+      },
     });
   });
 
@@ -795,5 +876,140 @@ describe('LINE adapter: showLoading and getBotInfo', () => {
       ok: false,
       error: { code: 'line.unavailable' },
     });
+  });
+});
+
+describe('LINE adapter: rich menu', () => {
+  const newMenu = async (): Promise<string> => {
+    const created = await gatewayFor().createRichMenu(TOKEN, richMenuSpec());
+    if (!created.ok) throw new Error('create failed');
+    return created.value.richMenuId;
+  };
+
+  it('sends the menu as LINE JSON with postback areas, selected and the chat bar text', async () => {
+    const before = (await recorded({ endpoint: 'richmenu-create' })).length;
+    await newMenu();
+    const [call] = (await recorded({ endpoint: 'richmenu-create' })).slice(before);
+    expect(call?.body).toEqual(toLineRichMenu(richMenuSpec()));
+    expect(call?.body).toMatchObject({
+      size: { width: 2500, height: 843 },
+      selected: true,
+      areas: [
+        { action: { type: 'postback', data: 'tw1:ai_on', displayText: 'คุยกับ AI' } },
+        { action: { type: 'postback', data: 'tw1:admin', displayText: 'คุยกับแอดมิน' } },
+        { action: { type: 'postback', data: 'tw1:how_to', displayText: 'วิธีทดสอบ' } },
+      ],
+    });
+  });
+
+  it('uploads the built-in PNG to the data host as image/png, under 1 MB', async () => {
+    const id = await newMenu();
+    const before = (await recorded({ endpoint: 'richmenu-upload' })).length;
+    expect((await gatewayFor().uploadRichMenuImage(TOKEN, id)).ok).toBe(true);
+    const [call] = (await recorded({ endpoint: 'richmenu-upload' })).slice(before);
+    expect(call?.path).toBe(`/line-data/v2/bot/richmenu/${id}/content`);
+    expect(call?.headers.contentType).toBe('image/png');
+    const png = Buffer.from(RICH_MENU_IMAGE_PNG_BASE64, 'base64');
+    expect(call?.body).toEqual({ contentType: 'image/png', bytes: png.length });
+    expect(png.length).toBeLessThanOrEqual(1024 * 1024);
+    // PNG IHDR: width and height at bytes 16 and 20.
+    expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([2500, 843]);
+  });
+
+  it('creates once only: a 5xx is line.unavailable without a second attempt', async () => {
+    const before = (await recorded({ endpoint: 'richmenu-create' })).length;
+    await failNext({ endpoint: 'richmenu-create', status: 500, times: 3 });
+    const result = await gatewayFor().createRichMenu(TOKEN, richMenuSpec());
+    expect(result).toMatchObject({ ok: false, error: { code: 'line.unavailable' } });
+    expect((await recorded({ endpoint: 'richmenu-create' })).slice(before)).toHaveLength(1);
+    await control('/reset', {});
+  });
+
+  it.each([
+    [429, 'line.rate_limited'],
+    [400, 'line.rich_menu_failed'],
+    [403, 'line.rich_menu_failed'],
+  ])('maps %i of create to %s', async (status, code) => {
+    await failNext({ endpoint: 'richmenu-create', status, body: { message: 'x' } });
+    const result = await gatewayFor().createRichMenu(TOKEN, richMenuSpec());
+    expect(result).toMatchObject({ ok: false, error: { code } });
+  });
+
+  it('returns line.rich_menu_failed for a 2xx without a usable id', async () => {
+    await failNext({ endpoint: 'richmenu-create', status: 200, body: { richMenuId: '../x' } });
+    const result = await gatewayFor().createRichMenu(TOKEN, richMenuSpec());
+    expect(result).toMatchObject({ ok: false, error: { code: 'line.rich_menu_failed' } });
+  });
+
+  it('refuses an id that could change the path, without calling LINE', async () => {
+    const before = (await recorded({})).length;
+    for (const call of [
+      gatewayFor().uploadRichMenuImage(TOKEN, '../x'),
+      gatewayFor().setDefaultRichMenu(TOKEN, 'a/b'),
+      gatewayFor().deleteRichMenu(TOKEN, '%2e'),
+    ]) {
+      expect(await call).toMatchObject({ ok: false, error: { code: 'line.rich_menu_failed' } });
+    }
+    expect(await recorded({})).toHaveLength(before);
+  });
+
+  it('retries setting the default after a 5xx', async () => {
+    const id = await newMenu();
+    await gatewayFor().uploadRichMenuImage(TOKEN, id);
+    await failNext({ endpoint: 'richmenu-default', status: 503 });
+    expect((await gatewayFor().setDefaultRichMenu(TOKEN, id)).ok).toBe(true);
+    await gatewayFor().clearDefaultRichMenu(TOKEN);
+    await gatewayFor().deleteRichMenu(TOKEN, id);
+  });
+});
+
+describe('LINE adapter: welcome card', () => {
+  const card = buildWelcomeCard({
+    botName: 'บัญชีทดสอบ',
+    welcomeText: 'ข้อความที่แก้',
+    particle: 'ค่ะ',
+    appBaseUrl: 'https://chat.example.com',
+  });
+
+  it('replies with a Flex bubble: gradient header, logo, text, three postback buttons', async () => {
+    const replyToken = hex();
+    expect((await gatewayFor().reply(TOKEN, replyToken, [{ type: 'card', card }])).ok).toBe(true);
+    const calls = await recorded({ endpoint: 'reply' });
+    const call = calls.find(
+      (r) => (r.body as { replyToken?: string } | null)?.replyToken === replyToken,
+    );
+    const message = (call?.body as { messages: unknown[] }).messages[0];
+    expect(message).toEqual(toFlexWelcome(card));
+    expect(message).toMatchObject({
+      type: 'flex',
+      altText: card.altText,
+      contents: {
+        type: 'bubble',
+        header: {
+          background: { type: 'linearGradient' },
+          contents: [{ type: 'image', url: 'https://chat.example.com/brand/app-icon-512.png' }, {}],
+        },
+        footer: {
+          contents: [
+            { style: 'primary', action: { type: 'postback', data: 'tw1:ai_on' } },
+            { style: 'secondary', action: { type: 'postback', data: 'tw1:admin' } },
+            { style: 'link', action: { type: 'postback', data: 'tw1:how_to' } },
+          ],
+        },
+      },
+    });
+    expect(JSON.stringify(message)).toContain('ข้อความที่แก้');
+  });
+
+  it('draws a text tile in place of the logo when the base URL is not HTTPS', () => {
+    const plain = buildWelcomeCard({
+      botName: null,
+      welcomeText: '',
+      particle: 'ครับ',
+      appBaseUrl: 'http://localhost:3000',
+    });
+    const flex = toFlexWelcome(plain);
+    expect(flex.contents.header.contents[0]).toMatchObject({ type: 'box' });
+    expect(JSON.stringify(flex)).not.toContain('http://');
   });
 });

@@ -1,6 +1,6 @@
 # 0007: Port ของผู้ให้บริการ AI และโมเดลเริ่มต้น
 
-> สถานะ: อนุมัติ ข้อ prompt caching และการสลับโมเดลสำรองถูกแทนที่โดย [0021](0021-explicit-cache-marker-and-fallback-per-model.md) · วันที่: 2026-11-18
+> สถานะ: อนุมัติ ข้อ prompt caching และการสลับโมเดลสำรองถูกแทนที่โดย [0021](0021-explicit-cache-marker-and-fallback-per-model.md) ข้อโมเดลเริ่มต้นถูกแทนที่โดย [0026](0026-neutral-core-prompt-and-layered-settings.md) (`claude-sonnet-5-5`) · วันที่: 2026-11-18
 
 ## บริบท
 

@@ -9,7 +9,7 @@ import type {
   Result,
   WebhookEventId,
 } from '@/core/domain';
-import { err, ok } from '@/core/domain';
+import { POSTBACK_DATA_MAX_CHARS, err, ok } from '@/core/domain';
 
 // Translates the LINE webhook body into LineEvent. Strict only on the fields listed in
 // docs/architecture/api-contract.md (POST /api/line/webhook); every other field passes through.
@@ -65,14 +65,18 @@ const eventBaseSchema = z.looseObject({
 });
 
 const messageHeadSchema = z.looseObject({ id: nonEmpty, type: z.string() });
-const textSchema = z.looseObject({ text: z.string() });
+// quotedMessageId: present when the customer used LINE's reply on a message. A value that is not
+// a non-empty string is ignored rather than dropping the message.
+const textSchema = z.looseObject({ text: z.string(), quotedMessageId: z.unknown().optional() });
 const mediaSchema = z.looseObject({
   contentProvider: z.looseObject({ type: z.string() }).optional(),
 });
 const stickerSchema = z.looseObject({ packageId: nonEmpty, stickerId: nonEmpty });
+const postbackSchema = z.looseObject({ data: z.string().max(POSTBACK_DATA_MAX_CHARS) });
+// duration (ms) is read tolerantly: a value that is not a non-negative integer counts as unknown.
+const audioSchema = mediaSchema.extend({ duration: z.unknown().optional() });
 
 const OTHER_KIND_BY_TYPE: Readonly<Record<string, OtherKind>> = {
-  audio: 'audio',
   file: 'file',
   location: 'location',
 };
@@ -85,7 +89,16 @@ const parseMessage = (raw: unknown): InboundLineMessage | null => {
   switch (head.data.type) {
     case 'text': {
       const m = textSchema.safeParse(raw);
-      return m.success ? { type: 'text', lineMessageId, text: m.data.text } : null;
+      if (!m.success) return null;
+      const quoted = m.data.quotedMessageId;
+      return {
+        type: 'text',
+        lineMessageId,
+        text: m.data.text,
+        // Safe: an opaque LINE message id, as above.
+        quotedLineMessageId:
+          typeof quoted === 'string' && quoted !== '' ? (quoted as LineMessageId) : null,
+      };
     }
     case 'image':
     case 'video': {
@@ -95,6 +108,17 @@ const parseMessage = (raw: unknown): InboundLineMessage | null => {
         type: head.data.type,
         lineMessageId,
         hostedByLine: isHostedByLine(m.data.contentProvider),
+      };
+    }
+    case 'audio': {
+      const m = audioSchema.safeParse(raw);
+      if (!m.success) return null;
+      const d = m.data.duration;
+      return {
+        type: 'audio',
+        lineMessageId,
+        hostedByLine: isHostedByLine(m.data.contentProvider),
+        durationMs: typeof d === 'number' && Number.isInteger(d) && d >= 0 ? d : null,
       };
     }
     case 'sticker': {
@@ -155,6 +179,13 @@ const parseEvent = (raw: unknown, webhookEventId: WebhookEventId): LineEvent => 
       return { ...base, kind: 'follow', userId, replyToken };
     case 'unfollow':
       return { ...base, kind: 'unfollow', userId };
+    case 'postback': {
+      // The data is untrusted text; the core decides whether it is one of the app's actions.
+      const p = postbackSchema.safeParse(obj.postback);
+      return p.success
+        ? { ...base, kind: 'postback', userId, replyToken, data: p.data.data }
+        : unsupported;
+    }
     default:
       return unsupported;
   }

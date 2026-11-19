@@ -8,6 +8,10 @@ export function proxy(request: NextRequest): Promise<NextResponse> {
 }
 
 export const config = {
-  // Every path except static assets. Must stay a literal: Next.js reads it at build time.
-  matcher: ['/((?!_next/static|_next/image|favicon\\.ico$|robots\\.txt$).*)'],
+  // Every path except static assets: the icons of app/ and the brand files of public/brand/ are
+  // public, so the browser tab and LINE can fetch them without the cookie. Must stay a literal:
+  // Next.js reads it at build time.
+  matcher: [
+    '/((?!_next/static|_next/image|favicon\\.ico$|icon\\.svg$|apple-icon\\.png$|robots\\.txt$|brand/).*)',
+  ],
 };

@@ -146,3 +146,43 @@ test('journey 5: pictures and videos are checked, converted, uploaded and sent',
   const loadedAfterPick = await Promise.all(scripts.filter((s) => s.afterPick).map((s) => s.body));
   expect(loadedAfterPick.some((body) => body.includes(HEIC_TO_MARKER))).toBe(true);
 });
+
+test('journey 5: a local upload over 10 MB arrives whole through the proxy, and a cut one is refused', async ({
+  request,
+  baseURL,
+}) => {
+  // Next.js buffers non-GET bodies for proxy.ts; past its default 10 MB it used to cut them
+  // silently (PROXY_BODY_MAX_BYTES). The PUT target is a path on whatever origin the page uses.
+  const size = 12 * MIB;
+  const origin = baseURL ?? '';
+  const issued = await request.post('/api/uploads', {
+    headers: { origin },
+    data: {
+      kind: 'video',
+      contentType: 'video/mp4',
+      sizeBytes: size,
+      preview: { contentType: 'image/jpeg', sizeBytes: 1024 },
+    },
+  });
+  expect(issued.status()).toBe(200);
+  const ticket = (await issued.json()) as { original: { url: string; strategy: string } };
+  expect(ticket.original.strategy).toBe('http_put');
+  expect(ticket.original.url.startsWith('/api/local-storage/')).toBe(true);
+
+  const body = Buffer.alloc(size, 7);
+  const cut = await request.put(ticket.original.url, {
+    headers: { origin, 'content-type': 'video/mp4' },
+    data: body.subarray(0, size - 1),
+  });
+  expect(cut.status()).toBe(422);
+  expect(((await cut.json()) as { error: { code: string } }).error.code).toBe('upload.incomplete');
+
+  const whole = await request.put(ticket.original.url, {
+    headers: { origin, 'content-type': 'video/mp4' },
+    data: body,
+  });
+  expect(whole.status()).toBe(200);
+  const stored = await request.get(ticket.original.url.split('?')[0] ?? '');
+  expect(stored.status()).toBe(200);
+  expect((await stored.body()).equals(body)).toBe(true);
+});

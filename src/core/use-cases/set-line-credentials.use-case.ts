@@ -23,8 +23,10 @@ export type SetLineCredentialsDeps = Pick<
 
 /**
  * Checks the access token and the Channel ID with channel secret pair with LINE, then stores them
- * (the two secrets encrypted). A pair LINE refuses is not saved; a check LINE cannot answer (429,
- * 5xx, no network) does not block the save and leaves the secret unchecked.
+ * (the two secrets encrypted). A pair LINE refuses is not saved, nor a token of another channel
+ * than the pair (its bot differs from the pair's bot: every webhook would then fail its
+ * signature). A check LINE cannot answer (429, 5xx, no network, the pair's bot unreadable) does
+ * not block the save and leaves the secret unchecked.
  */
 export const makeSetLineCredentials: (
   deps: SetLineCredentialsDeps,
@@ -32,7 +34,10 @@ export const makeSetLineCredentials: (
 ) => UseCase<
   SetLineCredentialsInput,
   SetLineCredentialsOutput,
-  'line.credentials_invalid' | 'line.channel_secret_invalid' | 'line.unavailable'
+  | 'line.credentials_invalid'
+  | 'line.channel_secret_invalid'
+  | 'line.channel_mismatch'
+  | 'line.unavailable'
 > =
   ({ gateway, cipher, settings, clock, logger }) =>
   async ({ channelId, channelSecret, channelAccessToken }, ctx) => {
@@ -53,15 +58,25 @@ export const makeSetLineCredentials: (
       });
       return err(secret.error.code);
     }
-    const secretStatus = secret.ok ? 'verified' : 'unchecked';
+    const channelBot = secret.ok ? secret.value.bot : null;
+    if (channelBot !== null && channelBot.botUserId !== bot.value.botUserId) {
+      logger.log('warn', 'line.credentials.rejected', {
+        requestId: ctx.requestId,
+        errorCode: 'line.channel_mismatch',
+      });
+      return err('line.channel_mismatch');
+    }
+    const verified = channelBot !== null;
+    const secretStatus = verified ? 'verified' : 'unchecked';
+    const botInfo = { botName: bot.value.botName, basicId: bot.value.basicId };
 
     await settings.saveLineCredentials(
       {
         channelSecretEnc: cipher.encrypt(channelSecret),
         channelAccessTokenEnc: cipher.encrypt(channelAccessToken),
       },
-      bot.value,
-      { channelId, secretVerifiedAt: secret.ok ? clock.now() : null },
+      botInfo,
+      { channelId, secretVerifiedAt: verified ? clock.now() : null },
     );
     await settings.recordLineError(null);
     logger.log('info', 'line.credentials.saved', {
@@ -69,5 +84,5 @@ export const makeSetLineCredentials: (
       outcome: secretStatus,
       ...(secret.ok ? {} : { errorCode: secret.error.code }),
     });
-    return ok({ ...bot.value, secretStatus });
+    return ok({ ...botInfo, secretStatus });
   };

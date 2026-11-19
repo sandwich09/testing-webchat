@@ -64,6 +64,7 @@ for (const file of markdownFiles) problems.push(...checkLinks(file, read(file), 
 const sourceFiles = [
   ...walk('src', (p) => p.endsWith('.constants.ts') || p === 'src/core/domain/constants.ts'),
   'src/composition/env.ts',
+  'src/contracts/timeouts.contract.ts',
   // JOB_BUDGET_SHARE of project-setup 10.4 lives next to the worst-case formulas it scales.
   'src/composition/timing-budget.ts',
   ...walk('app', (p) => p.endsWith('/route.ts')),

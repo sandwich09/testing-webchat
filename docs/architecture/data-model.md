@@ -25,10 +25,17 @@
 | lineChannelId | Channel ID ของ channel ตัวเลขไม่เกิน `LINE_CHANNEL_ID_MAX_CHARS` ไม่ใช่ความลับ จึงไม่เข้ารหัสและออกทาง API ได้ null สำหรับ credential ที่บันทึกก่อน migration ที่สี่ |
 | lineSecretVerifiedAt | เวลาที่ LINE ยืนยันล่าสุดว่า Channel secret เป็นของ `lineChannelId` (การตรวจแบบ client credentials ตอนบันทึกหรือทดสอบ) null เมื่อยังไม่เคยยืนยัน ตรวจไม่ได้ตอนบันทึก หรือ LINE ปฏิเสธคู่นี้ตอนทดสอบ |
 | aiEnabled | kill switch ค่าเริ่มต้นปิด ([ค่าเริ่มต้นของระบบที่ติดตั้งใหม่](project-setup.md#101-แกนกลาง)) |
-| aiProvider, aiModel | ค่าเริ่มต้น `claude` และ `DEFAULT_AI_MODEL` |
+| aiProvider, aiModel | ค่าเริ่มต้น `claude` และ `DEFAULT_AI_MODEL` (`claude-sonnet-5-5` ตั้งแต่ migration ที่หก แถวที่มีอยู่แล้วคงค่าเดิม) |
 | aiDailyBudgetUsd | งบต่อวัน ค่าเริ่มต้น `DEFAULT_AI_DAILY_BUDGET_USD` |
 | aiPoliteParticle | `ค่ะ` หรือ `ครับ` ค่าเริ่มต้น `DEFAULT_POLITE_PARTICLE` |
-| aiInstructions | คำแนะนำสำหรับ AI ที่ร้านเขียนเอง |
+| aiInstructions | คำแนะนำสำหรับ AI ที่แอดมินเขียนเอง (บล็อก `<custom_instructions>`) ค่าเริ่มต้นว่าง |
+| aiName | ชื่อ AI ที่ตัดช่องว่างแล้ว ไม่เกิน `AI_NAME_MAX_CHARS` null เมื่อไม่ตั้ง |
+| aiAnswerMode | ขอบเขตคำตอบ enum `AiAnswerMode`: `knowledge_only` หรือ `general` ค่าเริ่มต้น `DEFAULT_AI_ANSWER_MODE` (`general`) |
+| howToText | ข้อความของปุ่ม "วิธีทดสอบ" ตัดช่องว่างหัวท้าย ไม่เกิน `HOW_TO_TEXT_MAX_CHARS` ค่าว่าง (ค่าเริ่มต้น) คือส่งข้อความเริ่มต้นตามคำลงท้าย ([line-messaging](../specs/line-messaging.md#เมื่อลูกค้ากดปุ่ม)) |
+| welcomeEnabled | ส่งการ์ดต้อนรับเมื่อมี follow event ค่าเริ่มต้น true |
+| welcomeText | เนื้อการ์ดต้อนรับ ไม่เกิน `WELCOME_TEXT_MAX_CHARS` ค่าว่างคือข้อความเริ่มต้น |
+| richMenuId, richMenuPublishedAt | Rich menu ที่แอปตั้งเป็นเมนูเริ่มต้นที่ LINE และเวลาที่ publish null เมื่อไม่มี id ไม่ถูกส่งออกทาง API |
+| richMenuError, richMenuErrorAt | รหัสของการ publish หรือนำออกที่ล้มครั้งล่าสุด ล้างเมื่อทำสำเร็จ |
 | guardEnabled | ขอบเขตหัวข้อ ค่าเริ่มต้นปิด ([topic-guard](../specs/topic-guard.md)) |
 | guardTopics | รายการหัวข้อ (array ของข้อความ) ค่าเริ่มต้นว่าง ไม่เกิน `GUARD_MAX_TOPICS` รายการ |
 | lastWebhookAt, lastLineError, lastLineErrorAt, lastAiError, lastAiErrorAt | ใช้ในส่วนสถานะระบบ error เก็บเป็นรหัสจาก [error-catalog](error-catalog.md) ไม่เก็บข้อความจากบริการภายนอก |
@@ -43,6 +50,7 @@
 | lineUserId | unique |
 | displayName, pictureUrl | จาก profile API อาจว่างได้ |
 | followStatus, followedAt | `following` หรือ `unfollowed` และเวลาที่เพิ่มเพื่อนล่าสุด ใช้ในแผงข้อมูลลูกค้า |
+| followStatusAt | เวลาของ event (follow, unfollow หรือข้อความของลูกค้า) ที่ตั้ง `followStatus` ปัจจุบัน `setFollowStatus` เปลี่ยนสถานะเฉพาะเมื่อ event ใหม่ไม่เก่ากว่าค่านี้ event ที่มาไม่เรียงจึงไม่ทำให้สถานะย้อน (migration ที่สิบเอ็ด) แถวเดิมเป็น NULL ซึ่ง event แรกเปลี่ยนได้ |
 | aiEnabled | สวิตช์ AI ตอบแทนรายลูกค้า ลูกค้าใหม่เป็น false จำค่าไว้แม้ kill switch ปิด และกลายเป็น false เมื่อแอดมินส่งข้อความ ([ai-reply](../specs/ai-reply.md#เมื่อแอดมินตอบเอง)) |
 | needsAdmin, needsAdminReason | สถานะรอแอดมิน และเหตุผลเป็นค่าของ `HandoffReason`: `customer_sent_image`, `customer_sent_video`, `customer_sent_non_text`, `budget_reached`, `ai_not_in_knowledge`, `ai_needs_human_action`, `ai_unsafe_or_offtopic`, `ai_other`, `ai_failed`, `ai_timeout` ข้อความไทยอยู่ใน [error-catalog](error-catalog.md#เหตุผลของสถานะรอแอดมิน) |
 | aiState, aiStateAt | `idle` หรือ `replying` ใช้ตรวจงานที่ค้าง และเป็น lock ต่อลูกค้า |
@@ -52,7 +60,7 @@
 | createdAt | |
 | updatedSeq | ค่าใหม่จาก sequence ของ `Message.seq` ทุกครั้งที่แถวถูกสร้างหรือแก้ ใช้เป็น cursor ของ polling รายชื่อ |
 
-Index: `lastMessageAt`, และ `needsAdmin` กับ `unreadCount` สำหรับตัวกรอง และ `updatedSeq` สำหรับ polling
+Index: `lastMessageAt`, และ `needsAdmin` กับ `unreadCount` สำหรับตัวกรอง และ `updatedSeq` สำหรับ polling และใน SQL ของ migration ที่สิบเอ็ด: index ของลำดับรายชื่อ (`COALESCE("lastMessageAt", "createdAt") DESC, "id" DESC`) กับ partial index ของ `aiState = 'replying'`
 
 ### Message
 
@@ -62,13 +70,18 @@ Index: `lastMessageAt`, และ `needsAdmin` กับ `unreadCount` สำห
 | contactId | |
 | direction | `inbound`, `outbound` หรือ `internal` (บรรทัดเหตุการณ์ ไม่ได้ส่งถึงใคร) |
 | author | `customer`, `admin`, `ai` หรือ `system` (บรรทัดเหตุการณ์) |
-| type | `text`, `image`, `video`, `sticker`, `other`, `event` |
+| type | `text`, `image`, `video`, `audio`, `sticker`, `other`, `event` (`audio` ตั้งแต่ migration ที่เก้า เสียงที่รับก่อนนั้นเป็น `other` ที่ `otherKind` `audio`) |
 | otherKind | `audio`, `file`, `location` หรือ `unknown` เมื่อ type เป็น `other` ใช้แสดงป้ายบอกประเภท |
-| eventCode | รหัสของบรรทัดเหตุการณ์ (`EventCode` ใน [domain-and-ports](domain-and-ports.md#enum): `handoff.{HandoffReason}`, `ai.turned_off_by_admin`, `guard.blocked`, `contact.followed`, `contact.unfollowed`) เช่น `handoff.customer_sent_image` เมื่อ type เป็น `event` ข้อความไทยอยู่ใน [error-catalog](error-catalog.md#บรรทัดเหตุการณ์) |
+| eventCode | รหัสของบรรทัดเหตุการณ์ (`EventCode` ใน [domain-and-ports](domain-and-ports.md#enum): `handoff.{HandoffReason}`, `ai.turned_off_by_admin`, `guard.blocked`, `contact.followed`, `contact.unfollowed`, `customer.tapped_ai_on`, `customer.tapped_admin`, `customer.tapped_how_to`, `welcome.sent`) เช่น `handoff.customer_sent_image` เมื่อ type เป็น `event` ส่วน `customer.tapped_*` อยู่บนแถวขาเข้าของการกดปุ่ม และ `welcome.sent` อยู่บนแถวขาออกของการ์ดต้อนรับ (ทั้งสองเป็น type `text`) ข้อความไทยอยู่ใน [error-catalog](error-catalog.md#บรรทัดเหตุการณ์) |
 | text | |
-| mediaUrl, previewUrl, mediaStatus | สำหรับรูปและวิดีโอ `mediaStatus` เป็น `pending`, `ready`, `failed` หรือ `too_large` |
+| mediaUrl, previewUrl, mediaStatus | สำหรับรูป วิดีโอ และเสียง `mediaStatus` เป็น `pending`, `ready`, `failed` หรือ `too_large` เสียงไม่มีภาพตัวอย่าง `previewUrl` เท่ากับ `mediaUrl` |
+| mediaFailure | เหตุผลของสื่อขาเข้าที่ `failed`: `unsupported_type`, `external_source`, `download_failed` หรือ `interrupted` (migration ที่สิบเอ็ด) null สำหรับแถวอื่นและแถวที่ล้มก่อนนั้น |
+| mediaDurationMs | เสียงขาเข้า: `message.duration` ของ event หน่วย ms null เมื่อไม่รู้ |
 | stickerPackageId, stickerId | |
 | lineMessageId | unique ใช้กันข้อความขาเข้าซ้ำ |
+| webhookEventId | unique: `webhookEventId` ของ LINE บนแถวขาเข้าที่ไม่มี `lineMessageId` (การกดปุ่ม) ใช้กันการกดที่ LINE ส่งซ้ำ (migration ที่สิบเอ็ด) null สำหรับแถวอื่น |
+| quotedLineMessageId | ขาเข้า: id ของ LINE ที่ข้อความนี้ตอบกลับ (`message.quotedMessageId`) null เมื่อไม่มี หาข้อความต้นทางตอนอ่าน |
+| lineSentIds | ขาออก: `sentMessages[].id` ที่ LINE คืนตามลำดับส่วนของข้อความ (`text[]` ค่าเริ่มต้นว่าง) ใช้หาข้อความที่ลูกค้าตอบกลับ index แบบ GIN |
 | deliveryStatus, deliveryError | `pending`, `sent`, `failed` เฉพาะข้อความขาออก `deliveryError` เป็นรหัสจาก [error-catalog](error-catalog.md) |
 | retryKey | ใช้กับ LINE ทุกครั้งที่ส่งข้อความเดิม เท่ากับ id ของข้อความขาออก |
 | createdAt, sentAt | |
@@ -78,7 +91,20 @@ Index: `lastMessageAt`, และ `needsAdmin` กับ `unreadCount` สำห
 
 id ของข้อความขาออกสร้างที่หน้าเว็บ จึงกันการส่งซ้ำได้ด้วย primary key
 
-Index: `(contactId, seq)` และ `(contactId, updatedSeq)` (`countEventsByCode` ของ `GetGuardrailStats` กรองด้วย `type` และ `createdAt` ไม่มี index เพิ่ม เพราะข้อมูลของร้านเดียวมีไม่มาก)
+Index: `(contactId, seq)`, `(contactId, updatedSeq)` และ GIN บน `lineSentIds` (`countEventsByCode` ของ `GetGuardrailStats` กรองด้วย `type` และ `createdAt` ไม่มี index เพิ่ม เพราะข้อมูลของบัญชีเดียวมีไม่มาก)
+
+### ContactNote
+
+โน้ตของแอดมินเกี่ยวกับลูกค้า ([webchat-inbox](../specs/webchat-inbox.md#โน้ตของแอดมิน)) ไม่ถูกส่งไป LINE หรือโมเดล และไม่อยู่ใน log
+
+| Field | หมายเหตุ |
+| --- | --- |
+| id | UUIDv7 |
+| contactId | foreign key ไป `Contact` แบบ `ON DELETE CASCADE` |
+| text | ตัดช่องว่างแล้ว 1 ถึง `CONTACT_NOTE_MAX_CHARS` ตัว |
+| createdAt | จาก `Clock` |
+
+Index: `(contactId, createdAt DESC)` สำหรับรายการใหม่ไปเก่าของลูกค้าหนึ่งคน
 
 ### WebhookEvent
 
@@ -123,6 +149,7 @@ Index: `(contactId, seq)` และ `(contactId, updatedSeq)` (`countEventsByCod
 
 ```
 Contact 1 ── * Message
+Contact 1 ── * ContactNote
 Contact 1 ── * AiUsage (kind = reply, guard)
 Message 1 ── * AiUsage (kind = reply, guard)
 KbDocument 1 ── * AiUsage (kind = ingest)
@@ -189,6 +216,86 @@ Migration แรก (`init`) ถูก apply แล้ว ห้ามแก้�
 
 ไม่มีคำสั่งของ `"Message"."seq"` หรือ `change_seq` ตามกฎของ migration ที่สอง โค้ดก่อน migration นี้อ่านคอลัมน์และตารางที่ถูกลบ จึงย้อนกลับด้วยการ deploy รุ่นเก่าอย่างเดียวไม่ได้ ต้องเพิ่ม migration ที่สร้างคืนก่อน
 
+### Migration ที่หก: ชื่อ AI ขอบเขตคำตอบ และโมเดลเริ่มต้น
+
+`ai_name_answer_mode_default_model` ([ADR 0026](../adr/0026-neutral-core-prompt-and-layered-settings.md)) เพิ่มอย่างเดียว สร้างด้วย `--create-only` ตามวิธีของ migration ที่สอง และลบคำสั่งของ `"Message"."seq"` กับ `DROP SEQUENCE "change_seq"` ที่ Prisma สร้างเกินมาด้วยมือ ไฟล์มีเฉพาะ:
+
+```sql
+CREATE TYPE "AiAnswerMode" AS ENUM ('knowledge_only', 'general');
+ALTER TABLE "Settings" ADD COLUMN     "aiAnswerMode" "AiAnswerMode" NOT NULL DEFAULT 'general',
+ADD COLUMN     "aiName" TEXT,
+ALTER COLUMN "aiModel" SET DEFAULT 'claude-sonnet-5-5';
+```
+
+- การเปลี่ยนค่าเริ่มต้นของ `aiModel` ไม่แก้แถวที่มีอยู่ แถว Settings ของระบบที่ติดตั้งแล้วคงโมเดลเดิม (เช่น `claude-opus-5-5`) แอดมินเปลี่ยนเองในหน้าตั้งค่า
+- แถวเดิมได้ `aiAnswerMode = general` จากค่าเริ่มต้นของคอลัมน์ และ `aiName = null`
+- โค้ดรุ่นก่อนไม่อ่านสองคอลัมน์ใหม่ จึงยังทำงานกับตารางใหม่ได้
+
+### Migration ที่เจ็ด: การตอบกลับ
+
+`message_quote_and_sent_ids` เพิ่มอย่างเดียว ลบคำสั่งของ `"Message"."seq"` กับ `DROP SEQUENCE "change_seq"` ที่ Prisma สร้างเกินมาด้วยมือ:
+
+```sql
+ALTER TABLE "Message" ADD COLUMN     "lineSentIds" TEXT[] DEFAULT ARRAY[]::TEXT[],
+ADD COLUMN     "quotedLineMessageId" TEXT;
+CREATE INDEX "Message_lineSentIds_idx" ON "Message" USING GIN ("lineSentIds");
+```
+
+แถวเดิมได้ array ว่างและ null การอ้างถึงข้อความที่ส่งก่อน migration นี้จึงแสดงว่าไม่พร้อมแสดง `findByLineIds` ใช้ `lineMessageId IN (...)` (unique index) หรือ `lineSentIds && ARRAY[...]` (GIN index) ในคำสั่งเดียว
+
+### Migration ที่แปด: โน้ตของแอดมิน
+
+`contact_note` สร้างตาราง `ContactNote` พร้อม primary key, index `(contactId, createdAt DESC)` และ foreign key ไป `Contact` แบบ cascade เพิ่มอย่างเดียว (ลบคำสั่งของ `"Message"."seq"` กับ `DROP SEQUENCE "change_seq"` ที่ Prisma สร้างเกินมาด้วยมือ) adapter test ที่ล้างตาราง `Contact` ด้วย `TRUNCATE` ต้องใส่ `"ContactNote"` ในคำสั่งเดียวกัน
+
+### Migration ที่เก้า: ข้อความเสียงขาเข้า
+
+`inbound_audio` เพิ่มค่า `audio` ของ enum `MessageType` (`ALTER TYPE ... ADD VALUE`) และคอลัมน์ `Message.mediaDurationMs` (`INTEGER` ว่างได้) เพิ่มอย่างเดียว ลบคำสั่งของ `"Message"."seq"` กับ `DROP SEQUENCE "change_seq"` ที่ Prisma สร้างเกินมาด้วยมือ โค้ดรุ่นก่อนไม่อ่านแถวชนิด `audio` ได้ ถ้าย้อน deploy หลังมีข้อความเสียงเข้ามาแล้ว แถวนั้นจะแปลงเป็น domain ไม่ได้ ให้แก้ไปข้างหน้าแทนการย้อน
+
+### Migration ที่สิบ: rich menu และข้อความต้อนรับ
+
+`rich_menu_and_welcome` เพิ่มค่า `customer_asked_admin` และ `ai_unavailable` ของ enum `HandoffReason` และคอลัมน์ของ Settings ทั้งหมดเป็นการเพิ่ม ([ADR 0027](../adr/0027-rich-menu-and-welcome-card.md)):
+
+```sql
+ALTER TYPE "HandoffReason" ADD VALUE 'customer_asked_admin';
+ALTER TYPE "HandoffReason" ADD VALUE 'ai_unavailable';
+ALTER TABLE "Settings" ADD COLUMN "howToText" TEXT NOT NULL DEFAULT '',
+ADD COLUMN "richMenuError" TEXT,
+ADD COLUMN "richMenuErrorAt" TIMESTAMPTZ(3),
+ADD COLUMN "richMenuId" TEXT,
+ADD COLUMN "richMenuPublishedAt" TIMESTAMPTZ(3),
+ADD COLUMN "welcomeEnabled" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN "welcomeText" TEXT NOT NULL DEFAULT '';
+```
+
+- แถวเดิมได้ `welcomeEnabled = true` และข้อความว่าง (ใช้ข้อความเริ่มต้น) ไม่มีเมนูที่ publish
+- การกดปุ่มไม่มีคอลัมน์ใหม่: เก็บเป็นข้อความขาเข้าชนิด `text` ที่มี `eventCode` ของปุ่ม และการ์ดต้อนรับเป็นข้อความขาออกที่ `eventCode` เป็น `welcome.sent` (`eventCode` เป็น `TEXT` อยู่แล้ว)
+- ลบคำสั่งของ `"Message"."seq"` กับ `DROP SEQUENCE "change_seq"` ที่ Prisma สร้างเกินมาด้วยมือ โค้ดรุ่นก่อนอ่านแถวที่ `needsAdminReason` เป็นค่าใหม่ไม่ได้ ถ้าย้อน deploy หลังมีการกดปุ่มแล้ว ให้แก้ไปข้างหน้าแทนการย้อน
+
+### Migration ที่สิบเอ็ด: ผลจากการ review
+
+`review_fixes` ([ADR 0028](../adr/0028-review-fixes-concurrency-polling-and-ci.md)) เพิ่มอย่างเดียว ไฟล์อยู่ที่ [`prisma/migrations/20261119120000_review_fixes/migration.sql`](../../prisma/migrations/20261119120000_review_fixes/migration.sql):
+
+```sql
+DO $$
+BEGIN
+  EXECUTE format('ALTER DATABASE %I SET "TimeZone" TO %L', current_database(), 'UTC');
+END
+$$;
+CREATE TYPE "MediaFailure" AS ENUM ('unsupported_type', 'external_source', 'download_failed', 'interrupted');
+ALTER TABLE "Contact" ADD COLUMN "followStatusAt" TIMESTAMPTZ(3);
+ALTER TABLE "Message" ADD COLUMN "mediaFailure" "MediaFailure", ADD COLUMN "webhookEventId" TEXT;
+CREATE UNIQUE INDEX "Message_webhookEventId_key" ON "Message"("webhookEventId");
+CREATE INDEX "Contact_list_order_idx" ON "Contact" ((COALESCE("lastMessageAt", "createdAt")) DESC, "id" DESC);
+CREATE INDEX "Contact_ai_replying_idx" ON "Contact" ("aiStateAt") WHERE "aiState" = 'replying';
+```
+
+- **เขตเวลาของ session:** driver adapter แปลงเวลาถูกต้องเฉพาะเมื่อ session เป็น UTC จึงตั้งค่าเริ่มต้นของ database ด้วย dynamic SQL (ชื่อ database ต่างกันในแต่ละที่) ไม่ใช้พารามิเตอร์ `options` ตอนเชื่อมต่อ เพราะ pooler แบบ transaction ของ Neon ไม่รับประกันว่าส่งต่อ ค่าใหม่มีผลกับ session ที่เปิดหลัง migration เท่านั้น บน production ที่มี connection ค้างใน pool ของ Neon อยู่แล้ว session เหล่านั้นคงค่าเดิมจนถูกปิด ซึ่งค่าเริ่มต้นของ Neon คือ UTC อยู่แล้ว migration นี้จึงตรึงค่าไว้ไม่ให้เปลี่ยน ไม่ได้เปลี่ยนพฤติกรรม คำสั่งต้องใช้สิทธิ์เจ้าของ database ซึ่ง `DIRECT_URL` ของ Neon และผู้ใช้ของ compose มี adapter test (`settings.repository.spec.ts`) ตรวจว่า `SHOW TimeZone` เป็น `UTC` และค่าอยู่ใน `pg_db_role_setting` ของ database
+- **Index ที่ schema เขียนไม่ได้:** index บน expression ของลำดับรายชื่อ (`list` เรียง `COALESCE("lastMessageAt", "createdAt") DESC, "id" DESC`) และ partial index ของ `recoverStuckAiStates` ที่รันทุกรอบ polling ของรายชื่อ เขียนด้วย SQL เหมือน sequence และ trigger ของ migration แรก `prisma migrate diff` จากฐานข้อมูลหลัง migration ไปที่ schema ไม่สร้าง `DROP INDEX` ของสองตัวนี้ (ตรวจกับ Prisma 7.10.1 แล้ว: ผลต่างมีเฉพาะคำสั่งของ `"Message"."seq"` ที่รู้อยู่แล้ว) adapter test (`contact.repository.spec.ts`) ตรวจด้วย `EXPLAIN` ว่าคำสั่งทั้งสองใช้ index เมื่อ sequential scan ถูกปิด
+- `Contact.followStatusAt`: เวลาของ event ที่ตั้ง `followStatus` ปัจจุบัน (กฎของ repository ข้อ 14) แถวเดิมเป็น NULL ซึ่ง event แรกเปลี่ยนได้
+- `Message.webhookEventId`: key ของแถวขาเข้าที่ไม่มี `lineMessageId` (การกดปุ่ม) ทำให้ `insertInboundIfAbsent` กันซ้ำได้ (กฎของ repository ข้อ 1) แถวอื่นเป็น NULL ซึ่ง unique index ไม่นับ
+- `Message.mediaFailure`: เหตุผลของสื่อขาเข้าที่ `failed` แถวเดิมเป็น NULL ซึ่งหน้าเว็บแสดงข้อความเดิมของชนิดนั้น
+- ลบคำสั่งของ `"Message"."seq"` กับ `DROP SEQUENCE "change_seq"` ที่ Prisma สร้างเกินมาด้วยมือ โค้ดรุ่นก่อนไม่อ่านคอลัมน์ใหม่และทำงานกับตารางหลัง migration ได้
+
 ## Prisma schema
 
 ไฟล์ `prisma/schema.prisma` ทั้งไฟล์ ข้อกำหนด:
@@ -225,6 +332,11 @@ enum PoliteParticle {
   khrap
 }
 
+enum AiAnswerMode {
+  knowledge_only
+  general
+}
+
 enum FollowStatus {
   following
   unfollowed
@@ -246,6 +358,8 @@ enum HandoffReason {
   ai_other
   ai_failed
   ai_timeout
+  customer_asked_admin
+  ai_unavailable
 }
 
 enum MessageDirection {
@@ -265,6 +379,7 @@ enum MessageType {
   text
   image
   video
+  audio
   sticker
   other
   event
@@ -282,6 +397,13 @@ enum MediaStatus {
   ready
   failed
   too_large
+}
+
+enum MediaFailure {
+  unsupported_type
+  external_source
+  download_failed
+  interrupted
 }
 
 enum DeliveryStatus {
@@ -323,12 +445,25 @@ model Settings {
   lineSecretVerifiedAt DateTime?      @db.Timestamptz(3)
   aiEnabled            Boolean        @default(false)
   aiProvider           String         @default("claude")
-  aiModel              String         @default("claude-opus-5-5")
+  aiModel              String         @default("claude-sonnet-5-5")
   aiDailyBudgetUsd     Decimal        @default(2) @db.Decimal(18, 9)
   aiPoliteParticle     PoliteParticle @default(kha)
   aiInstructions       String         @default("")
+  // Name the AI calls itself; null when none.
+  aiName               String?
+  aiAnswerMode         AiAnswerMode   @default(general)
   guardEnabled         Boolean        @default(false)
   guardTopics          String[]       @default([])
+  // Text of the rich menu button "วิธีทดสอบ"; '' sends the default text.
+  howToText            String         @default("")
+  // Welcome card on follow events.
+  welcomeEnabled       Boolean        @default(true)
+  welcomeText          String         @default("")
+  // The rich menu this app published as the default one, and when; null when none.
+  richMenuId           String?
+  richMenuPublishedAt  DateTime?      @db.Timestamptz(3)
+  richMenuError        String?
+  richMenuErrorAt      DateTime?      @db.Timestamptz(3)
   lastWebhookAt        DateTime?      @db.Timestamptz(3)
   lastLineError        String?
   lastLineErrorAt      DateTime?      @db.Timestamptz(3)
@@ -338,29 +473,31 @@ model Settings {
 }
 
 model Contact {
-  id                  String            @id @db.Uuid
-  lineUserId          String            @unique
+  id                  String         @id @db.Uuid
+  lineUserId          String         @unique
   displayName         String?
   pictureUrl          String?
-  followStatus        FollowStatus      @default(following)
-  followedAt          DateTime?         @db.Timestamptz(3)
-  aiEnabled           Boolean           @default(false)
-  needsAdmin          Boolean           @default(false)
+  followStatus        FollowStatus   @default(following)
+  followedAt          DateTime?      @db.Timestamptz(3)
+  followStatusAt      DateTime?      @db.Timestamptz(3)
+  aiEnabled           Boolean        @default(false)
+  needsAdmin          Boolean        @default(false)
   needsAdminReason    HandoffReason?
-  aiState             AiState           @default(idle)
-  aiStateAt           DateTime?         @db.Timestamptz(3)
-  unreadCount         Int               @default(0)
-  lastMessageAt       DateTime?         @db.Timestamptz(3)
+  aiState             AiState        @default(idle)
+  aiStateAt           DateTime?      @db.Timestamptz(3)
+  unreadCount         Int            @default(0)
+  lastMessageAt       DateTime?      @db.Timestamptz(3)
   lastMessagePreview  String?
   lastMessageBy       MessageAuthor?
   lastMessageType     MessageType?
   replyToken          String?
-  replyTokenExpiresAt DateTime?         @db.Timestamptz(3)
-  createdAt           DateTime          @db.Timestamptz(3)
-  updatedSeq          BigInt            @default(0)
+  replyTokenExpiresAt DateTime?      @db.Timestamptz(3)
+  createdAt           DateTime       @db.Timestamptz(3)
+  updatedSeq          BigInt         @default(0)
 
   messages Message[]
   aiUsages AiUsage[]
+  notes    ContactNote[]
 
   @@index([lastMessageAt(sort: Desc)])
   @@index([needsAdmin])
@@ -369,37 +506,58 @@ model Contact {
 }
 
 model Message {
-  id                String           @id @db.Uuid
-  seq               BigInt           @unique @default(dbgenerated("nextval('change_seq')"))
-  updatedSeq        BigInt           @default(0)
-  contactId         String           @db.Uuid
-  direction         MessageDirection
-  author            MessageAuthor
-  type              MessageType
-  otherKind         OtherKind?
-  eventCode         String?
-  text              String?
-  mediaUrl          String?
-  previewUrl        String?
-  mediaStatus       MediaStatus?
-  stickerPackageId  String?
-  stickerId         String?
-  lineMessageId     String?          @unique
-  deliveryStatus    DeliveryStatus?
-  deliveryError     String?
-  retryKey          String?          @db.Uuid
-  createdAt         DateTime         @db.Timestamptz(3)
-  sentAt            DateTime?        @db.Timestamptz(3)
+  id                  String           @id @db.Uuid
+  seq                 BigInt           @unique @default(dbgenerated("nextval('change_seq')"))
+  updatedSeq          BigInt           @default(0)
+  contactId           String           @db.Uuid
+  direction           MessageDirection
+  author              MessageAuthor
+  type                MessageType
+  otherKind           OtherKind?
+  eventCode           String?
+  text                String?
+  mediaUrl            String?
+  previewUrl          String?
+  mediaStatus         MediaStatus?
+  mediaFailure        MediaFailure?
+  // Inbound audio: message.duration of the LINE event, in milliseconds.
+  mediaDurationMs     Int?
+  stickerPackageId    String?
+  stickerId           String?
+  lineMessageId       String?          @unique
+  webhookEventId      String?          @unique
+  // Inbound: the LINE message id the customer quoted with LINE's reply.
+  quotedLineMessageId String?
+  // Outbound: LINE message ids of the parts LINE accepted (sentMessages), in part order.
+  lineSentIds         String[]         @default([])
+  deliveryStatus      DeliveryStatus?
+  deliveryError       String?
+  retryKey            String?          @db.Uuid
+  createdAt           DateTime         @db.Timestamptz(3)
+  sentAt              DateTime?        @db.Timestamptz(3)
   // When the current delivery attempt started: the insert of a pending row or the last retry.
-  deliveryAttemptAt DateTime?        @db.Timestamptz(3)
+  deliveryAttemptAt   DateTime?        @db.Timestamptz(3)
   // When the first push with retryKey was attempted; never moves (LINE_RETRY_KEY_WINDOW_MS).
-  firstPushAt       DateTime?        @db.Timestamptz(3)
+  firstPushAt         DateTime?        @db.Timestamptz(3)
 
   contact  Contact   @relation(fields: [contactId], references: [id], onDelete: Restrict)
   aiUsages AiUsage[]
 
   @@index([contactId, seq])
   @@index([contactId, updatedSeq])
+  @@index([lineSentIds], type: Gin)
+}
+
+// Admin-only notes about a contact: never sent to LINE or to the AI model, never logged.
+model ContactNote {
+  id        String   @id @db.Uuid
+  contactId String   @db.Uuid
+  text      String
+  createdAt DateTime @db.Timestamptz(3)
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([contactId, createdAt(sort: Desc)])
 }
 
 model WebhookEvent {
@@ -467,7 +625,7 @@ model RateLimitBucket {
 
 สัญญาของแต่ละ method อยู่ใน [domain-and-ports](domain-and-ports.md) หัวข้อนี้บอกว่า adapter ของ Prisma ทำให้สัญญานั้นเป็นจริงอย่างไร
 
-1. **กันซ้ำด้วย insert แบบข้ามเมื่อซ้ำ:** `WebhookEvent` และ `Message` ขาเข้าบันทึกด้วย `createMany({ data: [row], skipDuplicates: true })` ซึ่งเป็น `INSERT ... ON CONFLICT DO NOTHING` ถ้า `count` เป็น 0 แปลว่าซ้ำ แล้วอ่านแถวเดิมด้วย unique key (`webhookEventId` หรือ `lineMessageId`) คืนไปพร้อม `inserted: false` ห้ามใช้แบบอ่านก่อนแล้วจึงเขียน
+1. **กันซ้ำด้วย insert แบบข้ามเมื่อซ้ำ:** `WebhookEvent` และ `Message` ขาเข้าบันทึกด้วย `createMany({ data: [row], skipDuplicates: true })` ซึ่งเป็น `INSERT ... ON CONFLICT DO NOTHING` ถ้า `count` เป็น 0 แปลว่าซ้ำ แล้วอ่านแถวเดิมด้วย unique key (`webhookEventId` หรือ `lineMessageId`) คืนไปพร้อม `inserted: false` ห้ามใช้แบบอ่านก่อนแล้วจึงเขียน Message ขาเข้าที่ไม่มี `lineMessageId` (การกดปุ่ม) ใช้ `Message.webhookEventId` เป็น unique key ([migration ที่สิบเอ็ด](#migration-ที่สิบเอ็ด-ผลจากการ-review)) การส่งซ้ำของ LINE ที่ผ่าน `webhookEvents.has` มาพร้อมกับครั้งแรกจึงได้ `inserted: false` และไม่มีงานที่สอง
 2. **ข้อความขาออกซ้ำ:** ใช้วิธีเดียวกับข้อ 1 โดย unique key คือ id ที่หน้าเว็บสร้าง
 3. **สร้าง Contact พร้อมกัน:** `ensure` ใช้ `createMany({ skipDuplicates: true })` กับ `lineUserId` แล้วอ่านแถว ผู้ที่ได้ `count` เป็น 1 คือผู้สร้าง
 4. **บันทึกข้อความขาเข้ากับ Contact:** `recordInbound` ใช้ `unreadCount: { increment: 1 }` และแก้ `lastMessage*` ด้วยเงื่อนไข `lastMessageAt` เดิมว่างหรือเก่ากว่า ผ่าน `$executeRaw` คำสั่งเดียว จึงไม่ถอยหลังเมื่อ event มาไม่เรียงลำดับ
@@ -498,7 +656,7 @@ model RateLimitBucket {
     ```
 
     - ช่วงย้อนหลัง: หน้าเว็บส่ง `after` เป็น cursor ล่าสุดลบ `POLL_OVERLAP_SEQ` แล้วรวมผลด้วย id โดยแถวที่ `updatedSeq` สูงกว่าแทนของเดิม ช่วงนี้จับแถวที่ได้เลข sequence ไปก่อนแต่ commit ช้ากว่าแถวที่หน้าเว็บเห็นแล้ว รายละเอียดของ protocol อยู่ใน [api-contract](api-contract.md#protocol-ของ-polling)
-    - sequence ใช้ร่วมทั้งระบบ `POLL_OVERLAP_SEQ` จึงครอบคลุมการเขียนพร้อมกันได้เท่าค่านั้นในช่วงที่ transaction หนึ่งยังไม่ commit ซึ่งพอสำหรับร้านเดียว
+    - sequence ใช้ร่วมทั้งระบบ `POLL_OVERLAP_SEQ` จึงครอบคลุมการเขียนพร้อมกันได้เท่าค่านั้นในช่วงที่ transaction หนึ่งยังไม่ commit ซึ่งพอสำหรับบัญชีเดียว
     - `limit` คือ `POLL_PAGE_LIMIT` ถ้า `hasMore` หน้าเว็บโหลดหน้าล่าสุดใหม่แทนการต่อ cursor
     - โหลดย้อนหลัง: `WHERE "contactId" = $1 AND "seq" < $beforeSeq ORDER BY "seq" DESC LIMIT MESSAGE_PAGE_LIMIT + 1` แล้วกลับลำดับ
     - ลำดับการแสดงใช้ `seq` ไม่ใช้ `updatedSeq`
@@ -513,21 +671,25 @@ model RateLimitBucket {
     RETURNING "count"
     ```
 
-    - `peek` อ่านโดยไม่เพิ่ม: `SELECT "count" FROM "RateLimitBucket" WHERE "key" = $key AND "windowStart" = $windowStart` ไม่มีแถวหรือหน้าต่างเก่าคืน 0
+    - `refund` คืนหนึ่งครั้งด้วยคำสั่งเดียว: `UPDATE "RateLimitBucket" SET "count" = "count" - 1 WHERE "key" = $key AND "windowStart" = $windowStart AND "count" > 0` ไม่มีแถวหรือหน้าต่างอื่นไม่เปลี่ยน
     - รูปแบบของ `key` อยู่ใน [domain-and-ports](domain-and-ports.md#ratelimitrepository) ไม่มี IP ดิบในฐานข้อมูล
-    - การลองรหัสเข้าใช้นับเฉพาะรหัสผิด ตาม [access-gate](../specs/access-gate.md) จึงใช้ `peek` ก่อนตรวจรหัส และ `hit` เมื่อรหัสผิด ([use-cases](use-cases.md#unlockaccess))
+    - การลองรหัสเข้าใช้ `hit` ก่อนเทียบรหัสทุกครั้ง คำขอพร้อมกันจึงได้ count คนละค่าและถูกเทียบรหัสไม่เกินค่าจำกัด แล้ว `refund` เมื่อรหัสถูก รหัสถูกจึงไม่กินโควตา ตาม [access-gate](../specs/access-gate.md) ([use-cases](use-cases.md#unlockaccess))
     - เมื่อ `RETURNING "count"` เป็น 1 ลบแถวที่ `windowStart` เก่ากว่า 1 วันในคำสั่งถัดไป ตารางจึงไม่โตตามจำนวน IP
 12. **ยอดใช้จ่ายของวัน:** รวม `costUsd` ของ `AiUsage` ที่ `createdAt` อยู่ในช่วงเที่ยงคืนถึงเที่ยงคืนตามเวลาไทย ช่วงเวลาคำนวณใน domain แล้วส่งเป็นเวลา UTC สองค่าให้ repository
 13. **คืนสภาพงานที่ค้างเมื่อ function ถูกตัด:** แต่ละสถานะกลางทางมี `UPDATE ... RETURNING "id"` ผ่าน `$queryRaw` คำสั่งเดียวที่มีเงื่อนไขบนสถานะเดิม เหมือน `recoverStuckAiStates` ในข้อ 8 ผู้เรียกพร้อมกันที่มาทีหลังรอ row lock แล้วไม่เห็นสถานะเดิมอีก แต่ละแถวจึงกลับไปที่ผู้เรียกคนเดียว และ trigger ของข้อ 10 ให้ `updatedSeq` ใหม่ polling รอบถัดไปจึงเห็น ([pitfalls M3](../guidelines/pitfalls-and-prevention.md#m3-สถานะกลางทางค้างเมื่อ-function-ถูกตัด)) ค่าของเวลาทั้งสามอยู่ใน [project-setup ข้อ 10.1](project-setup.md#101-แกนกลาง)
     - `failStuckProcessing(staleBefore, now)`: `UPDATE "KbDocument" SET "status" = 'failed', "error" = 'knowledge.extract_interrupted', "updatedAt" = $now WHERE "status" = 'processing' AND "updatedAt" < $staleBefore` `ListDocuments` เรียกทุกครั้งด้วย `now - KNOWLEDGE_STUCK_AFTER_MS`
-    - `failStuckMedia(contactId, staleBefore)`: `UPDATE "Message" SET "mediaStatus" = 'failed' WHERE "contactId" = $1 AND "mediaStatus" = 'pending' AND "createdAt" < $2` `GetMessages` เรียกทุกครั้งด้วย `now - MEDIA_STUCK_AFTER_MS`
+    - `failStuckMedia(contactId, staleBefore)`: `UPDATE "Message" SET "mediaStatus" = 'failed', "mediaFailure" = 'interrupted' WHERE "contactId" = $1 AND "mediaStatus" = 'pending' AND "createdAt" < $2` `GetMessages` เรียกทุกครั้งด้วย `now - MEDIA_STUCK_AFTER_MS`
     - `failStuckDeliveries(contactId, staleBefore)`: `UPDATE "Message" SET "deliveryStatus" = 'failed', "deliveryError" = 'line.send_interrupted' WHERE "contactId" = $1 AND "deliveryStatus" = 'pending' AND COALESCE("deliveryAttemptAt", "createdAt") < $2` `GetMessages` เรียกทุกครั้งด้วย `now - SEND_STUCK_AFTER_MS`
     - `markSent`, `markFailed`, `markReady` และ `markFailed` ของ KbDocument ไม่มีเงื่อนไขบนสถานะ ถ้างานที่ยังไม่ตายจบหลังการคืนสภาพ ผลจริงของมันเขียนทับ failed แต่เวลาของข้อ 10.1 มากกว่าเวลาแย่ที่สุดของทุกงาน ([project-setup ข้อ 10.4](project-setup.md#104-adapter-และ-route)) กรณีนี้จึงไม่เกิดเมื่อค่าเป็นไปตาม test ของ `timing-budget.spec.ts`
 14. **Push ครั้งแรก:** `recordFirstPush(id, at)` คือ `UPDATE "Message" SET "firstPushAt" = $at WHERE "id" = $id AND "firstPushAt" IS NULL` คำสั่งเดียว ผู้เรียกพร้อมกันได้ค่าเดียว และการส่งอีกครั้งไม่เลื่อนค่า `deliverOutbound` เรียกก่อน push ทุกครั้ง
+15. **สถานะการติดตามตามเวลาของ event:** `setFollowStatus(id, status, at)` คือ `updateMany` คำสั่งเดียวที่ `where` มี `"followStatusAt" IS NULL OR "followStatusAt" <= $at` และสถานะที่ต่างจากที่ขอ (หรือ `following` ของแถวที่ยังไม่มี `followedAt`) แล้วตั้ง `followStatusAt = $at` คืน true เมื่อแถวเปลี่ยน unfollow ที่เก่ากว่า follow หรือข้อความล่าสุดของลูกค้า และ follow หรือข้อความที่เก่ากว่า unfollow จึงไม่เปลี่ยนสถานะ ไม่ว่ามาถึงลำดับใด
+16. **ข้อความล่าสุดที่ AI ตอบ:** `latestInbound` เลือกแถวขาเข้าล่าสุดตาม seq ที่ `eventCode` เป็น NULL หรือไม่อยู่ใน `customer.tapped_admin`, `customer.tapped_how_to` (เขียนด้วย `OR` เพราะ `NOT IN` ตัดแถวที่เป็น NULL ทิ้งด้วย)
+17. **Rich menu ที่ publish:** `replaceRichMenu(expectedId, menu)` คือ `updateMany` คำสั่งเดียวที่ `where` มี `"richMenuId" IS NOT DISTINCT FROM $expectedId` การ publish สองครั้งที่เริ่มจากเมนูเดียวกันจึงบันทึกได้ครั้งเดียว ([use-cases PublishRichMenu](use-cases.md#publishrichmenu-และ-removerichmenu))
+18. **สื่อขาเข้าที่ไม่สำเร็จ:** `setMediaStatus(id, "failed", failure)` ตั้ง `mediaFailure` พร้อมกันในคำสั่งเดียวกับ compare-and-set บน `pending` (`too_large` ไม่มีเหตุผลเพิ่ม เพราะสถานะบอกอยู่แล้ว)
 
 ## ข้อมูลตัวอย่าง (seed)
 
-`prisma/seed.ts` ใส่ข้อมูลปลอมทั้งหมดของร้านสมมติ "ต้นหอม คาเฟ่" ให้หน้าจอใน Docker ตรงกับภาพตัวอย่าง ไม่มีข้อมูลของคนจริง
+`prisma/seed.ts` ใส่ข้อมูลปลอมทั้งหมดของร้านสมมติ "ต้นหอม คาเฟ่" ให้หน้าจอใน Docker ตรงกับภาพตัวอย่าง ไม่มีข้อมูลของคนจริง ใช้กับเครื่อง local และ Docker เท่านั้น production ไม่มี seed
 
 ### วิธีทำงาน
 
@@ -547,7 +709,7 @@ model RateLimitBucket {
 | lineChannelId, lineSecretVerifiedAt | `STUB_CHANNEL_ID` (คู่ของ `STUB_CHANNEL_SECRET` ที่ stub ยอมรับ) และ 1 นาทีก่อนรัน ส่วน LINE จึงแสดงว่า LINE ยืนยัน Channel secret แล้ว |
 | aiEnabled | เปิด เพื่อให้ผู้ตรวจลอง AI ตอบแทนกับ stub ได้ทันที (ต่างจากค่าเริ่มต้นของระบบที่ติดตั้งใหม่ซึ่งปิด) |
 | aiModel, aiDailyBudgetUsd, aiPoliteParticle | ค่าเริ่มต้นของ schema (`DEFAULT_AI_MODEL`, `DEFAULT_AI_DAILY_BUDGET_USD`, `DEFAULT_POLITE_PARTICLE`) |
-| aiInstructions | `ตอบสุภาพ เป็นกันเอง ถ้าลูกค้าถามเรื่องจัดเลี้ยงหรือสั่งจำนวนมาก ให้แอดมินตอบ` |
+| aiInstructions, aiName, aiAnswerMode | `SAMPLE_CUSTOM_INSTRUCTIONS`, `SAMPLE_AI_NAME` (`มะปราง`) และ `knowledge_only` จาก `e2e/fixtures/kb/tonhom-cafe.settings.ts` ซึ่งชุดคำถามวัดคุณภาพใช้ร่วม ความเป็นร้านของเดโมมาจากค่าเหล่านี้ ระบบที่ติดตั้งใหม่โดยไม่มี seed มีค่าเป็นกลาง (คำแนะนำว่าง ไม่มีชื่อ `general`) |
 | guardEnabled, guardTopics | ปิด, `มุกตลกไทย`, `มีมจากละครและซีรีส์`, `มุกจากภาพยนตร์` (ตัวอย่างสำหรับเดโม เปิดเองที่หน้าตั้งค่า) |
 | lastWebhookAt | 1 นาทีก่อนรัน |
 

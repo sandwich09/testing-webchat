@@ -36,4 +36,23 @@ describe('createSettingsRepository (Postgres)', () => {
     expect(row.aiDailyBudgetUsd.toFixed(9)).toBe('123456789.012345678');
     expect((await repo.get()).aiDailyBudget).toBe(123_456_789_012_345_678n);
   });
+
+  it('turns AI off with the one SQL statement of the operations runbook, read at once by get', async () => {
+    await client.settings.deleteMany();
+    const repo = createSettingsRepository(client, { clock });
+    await repo.update({ aiEnabled: true });
+    // docs/runbooks/operations.md "หยุด AI ทันที", when the web page cannot be reached.
+    await client.$executeRawUnsafe('UPDATE "Settings" SET "aiEnabled" = false WHERE "id" = 1;');
+    expect((await repo.get()).aiEnabled).toBe(false);
+  });
+
+  it('the database runs every session in UTC (database default set by migration)', async () => {
+    const rows = await client.$queryRaw<{ TimeZone: string }[]>`SHOW TimeZone`;
+    expect(rows[0]?.TimeZone).toBe('UTC');
+    const setting = await client.$queryRaw<{ setconfig: string[] }[]>`
+      SELECT s."setconfig" FROM "pg_db_role_setting" s
+      JOIN "pg_database" d ON d."oid" = s."setdatabase"
+      WHERE d."datname" = current_database() AND s."setrole" = 0`;
+    expect(setting.flatMap((r) => r.setconfig)).toContain('TimeZone=UTC');
+  });
 });

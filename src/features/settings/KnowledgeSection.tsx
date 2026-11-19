@@ -1,7 +1,7 @@
 'use client';
 
 import { Loader2, Upload } from 'lucide-react';
-import { useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useId, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 
 import { errorCodeOf } from '@/common/common.api';
 import { copy as commonCopy } from '@/common/common.constants';
@@ -12,7 +12,7 @@ import { errorMessage } from '@/common/error-messages';
 import { testIds } from '@/common/test-ids';
 import { Button } from '@/common/ui/button';
 import { Skeleton } from '@/common/ui/skeleton';
-import { PDF_MAX_BYTES, type DocumentDto } from '@/contracts';
+import { PDF_MAX_BYTES, PDF_MAX_PAGES, type DocumentDto } from '@/contracts';
 import { KbDeleteDialog } from '@/features/settings/KbDeleteDialog';
 import { KbDocumentTable } from '@/features/settings/KbDocumentTable';
 import { KbTextDialog } from '@/features/settings/KbTextDialog';
@@ -22,7 +22,7 @@ import {
   useRetryKbDocument,
   useUploadKbDocument,
 } from '@/features/settings/settings.hooks';
-import { kbUsage, validatePdfFile } from '@/features/settings/settings.logic';
+import { kbUsage, pdfUploadHintText, validatePdfFile } from '@/features/settings/settings.logic';
 import { SettingsRow } from '@/features/settings/SettingsRow';
 import { SettingsSection } from '@/features/settings/SettingsSection';
 
@@ -94,6 +94,7 @@ export function KnowledgeSection() {
   const [deleting, setDeleting] = useState<DocumentDto | null>(null);
 
   const uploadButtonRef = useRef<HTMLButtonElement>(null);
+  const uploadHintId = useId();
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const retryInputRef = useRef<HTMLInputElement>(null);
   const retryIdRef = useRef<string | null>(null);
@@ -106,6 +107,8 @@ export function KnowledgeSection() {
       errorMessage(code, {
         size: (file.size / BYTES_PER_MB).toFixed(1),
         maxMb: PDF_MAX_BYTES / BYTES_PER_MB,
+        maxPages: PDF_MAX_PAGES,
+        pageCount: '—',
       }) ?? errorMessage('internal.unexpected');
     setUploadError({ code, message: message ?? '' });
   };
@@ -219,6 +222,7 @@ export function KnowledgeSection() {
             uploadInputRef.current?.click();
           }}
           data-testid={testIds.kbUpload}
+          aria-describedby={uploadHintId}
           className="relative"
         >
           <span className={cn('inline-flex items-center gap-2', busy && 'invisible')}>
@@ -229,6 +233,13 @@ export function KnowledgeSection() {
             <Loader2 aria-hidden="true" className="absolute size-[18px] animate-spin" />
           ) : null}
         </Button>
+        <p
+          id={uploadHintId}
+          data-testid={testIds.kbUploadHint}
+          className="text-sub [overflow-wrap:anywhere] text-muted"
+        >
+          {pdfUploadHintText()}
+        </p>
         <input
           ref={uploadInputRef}
           type="file"

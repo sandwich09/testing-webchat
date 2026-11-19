@@ -1,6 +1,6 @@
 # Backend
 
-> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-18
+> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-19
 
 ภาพรวมของฝั่ง server: โครงโฟลเดอร์ หลักการ และรายชื่อ port, use case และ endpoint รายละเอียดอยู่ในเอกสารเจ้าของแต่ละเรื่อง ไฟล์นี้ไม่เขียนซ้ำ
 
@@ -49,7 +49,7 @@ app/
 
 รายชื่อทั้งหมด ลายเซ็นและความหมายอยู่ใน [domain-and-ports](domain-and-ports.md#port)
 
-`MessagingGateway`, `ChatModel`, `DocumentExtractor`, `TopicGuard`, `KnowledgeSource`, `FileStorage`, `ContactRepository`, `MessageRepository`, `SettingsRepository`, `KnowledgeRepository`, `UsageRepository`, `WebhookEventRepository`, `RateLimitRepository`, `SecretCipher`, `AccessTokenSigner`, `ContentHasher`, `Clock`, `IdGenerator`, `Logger`
+20 ตัว: `MessagingGateway`, `ChatModel`, `DocumentExtractor`, `TopicGuard`, `KnowledgeSource`, `FileStorage`, `ContactRepository`, `ContactNoteRepository`, `MessageRepository`, `SettingsRepository`, `KnowledgeRepository`, `UsageRepository`, `WebhookEventRepository`, `RateLimitRepository`, `SecretCipher`, `AccessTokenSigner`, `ContentHasher`, `Clock`, `IdGenerator`, `Logger`
 
 Adapter ของ `KnowledgeSource` อยู่ใน `src/adapters/prisma/` และ query ตาราง `KbDocument` ตรง ไม่เรียก `KnowledgeRepository` เพราะ adapter ห้ามเรียก adapter อื่น ทุก port มีตัวปลอมใน `src/adapters/fakes/` และชุดทดสอบของ port ที่รันกับทั้งตัวปลอมและตัวจริง
 
@@ -57,7 +57,7 @@ Adapter ของ `KnowledgeSource` อยู่ใน `src/adapters/prisma/` �
 
 ขั้นตอนและ test อยู่ใน [use-cases](use-cases.md)
 
-`VerifyAccess`, `UnlockAccess`, `CheckHealth`, `ReceiveLineEvents`, `StoreInboundMedia`, `GenerateAiReply`, `SendAdminMessage`, `RetryMessage`, `IssueUpload`, `DiscardUpload`, `WriteLocalUpload`, `ServeLocalMedia`, `ShowTypingToCustomer`, `SetContactAi`, `MarkContactRead`, `ListContacts`, `GetContact`, `GetMessages`, `GetSettings`, `UpdateSettings`, `TestTopicGuard`, `SetLineCredentials`, `TestLineConnection`, `IngestDocument`, `DeleteDocument`, `ListDocuments`, `GetDocument`, `GetUsageReport`, `GetContactUsage`, `GetSystemStatus`, `GetGuardrailStats`
+`VerifyAccess`, `UnlockAccess`, `CheckHealth`, `ReceiveLineEvents`, `HandleRichMenuAction`, `SendWelcome`, `PublishRichMenu`, `RemoveRichMenu`, `StoreInboundMedia`, `GenerateAiReply`, `SendAdminMessage`, `RetryMessage`, `IssueUpload`, `DiscardUpload`, `WriteLocalUpload`, `ServeLocalMedia`, `ShowTypingToCustomer`, `SetContactAi`, `MarkContactRead`, `ListContactNotes`, `AddContactNote`, `DeleteContactNote`, `ListContacts`, `GetContact`, `GetMessages`, `GetSettings`, `UpdateSettings`, `TestTopicGuard`, `SetLineCredentials`, `TestLineConnection`, `IngestDocument` (ช่วงหลังตอบเป็น `ExtractDocument`), `DeleteDocument`, `ListDocuments`, `GetDocument`, `GetUsageReport`, `GetContactUsage`, `GetSystemStatus`, `GetGuardrailStats`
 
 Use case ที่อ่านอย่างเดียวเรียก repository ตรงได้ ยกเว้น `ListContacts` ซึ่งเขียนแบบมีเงื่อนไขหนึ่งครั้งทุกรอบ: คืนสภาพงาน AI ที่ค้างเป็นรอแอดมินพร้อมบรรทัดเหตุการณ์ ตาม [ai-reply](../specs/ai-reply.md#งานที่ค้าง)
 
@@ -67,7 +67,7 @@ Use case ที่อ่านอย่างเดียวเรียก repo
 
 ตัวช่วยของ route (`withRoute`, `json`, `bodyStream`, `runJob`, ตัวแปลง DTO และตัวแปลง input) อยู่ใน `src/composition/` และ export จาก `src/composition/index.ts` route import จาก `@/composition` เท่านั้น ไฟล์ใน `app/api/_lib/` (`with-route.ts`, `to-dto.ts`) เป็นเพียง re-export และคำอธิบายวิธีเขียน route เพราะ unit test ของ Vitest เก็บเฉพาะ `src/**` `runJob(fn, fields)` รับงานและ field ของ log (`requestId`, `route`, `contactId`, `messageId`, `documentId`) ส่งงานเข้า `after()` และ log `job.run.failed` เมื่องาน throw สัญญาของแต่ละตัวอยู่ใน [api-contract](api-contract.md#endpoint)
 
-`POST /api/line/webhook`, `GET /api/health`, `POST /api/access/unlock`, `POST /api/access/lock`, `GET /api/contacts`, `GET /api/contacts/:id`, `PATCH /api/contacts/:id`, `POST /api/contacts/:id/read`, `GET /api/contacts/:id/messages`, `POST /api/contacts/:id/messages`, `POST /api/contacts/:id/messages/:messageId/retry`, `POST /api/contacts/:id/typing`, `POST /api/uploads`, `DELETE /api/uploads/:uploadId`, `PUT /api/local-storage/*key`, `GET /api/local-storage/*key`, `GET /api/settings`, `PATCH /api/settings`, `PUT /api/settings/line-credentials`, `POST /api/settings/line/test`, `POST /api/settings/guard/test`, `GET /api/knowledge/documents`, `POST /api/knowledge/documents`, `GET /api/knowledge/documents/:id`, `DELETE /api/knowledge/documents/:id`, `POST /api/knowledge/documents/:id/retry`, `GET /api/usage`, `GET /api/usage/contacts/:id`, `GET /api/system/status`, `GET /api/system/guardrails`
+`POST /api/line/webhook`, `GET /api/health`, `POST /api/access/unlock`, `POST /api/access/lock`, `GET /api/contacts`, `GET /api/contacts/:id`, `PATCH /api/contacts/:id`, `POST /api/contacts/:id/read`, `GET /api/contacts/:id/notes`, `POST /api/contacts/:id/notes`, `DELETE /api/contacts/:id/notes/:noteId`, `GET /api/contacts/:id/messages`, `POST /api/contacts/:id/messages`, `POST /api/contacts/:id/messages/:messageId/retry`, `POST /api/contacts/:id/typing`, `POST /api/uploads`, `DELETE /api/uploads/:uploadId`, `PUT /api/local-storage/*key`, `GET /api/local-storage/*key`, `GET /api/settings`, `PATCH /api/settings`, `PUT /api/settings/line-credentials`, `POST /api/settings/line/test`, `POST /api/settings/guard/test`, `POST /api/settings/rich-menu`, `DELETE /api/settings/rich-menu`, `GET /api/knowledge/documents`, `POST /api/knowledge/documents`, `GET /api/knowledge/documents/:id`, `DELETE /api/knowledge/documents/:id`, `POST /api/knowledge/documents/:id/retry`, `GET /api/usage`, `GET /api/usage/contacts/:id`, `GET /api/system/status`, `GET /api/system/guardrails`
 
 `PUT` และ `GET /api/local-storage/*key` มีเฉพาะเมื่อ `FILE_STORAGE=local`
 
@@ -76,6 +76,6 @@ Use case ที่อ่านอย่างเดียวเรียก repo
 - URL ของไฟล์คือ `<APP_BASE_URL>/api/local-storage/<key>` โดยแต่ละส่วนของ key ที่คั่นด้วย `/` ผ่าน `encodeURIComponent` key รับเฉพาะส่วนที่เป็นตัวอักษร ตัวเลข `.`, `_`, `-` ส่วนใดขึ้นต้นด้วย `.` ไม่ได้ (จึงไม่มี `.` และ `..`) และยาวไม่เกิน 512 ตัวอักษร key ที่ไม่ผ่านไม่ถูกแปลงเป็น path
 - สิทธิ์อัปโหลดจาก `issueUpload` เป็น URL ของไฟล์ต่อด้วย `?exp=<exp>&sig=<sig>` และ header `Content-Type` ที่ต้องส่ง
   - `exp`: เวลาหมดอายุเป็นวินาทีแบบ epoch (`floor(expiresAt / 1000)`)
-  - `sig`: สามส่วนคั่นด้วย `.` คือ `<maxSizeBytes>.<base64url(contentType)>.<base64url(hmac)>` โดย `hmac` = HMAC-SHA256 ด้วย secret ที่ composition ส่งให้ adapter (สร้างจาก `SESSION_SECRET` ด้วย HKDF-SHA256 salt `twa.local-storage` info `signed-put.v1` ยาว 32 byte จึงไม่ต้องมี environment variable เพิ่มและไม่ใช่ key เดียวกับของ cookie) ของข้อความ `<key>\n<contentType>\n<maxSizeBytes>\n<exp>` ขนาดและชนิดที่เซ็นไว้อยู่ใน `sig` เพราะ port ส่งให้ `acceptSignedPut` เฉพาะ `exp` และ `sig`
-- `acceptSignedPut` ตรวจตามลำดับ: key ถูกรูปแบบ, `sig` แยกได้สามส่วนและ HMAC ตรงแบบ timing-safe (`upload.signature_invalid`), เวลาปัจจุบัน (ค่าที่มากกว่าระหว่างเวลาที่ส่งมากับ `Clock`) ยังน้อยกว่า `exp` (`upload.expired`), media type ของ `Content-Type` ที่ส่งมาตรงกับที่เซ็นไว้โดยไม่สนตัวพิมพ์และ parameter (`upload.content_mismatch`) แล้วจึงเขียนไฟล์ด้วยชนิดที่เซ็นไว้ และตัดเมื่อเกิน `maxSizeBytes` (`media.too_large`)
+  - `sig`: สามส่วนคั่นด้วย `.` คือ `<maxSizeBytes>.<base64url(contentType)>.<base64url(hmac)>` โดย `hmac` = HMAC-SHA256 ด้วย secret ที่ composition ส่งให้ adapter (สร้างจาก `SESSION_SECRET` ด้วย HKDF-SHA256 salt `twa.local-storage` info `signed-put.v1` ยาว 32 byte จึงไม่ต้องมี environment variable เพิ่มและไม่ใช่ key เดียวกับของ cookie) ของข้อความ `<key>\n<contentType>\n<maxSizeBytes>\n<exp>` ขนาดและชนิดที่เซ็นไว้อยู่ใน `sig` เพราะ port ส่งให้ `acceptSignedPut` เฉพาะ `exp` และ `sig` ขนาดที่เซ็นคือขนาดที่แน่นอนของไฟล์ที่ขอสิทธิ์ (`sizeBytes` ของ `issueUpload`)
+- `acceptSignedPut` ตรวจตามลำดับ: key ถูกรูปแบบ, `sig` แยกได้สามส่วนและ HMAC ตรงแบบ timing-safe (`upload.signature_invalid`), เวลาปัจจุบัน (ค่าที่มากกว่าระหว่างเวลาที่ส่งมากับ `Clock`) ยังน้อยกว่า `exp` (`upload.expired`), media type ของ `Content-Type` ที่ส่งมาตรงกับที่เซ็นไว้โดยไม่สนตัวพิมพ์และ parameter (`upload.content_mismatch`) แล้วจึงเขียนไฟล์ด้วยชนิดที่เซ็นไว้ ตัดเมื่อเกิน `maxSizeBytes` (`media.too_large`) และปฏิเสธ body ที่สั้นกว่า (`upload.incomplete`) ([ADR 0028](../adr/0028-review-fixes-concurrency-polling-and-ci.md))
 - บนดิสก์ ไฟล์อยู่ที่ `objects/<key>`, ชนิดของไฟล์อยู่ที่ `meta/<key>.json` และการเขียนผ่านไฟล์ชั่วคราวใน `tmp/` แล้วจึง rename ทั้งหมดอยู่ใต้ root ของที่เก็บ (`<cwd>/.data/uploads` ตาม [project-setup](project-setup.md#610-envexample)) ไฟล์ที่เกินขนาดไม่ทิ้งไฟล์ค้างและไม่ทับไฟล์เดิม

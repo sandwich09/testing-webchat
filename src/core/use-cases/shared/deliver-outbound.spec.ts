@@ -106,6 +106,8 @@ describe('deliverOutbound', () => {
       expect(result.deliveryStatus).toBe('sent');
       expect(result.deliveryError).toBeNull();
       expect(result.sentAt).toEqual(clock.now());
+      // The LINE id of the sent part is kept, so a later quote of it can be shown.
+      expect(result.lineSentIds).toEqual(['fake-sent-1']);
       expect((await contacts.findById(contact.id))?.replyToken).toBeNull();
       expect(logger.entries).toContainEqual(
         expect.objectContaining({
@@ -127,6 +129,7 @@ describe('deliverOutbound', () => {
       expect(gateway.pushes).toHaveLength(1);
       expect(gateway.pushes[0]).toMatchObject({ to: LINE_USER, retryKey: message.id });
       expect(result.deliveryStatus).toBe('sent');
+      expect(result.lineSentIds).toEqual(['fake-sent-1']);
       expect(logger.eventsOf()).toEqual(['line.send.reply_token_rejected', 'line.send.succeeded']);
       expect(logger.entries[1]).toMatchObject({ channel: 'push' });
     });

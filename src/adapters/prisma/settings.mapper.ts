@@ -32,8 +32,18 @@ export function toSettings(row: SettingsRow): Settings {
     aiDailyBudget: decimalStringToNano(row.aiDailyBudgetUsd.toFixed(9)),
     aiPoliteParticle: PARTICLE_FROM_DB[row.aiPoliteParticle],
     aiInstructions: row.aiInstructions,
+    aiName: row.aiName,
+    aiAnswerMode: row.aiAnswerMode,
     guardEnabled: row.guardEnabled,
     guardTopics: [...row.guardTopics],
+    howToText: row.howToText,
+    welcomeEnabled: row.welcomeEnabled,
+    welcomeText: row.welcomeText,
+    richMenu:
+      row.richMenuId !== null && row.richMenuPublishedAt !== null
+        ? { id: row.richMenuId, publishedAt: row.richMenuPublishedAt }
+        : null,
+    richMenuError: toError(row.richMenuError, row.richMenuErrorAt),
     lineConfigured: row.lineChannelSecretEnc !== null && row.lineAccessTokenEnc !== null,
     lineBotName: row.lineBotName,
     lineBasicId: row.lineBasicId,

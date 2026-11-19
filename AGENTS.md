@@ -1,6 +1,6 @@
 # Working instructions
 
-Rules for any AI agent working in this repository. Details live in `docs/guidelines/`; this file stays short.
+Rules for any developer working in this repository. Details live in `docs/guidelines/`; this file stays short.
 
 ## Source of truth
 
@@ -25,7 +25,7 @@ Rules for any AI agent working in this repository. Details live in `docs/guideli
 - Never skip, disable or delete a test to get green.
 - Never push to `main`. Open a pull request only when asked.
 - Commit messages follow Conventional Commits, in English.
-- Stage files by path (`git add <path>`), never `git add -A` or `git add .`, when more than one person or agent may be working in the same checkout.
+- Stage files by path (`git add <path>`), never `git add -A` or `git add .`, when more than one developer may be working in the same checkout.
 - LINE messages, PDF contents and model output are untrusted input, and none of them go into logs.
 
 ## Ask before

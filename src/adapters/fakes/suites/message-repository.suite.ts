@@ -7,6 +7,7 @@ import type {
   Message,
   MessageId,
   Seq,
+  WebhookEventId,
 } from '@/core/domain';
 import type { ContactRepository, MessageRepository, NewMessage } from '@/core/ports';
 
@@ -179,13 +180,50 @@ export const describeMessageRepositorySuite = (
       expect(sent.updatedSeq).toBeGreaterThan(c2?.updatedSeq ?? 0n);
     });
 
+    describe('quotes', () => {
+      it('stores the quoted LINE id of an inbound message, null when there is none', async () => {
+        const quoting = await repo.insertInboundIfAbsent(
+          inbound(A, 2, { quotedLineMessageId: lineMessageId(1) }),
+        );
+        expect(quoting.message.quotedLineMessageId).toBe(lineMessageId(1));
+        const plain = await repo.insertInboundIfAbsent(inbound(A, 3));
+        expect(plain.message.quotedLineMessageId).toBeNull();
+      });
+
+      it('findByLineIds finds an inbound lineMessageId and any part of an outbound message, in this contact only', async () => {
+        const customer = (await repo.insertInboundIfAbsent(inbound(A, 1))).message;
+        const reply = (await repo.insertOutboundIfAbsent(outbound(A, 2))).message;
+        await repo.markSent(reply.id, at(3), [lineMessageId(80), lineMessageId(81)]);
+        await repo.insertInboundIfAbsent(inbound(B, 4));
+
+        const found = await repo.findByLineIds(A, [
+          lineMessageId(1),
+          lineMessageId(81),
+          lineMessageId(81),
+          lineMessageId(4), // contact B's message
+          lineMessageId(999), // unknown
+        ]);
+        expect(ids(found)).toEqual([customer.id, reply.id]);
+        expect(await repo.findByLineIds(A, [])).toEqual([]);
+        expect(await repo.findByLineIds(B, [lineMessageId(80)])).toEqual([]);
+      });
+    });
+
     describe('delivery status', () => {
       it('markSent returns the row as sent with a new updatedSeq', async () => {
         const m = (await repo.insertOutboundIfAbsent(outbound(A, 1))).message;
-        const sent = await repo.markSent(m.id, at(9));
+        const sent = await repo.markSent(m.id, at(9), []);
         expect(sent).toMatchObject({ id: m.id, seq: m.seq, deliveryStatus: 'sent', sentAt: at(9) });
         expect(sent.updatedSeq).toBeGreaterThan(m.updatedSeq);
         expect(await get(m.id)).toEqual(sent);
+      });
+
+      it('markSent stores the LINE ids of the parts in order; a new message starts with none', async () => {
+        const m = (await repo.insertOutboundIfAbsent(outbound(A, 1))).message;
+        expect(m.lineSentIds).toEqual([]);
+        const sent = await repo.markSent(m.id, at(9), [lineMessageId(91), lineMessageId(92)]);
+        expect(sent.lineSentIds).toEqual([lineMessageId(91), lineMessageId(92)]);
+        expect((await get(m.id)).lineSentIds).toEqual([lineMessageId(91), lineMessageId(92)]);
       });
 
       it('markFailed returns the row as failed with the code', async () => {
@@ -200,7 +238,7 @@ export const describeMessageRepositorySuite = (
       });
 
       it('markSent and markFailed throw for a missing row', async () => {
-        await expect(repo.markSent(messageId(404), at(1))).rejects.toThrow();
+        await expect(repo.markSent(messageId(404), at(1), [])).rejects.toThrow();
         await expect(repo.markFailed(messageId(404), 'line.push_failed')).rejects.toThrow();
       });
 
@@ -213,7 +251,7 @@ export const describeMessageRepositorySuite = (
         expect(pending).toMatchObject({ deliveryStatus: 'pending', deliveryError: null });
         expect(pending.updatedSeq).toBeGreaterThan(failed.updatedSeq);
         expect(await repo.markPendingIfFailed(m.id, at(9))).toBe(false);
-        await repo.markSent(m.id, at(5));
+        await repo.markSent(m.id, at(5), []);
         expect(await repo.markPendingIfFailed(m.id, at(9))).toBe(false);
         expect(await repo.markPendingIfFailed(messageId(404), at(9))).toBe(false);
       });
@@ -226,7 +264,7 @@ export const describeMessageRepositorySuite = (
         await repo.markFailed(m.id, 'line.push_failed');
         expect(await repo.markPendingIfFailed(m.id, at(9))).toBe(true);
         await repo.recordFirstPush(m.id, at(9));
-        const after = await repo.markSent(m.id, at(10));
+        const after = await repo.markSent(m.id, at(10), []);
         expect(after.firstPushAt).toEqual(at(5));
         // A missing row is not an error: there is nothing to date.
         await repo.recordFirstPush(messageId(404), at(9));
@@ -265,6 +303,7 @@ export const describeMessageRepositorySuite = (
         expect(await repo.failStuckMedia(A, at(10))).toEqual([old.id]);
         const failed = await get(old.id);
         expect(failed.mediaStatus).toBe('failed');
+        expect(failed.mediaFailure).toBe('interrupted');
         expect(failed.updatedSeq).toBeGreaterThan(old.updatedSeq);
         // createdAt equal to staleBefore is not older; other statuses and contacts are untouched.
         expect((await get(edge.id)).mediaStatus).toBe('pending');
@@ -292,7 +331,7 @@ export const describeMessageRepositorySuite = (
         const old = (await repo.insertOutboundIfAbsent(outbound(A, 1))).message;
         const fresh = (await repo.insertOutboundIfAbsent(outbound(A, 20))).message;
         const sent = (await repo.insertOutboundIfAbsent(outbound(A, 2))).message;
-        await repo.markSent(sent.id, at(3));
+        await repo.markSent(sent.id, at(3), []);
         const otherContact = (await repo.insertOutboundIfAbsent(outbound(B, 4))).message;
 
         expect(await repo.failStuckDeliveries(A, at(20))).toEqual([old.id]);
@@ -364,7 +403,30 @@ export const describeMessageRepositorySuite = (
         )
       ).message;
       expect(await repo.setMediaStatus(f.id, 'failed')).toBe(true);
-      expect((await get(f.id)).mediaStatus).toBe('failed');
+      expect(await get(f.id)).toMatchObject({
+        mediaStatus: 'failed',
+        mediaFailure: 'download_failed',
+      });
+      expect(tooLarge.mediaFailure).toBeNull();
+
+      const u = (
+        await repo.insertInboundIfAbsent(
+          inbound(A, 4, { type: 'audio', text: null, mediaStatus: 'pending' }),
+        )
+      ).message;
+      expect(await repo.setMediaStatus(u.id, 'failed', 'unsupported_type')).toBe(true);
+      expect((await get(u.id)).mediaFailure).toBe('unsupported_type');
+      const e = (
+        await repo.insertInboundIfAbsent(
+          inbound(A, 5, {
+            type: 'image',
+            text: null,
+            mediaStatus: 'failed',
+            mediaFailure: 'external_source',
+          }),
+        )
+      ).message;
+      expect(e.mediaFailure).toBe('external_source');
     });
 
     it('setMediaReady and setMediaStatus change only pending media and return false otherwise', async () => {
@@ -420,6 +482,38 @@ export const describeMessageRepositorySuite = (
       expect((await repo.latestInbound(A))?.id).toBe(messageId(2));
     });
 
+    it('insertInboundIfAbsent keys a row without lineMessageId on its webhookEventId', async () => {
+      const tapOf = (n: number, event: string) =>
+        inbound(A, n, {
+          lineMessageId: null,
+          eventCode: 'customer.tapped_how_to',
+          webhookEventId: event as WebhookEventId, // brand: test id
+        });
+      const results = await Promise.all([
+        repo.insertInboundIfAbsent(tapOf(1, 'wev-tap-1')),
+        repo.insertInboundIfAbsent(tapOf(2, 'wev-tap-1')),
+      ]);
+      expect(results.map((r) => r.inserted).sort()).toEqual([false, true]);
+      const [first, second] = results;
+      expect(first.message.id).toBe(second.message.id);
+      expect((await repo.insertInboundIfAbsent(tapOf(3, 'wev-tap-2'))).inserted).toBe(true);
+      expect((await repo.insertInboundIfAbsent(tapOf(4, 'wev-tap-1'))).message.id).toBe(
+        first.message.id,
+      );
+    });
+
+    it('latestInbound skips taps answered with a fixed text, and keeps the AI tap', async () => {
+      const tapOf = (n: number, code: NonNullable<Message['eventCode']>) =>
+        inbound(A, n, { lineMessageId: null, eventCode: code });
+      await repo.insertInboundIfAbsent(inbound(A, 1));
+      await repo.insertInboundIfAbsent(tapOf(2, 'customer.tapped_how_to'));
+      await repo.insertInboundIfAbsent(tapOf(3, 'customer.tapped_admin'));
+      expect((await repo.latestInbound(A))?.id).toBe(messageId(1));
+      await repo.insertInboundIfAbsent(tapOf(4, 'customer.tapped_ai_on'));
+      await repo.insertInboundIfAbsent(tapOf(5, 'customer.tapped_how_to'));
+      expect((await repo.latestInbound(A))?.id).toBe(messageId(4));
+    });
+
     it('recentForAi returns the latest non-event messages, oldest first', async () => {
       await repo.insertInboundIfAbsent(inbound(A, 1));
       await repo.insertOutboundIfAbsent(outbound(A, 2, { author: 'ai' }));
@@ -473,7 +567,7 @@ export const describeMessageRepositorySuite = (
         await repo.insertInboundIfAbsent(inbound(B, 3));
         const cursor = await repo.maxUpdatedSeq(A);
 
-        const sent = await repo.markSent(old.id, at(10));
+        const sent = await repo.markSent(old.id, at(10), []);
         const fresh = (await repo.insertInboundIfAbsent(inbound(A, 4))).message;
 
         expect(old.seq).toBeLessThan(cursor);

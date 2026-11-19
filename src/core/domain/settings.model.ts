@@ -1,4 +1,4 @@
-import type { AiModelId, AiProvider, PoliteParticle } from './enums.model';
+import type { AiAnswerMode, AiModelId, AiProvider, PoliteParticle } from './enums.model';
 import type { LineAccessToken, NanoUsd } from './ids';
 import type { ErrorCode } from './result';
 
@@ -9,11 +9,26 @@ export interface Settings {
   aiModel: AiModelId;
   aiDailyBudget: NanoUsd;
   aiPoliteParticle: PoliteParticle;
+  /** Custom instructions of the account (the <custom_instructions> block); '' when none. */
   aiInstructions: string;
+  /** Name the AI calls itself, trimmed, used as typed; null when none (normalizeAiName). */
+  aiName: string | null;
+  /** Which answer scope block goes into the prompt. */
+  aiAnswerMode: AiAnswerMode;
   /** Topic guard, see specs/topic-guard.md. */
   guardEnabled: boolean;
   /** 0 to GUARD_MAX_TOPICS topics, trimmed and unique. At least 1 while guardEnabled is true. */
   guardTopics: string[];
+  /** Text of the rich menu button "วิธีทดสอบ"; '' means the default (howToTextOf). */
+  howToText: string;
+  /** Send the welcome card on follow events. */
+  welcomeEnabled: boolean;
+  /** Body of the welcome card; '' means the default (welcomeTextOf). */
+  welcomeText: string;
+  /** The rich menu this app set as the default at LINE, or null when none. */
+  richMenu: { id: string; publishedAt: Date } | null;
+  /** The last failed publish or removal of the rich menu; null after one that worked. */
+  richMenuError: { code: ErrorCode; at: Date } | null;
   /** Both encrypted credentials are stored. */
   lineConfigured: boolean;
   lineBotName: string | null;

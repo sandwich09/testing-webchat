@@ -4,6 +4,7 @@ import {
   FAKE_LINE_ACCESS_TOKEN,
   FAKE_LINE_CHANNEL_ID,
   FAKE_LINE_INVALID_TOKEN,
+  FAKE_LINE_OTHER_CHANNEL_TOKEN,
   FakeMessagingGateway,
 } from './fake-messaging-gateway';
 import {
@@ -23,6 +24,7 @@ const makeHarness = (): MessagingGatewayHarness => {
     channelSecret: gateway.channelSecret,
     validToken: FAKE_LINE_ACCESS_TOKEN,
     invalidToken: FAKE_LINE_INVALID_TOKEN,
+    otherChannelToken: FAKE_LINE_OTHER_CHANNEL_TOKEN,
     knownUserId: KNOWN,
     unknownUserId: 'U-unknown' as LineUserId,
     freshReplyToken: () => Promise.resolve(`reply-token-${String(++tokens)}`),
@@ -48,6 +50,8 @@ const makeHarness = (): MessagingGatewayHarness => {
       gateway.failNext('verifyChannelSecret', 'line.unavailable');
       return Promise.resolve();
     },
+    richMenuState: () =>
+      Promise.resolve({ ids: [...gateway.richMenus.keys()], defaultId: gateway.defaultRichMenuId }),
   };
 };
 
@@ -76,8 +80,11 @@ describe('FakeMessagingGateway test controls', () => {
     const parts = [{ type: 'text' as const, text: 'b' }];
     const first = await gateway.push(FAKE_LINE_ACCESS_TOKEN, KNOWN, parts, 'key-1');
     const second = await gateway.push(FAKE_LINE_ACCESS_TOKEN, KNOWN, parts, 'key-1');
-    expect(first).toEqual({ ok: true, value: { alreadyAccepted: false } });
-    expect(second).toEqual({ ok: true, value: { alreadyAccepted: true } });
+    expect(first).toEqual({
+      ok: true,
+      value: { alreadyAccepted: false, sentIds: ['fake-sent-1'] },
+    });
+    expect(second).toEqual({ ok: true, value: { alreadyAccepted: true, sentIds: [] } });
     expect(gateway.pushes).toHaveLength(1);
   });
 
@@ -88,7 +95,7 @@ describe('FakeMessagingGateway test controls', () => {
     expect((await gateway.push(FAKE_LINE_ACCESS_TOKEN, KNOWN, parts, 'k')).ok).toBe(false);
     expect(await gateway.push(FAKE_LINE_ACCESS_TOKEN, KNOWN, parts, 'k')).toEqual({
       ok: true,
-      value: { alreadyAccepted: false },
+      value: { alreadyAccepted: false, sentIds: ['fake-sent-1'] },
     });
   });
 

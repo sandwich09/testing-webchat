@@ -39,6 +39,7 @@ const server = (over: Partial<MessageDto> & { id: string; seq: string }): Messag
   sticker: null,
   otherKind: null,
   eventCode: null,
+  quote: null,
   delivery: { status: 'sent', errorCode: null, retryExpiresAt: null },
   createdAt: '2026-11-18T07:00:00.000Z',
   sentAt: null,
@@ -402,19 +403,38 @@ describe('thread cache (ui-screens 7.3)', () => {
     expect(s.items.map((m) => m.id)).toEqual(['a']);
   });
 
-  it('a reload keeps rows without seq, drops old server rows and never moves the cursor back', () => {
+  it('a reload merges the fresh page into the loaded rows, keeping older pages and hasOlder', () => {
+    const previous: ThreadState = {
+      items: [inbound('older', '1'), inbound('mid', '30'), inbound('a', '40'), local()],
+      hasOlder: true,
+      cursor: '50',
+    };
+    const s = threadFromFirstPage(
+      page({
+        messages: [inbound('mid', '30'), inbound('a', '40'), inbound('new', '48')],
+        highWater: '49',
+        hasOlder: true,
+      }),
+      previous,
+    );
+    expect(s.items.map((m) => m.id)).toEqual(['older', 'mid', 'a', 'new', ID]);
+    expect(s.cursor).toBe('50');
+    expect(s.hasOlder).toBe(true);
+  });
+
+  it('a reload whose page does not reach the loaded rows drops them, keeps rows being sent, never moves the cursor back', () => {
     const previous: ThreadState = {
       items: [inbound('old', '1'), local()],
       hasOlder: false,
       cursor: '50',
     };
     const s = threadFromFirstPage(
-      page({ messages: [inbound('a', '40')], highWater: '45', hasOlder: null }),
+      page({ messages: [inbound('a', '40')], highWater: '45', hasOlder: true }),
       previous,
     );
     expect(s.items.map((m) => m.id)).toEqual(['a', ID]);
     expect(s.cursor).toBe('50');
-    expect(s.hasOlder).toBe(false);
+    expect(s.hasOlder).toBe(true);
   });
 
   it('a poll merges rows and moves the cursor; nothing new gives the same state', () => {

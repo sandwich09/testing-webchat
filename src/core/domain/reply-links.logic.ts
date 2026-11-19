@@ -1,5 +1,6 @@
 // Links in an AI reply (ai-prompt section 6.1). LINE turns every URL into a tappable link, so a
-// reply may only carry a link the shop itself wrote in the knowledge base or its instructions.
+// reply may only carry a link the admins themselves wrote in the knowledge base or the custom
+// instructions.
 
 /** Characters a URL may hold here. Thai text and spaces end a URL, as do quotes and angle brackets. */
 const URL_CHARS = '[A-Za-z0-9\\-._~:/?#\\[\\]@!$&()*+,;=%]';
@@ -13,7 +14,7 @@ const REPLY_LINK = new RegExp(
   `${START}(?:https?://${URL_CHARS}+|www\\.${URL_CHARS}+|${DOMAIN}/${URL_CHARS}*)`,
   'gi',
 );
-/** In the shop's own text: the same, plus a bare domain without a path, which widens what is allowed. */
+/** In the admins' own text: the same, plus a bare domain without a path, which widens what is allowed. */
 const SOURCE_LINK = new RegExp(
   `${START}(?:https?://${URL_CHARS}+|www\\.${URL_CHARS}+|${DOMAIN}(?:/${URL_CHARS}*)?)`,
   'gi',
@@ -46,14 +47,14 @@ const linksOf = (text: string, pattern: RegExp): string[] =>
 /** Every link of an AI reply, as written (without trailing punctuation). */
 export const replyLinks = (reply: string): string[] => linksOf(reply, REPLY_LINK);
 
-/** A normalized link and its host alone: the front page of a site the shop linked to is allowed. */
+/** A normalized link and its host alone: the front page of a site the admins linked to is allowed. */
 const withHost = (normalized: string): string[] => {
   const host = normalized.split(/[/?#]/, 1)[0] ?? normalized;
   return host === normalized ? [normalized] : [normalized, host];
 };
 
 /**
- * The links of `reply` that appear in none of `sources` (knowledge text, shop instructions),
+ * The links of `reply` that appear in none of `sources` (knowledge text, custom instructions),
  * compared by normalizeLink. An empty array means the reply may be sent as it is.
  */
 export const disallowedLinks = (reply: string, sources: readonly string[]): string[] => {

@@ -36,7 +36,7 @@ const request = (): TopicGuardRequest => ({
   message: 'ขออีกมุก',
   context: [
     { role: 'customer', text: 'เล่ามุกตลกหน่อย' },
-    { role: 'shop', text: 'มุกแรกค่ะ' },
+    { role: 'assistant', text: 'มุกแรกค่ะ' },
   ],
   model: GUARD_MODEL,
   maxTokens: GUARD_MAX_TOKENS,

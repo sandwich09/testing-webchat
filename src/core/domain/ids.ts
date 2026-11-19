@@ -5,6 +5,7 @@ export type ContactId = Brand<string, 'ContactId'>; // UUIDv7
 export type MessageId = Brand<string, 'MessageId'>; // UUIDv7 (outbound admin ids are made in the browser)
 export type DocumentId = Brand<string, 'DocumentId'>; // UUIDv7
 export type UsageId = Brand<string, 'UsageId'>; // UUIDv7
+export type NoteId = Brand<string, 'NoteId'>; // UUIDv7
 export type LineUserId = Brand<string, 'LineUserId'>; // LINE userId
 export type LineMessageId = Brand<string, 'LineMessageId'>; // LINE message.id
 export type WebhookEventId = Brand<string, 'WebhookEventId'>;

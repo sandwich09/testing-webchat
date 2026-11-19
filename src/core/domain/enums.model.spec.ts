@@ -27,6 +27,8 @@ describe('enum value sets (domain-and-ports.md, Enum)', () => {
       'ai_other',
       'ai_failed',
       'ai_timeout',
+      'customer_asked_admin',
+      'ai_unavailable',
     ]);
   });
 
@@ -66,10 +68,16 @@ describe('enum value sets (domain-and-ports.md, Enum)', () => {
       'handoff.ai_other',
       'handoff.ai_failed',
       'handoff.ai_timeout',
+      'handoff.customer_asked_admin',
+      'handoff.ai_unavailable',
       'ai.turned_off_by_admin',
       'guard.blocked',
       'contact.followed',
       'contact.unfollowed',
+      'customer.tapped_ai_on',
+      'customer.tapped_admin',
+      'customer.tapped_how_to',
+      'welcome.sent',
     ]);
   });
 
@@ -85,6 +93,8 @@ describe('enum value sets (domain-and-ports.md, Enum)', () => {
       'pdf_ingest',
       'typing',
       'guard_test',
+      'note_create',
+      'rich_menu_tap',
     ]);
   });
 

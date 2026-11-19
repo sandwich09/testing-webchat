@@ -4,7 +4,8 @@ import type { TokenUsage } from './usage.model';
 // Defined in the domain (not the ChatModel port) because the pure functions toHistoryTurns and
 // usageOutcomeOf use them and the domain cannot import ports. The port re-exports them.
 
-export type ChatRole = 'customer' | 'shop';
+/** `assistant` is every reply the user got: an admin's or the AI's. */
+export type ChatRole = 'customer' | 'assistant';
 
 export interface ChatTurn {
   role: ChatRole;

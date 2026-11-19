@@ -43,8 +43,13 @@ export function createSettingsRepository(
         aiPoliteParticle:
           patch.aiPoliteParticle === undefined ? undefined : PARTICLE_TO_DB[patch.aiPoliteParticle],
         aiInstructions: patch.aiInstructions,
+        aiName: patch.aiName,
+        aiAnswerMode: patch.aiAnswerMode,
         guardEnabled: patch.guardEnabled,
         guardTopics: patch.guardTopics === undefined ? undefined : { set: [...patch.guardTopics] },
+        howToText: patch.howToText,
+        welcomeEnabled: patch.welcomeEnabled,
+        welcomeText: patch.welcomeText,
       });
       return toSettings(row);
     },
@@ -83,6 +88,34 @@ export function createSettingsRepository(
 
     async recordAiError(e) {
       await change({ lastAiError: e?.code ?? null, lastAiErrorAt: e?.at ?? null });
+    },
+
+    async recordRichMenu(menu) {
+      await change({
+        richMenuId: menu?.id ?? null,
+        richMenuPublishedAt: menu?.publishedAt ?? null,
+        richMenuError: null,
+        richMenuErrorAt: null,
+      });
+    },
+
+    async replaceRichMenu(expectedId, menu) {
+      await ensureRow();
+      const { count } = await client.settings.updateMany({
+        where: { ...where, richMenuId: expectedId },
+        data: {
+          richMenuId: menu.id,
+          richMenuPublishedAt: menu.publishedAt,
+          richMenuError: null,
+          richMenuErrorAt: null,
+          updatedAt: deps.clock.now(),
+        },
+      });
+      return count === 1;
+    },
+
+    async recordRichMenuError(e) {
+      await change({ richMenuError: e.code, richMenuErrorAt: e.at });
     },
 
     async ping() {

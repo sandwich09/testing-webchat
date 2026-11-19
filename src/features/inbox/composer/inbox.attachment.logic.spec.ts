@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { errorMessage } from '@/common/error-messages';
+import { IMAGE_MAX_BYTES, VIDEO_MAX_BYTES } from '@/contracts';
 
 import { copy } from '../inbox.constants';
 import type { ThreadMessage } from '../inbox.logic';
@@ -15,6 +16,8 @@ import {
   trayView,
   type Attachment,
   type AttachmentEvent,
+  attachHintText,
+  mbText,
 } from './inbox.attachment.logic';
 
 // ---------------------------------------------------------------------------
@@ -269,6 +272,33 @@ describe('tray view and error text', () => {
     expect(attachmentErrorText({ kind: 'request', code: 'db.unavailable' })).toBe(
       copy.attach.error.uploadFailed,
     );
+  });
+
+  it('names the accepted types, both limits and the file size when the server refuses a file', () => {
+    const limits = { imageMaxMb: mbText(IMAGE_MAX_BYTES), videoMaxMb: mbText(VIDEO_MAX_BYTES) };
+    const tooLarge = `ไฟล์ใหญ่เกินไป รูปต้องไม่เกิน ${limits.imageMaxMb} MB และวิดีโอไม่เกิน ${limits.videoMaxMb} MB ไฟล์นี้ 61.2 MB`;
+    expect(attachmentErrorText({ kind: 'request', code: 'upload.too_large', sizeMb: '61.2' })).toBe(
+      tooLarge,
+    );
+    expect(attachmentErrorText({ kind: 'upload', code: 'media.too_large', sizeMb: '61.2' })).toBe(
+      tooLarge,
+    );
+    expect(attachmentErrorText({ kind: 'request', code: 'upload.type_not_allowed' })).toContain(
+      'JPEG, PNG, WebP, HEIC และวิดีโอ MP4',
+    );
+    expect(attachmentErrorText({ kind: 'upload', code: 'upload.incomplete' })).toBe(
+      errorMessage('upload.incomplete'),
+    );
+    expect(attachmentErrorText({ kind: 'check', code: 'mov_not_supported' })).toContain('MP4');
+    for (const text of [tooLarge, attachHintText()]) expect(text).not.toMatch(/\{\w+\}/);
+  });
+
+  it('gives the attach hint the accepted types and both limits from the constants', () => {
+    const hint = attachHintText();
+    expect(hint).toContain('JPEG, PNG, WebP, HEIC');
+    expect(hint).toContain('MP4');
+    expect(hint).toContain(`${mbText(IMAGE_MAX_BYTES)} MB`);
+    expect(hint).toContain(`${mbText(VIDEO_MAX_BYTES)} MB`);
   });
 });
 

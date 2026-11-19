@@ -93,7 +93,7 @@ describe('local file storage keys', () => {
         await storage.issueUpload({
           key: bad,
           contentType: 'a/b',
-          maxSizeBytes: 1,
+          sizeBytes: 1,
           expiresAt: EXPIRES_AT,
         })
       ).ok,
@@ -114,24 +114,24 @@ describe('local file storage keys', () => {
 describe('local file storage signed PUT', () => {
   const issue = async (
     storage: FileStorage,
-    opts: { maxSizeBytes?: number; contentType?: string; k?: StorageKey } = {},
+    opts: { sizeBytes?: number; contentType?: string; k?: StorageKey } = {},
   ) => {
     const k = opts.k ?? key('outbound/abc/original.png');
     const issued = await storage.issueUpload({
       key: k,
       contentType: opts.contentType ?? 'image/png',
-      maxSizeBytes: opts.maxSizeBytes ?? 100,
+      sizeBytes: opts.sizeBytes ?? 10,
       expiresAt: EXPIRES_AT,
     });
     if (!issued.ok || issued.value.strategy !== 'http_put') throw new Error('expected http_put');
-    return { k, url: new URL(issued.value.url), target: issued.value };
+    return { k, url: new URL(issued.value.url, 'http://other.origin'), target: issued.value };
   };
 
-  it('builds a URL under /api/local-storage with exp in seconds and a sig that carries size and type', async () => {
-    const { url, target } = await issue(make(), { maxSizeBytes: 1234 });
-    expect(url.origin + url.pathname).toBe(
-      `${BASE_URL}/api/local-storage/outbound/abc/original.png`,
-    );
+  it('builds a path under /api/local-storage, without the origin of APP_BASE_URL, with exp in seconds and a sig that carries size and type', async () => {
+    const { url, target } = await issue(make(), { sizeBytes: 1234 });
+    expect(target.url.startsWith('/api/local-storage/outbound/abc/original.png?')).toBe(true);
+    expect(target.url).not.toContain(BASE_URL);
+    expect(url.pathname).toBe('/api/local-storage/outbound/abc/original.png');
     expect(url.searchParams.get('exp')).toBe(String(EXPIRES_AT.getTime() / 1000));
     const parts = (url.searchParams.get('sig') ?? '').split('.');
     expect(parts).toHaveLength(3);
@@ -160,7 +160,7 @@ describe('local file storage signed PUT', () => {
   it('rejects a tampered size, type, exp or key and a different secret', async () => {
     const root = freshRoot();
     const storage = make(root);
-    const { k, url } = await issue(storage, { maxSizeBytes: 10 });
+    const { k, url } = await issue(storage, { sizeBytes: 10 });
     const sig = url.searchParams.get('sig') ?? '';
     const [, type, mac] = sig.split('.');
     const forged = [
@@ -183,12 +183,16 @@ describe('local file storage signed PUT', () => {
     expect(!otherSecret.ok && otherSecret.error.code).toBe('upload.signature_invalid');
   });
 
-  it('accepts exactly the signed size and rejects one byte more without leaving files', async () => {
+  it('accepts exactly the signed size and rejects one byte more or less without leaving files', async () => {
     const root = freshRoot();
     const storage = make(root);
-    const { k, url } = await issue(storage, { maxSizeBytes: 10 });
+    const { k, url } = await issue(storage, { sizeBytes: 10 });
     const big = await accept(storage, k, url, { size: 11 });
     expect(!big.ok && big.error.code).toBe('media.too_large');
+    expect((await storage.inspect(k)).ok).toBe(false);
+    expect(await readdir(join(root, 'tmp'))).toEqual([]);
+    const short = await accept(storage, k, url, { size: 9 });
+    expect(!short.ok && short.error.code).toBe('upload.incomplete');
     expect((await storage.inspect(k)).ok).toBe(false);
     expect(await readdir(join(root, 'tmp'))).toEqual([]);
     const exact = await accept(storage, k, url, { size: 10 });

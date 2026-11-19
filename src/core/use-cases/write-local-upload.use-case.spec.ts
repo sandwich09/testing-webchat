@@ -24,15 +24,15 @@ describe('WriteLocalUpload', () => {
   let exp: string;
   let sig: string;
 
-  const issue = async (key: StorageKey = KEY, maxSizeBytes = 100) => {
+  const issue = async (key: StorageKey = KEY, sizeBytes = 10) => {
     const t = await storage.issueUpload({
       key,
       contentType: 'image/jpeg',
-      maxSizeBytes,
+      sizeBytes,
       expiresAt: new Date(clock.now().getTime() + 60_000),
     });
     if (!t.ok || t.value.strategy !== 'http_put') throw new Error('ticket');
-    const u = new URL(t.value.url);
+    const u = new URL(t.value.url, 'http://any.origin');
     exp = u.searchParams.get('exp') ?? '';
     sig = u.searchParams.get('sig') ?? '';
   };
@@ -73,9 +73,16 @@ describe('WriteLocalUpload', () => {
   });
 
   it('rejects a body over the signed size and leaves no file', async () => {
-    const r = await put({}, 101);
+    const r = await put({}, 11);
     expect(r).toMatchObject({ ok: false, error: { code: 'media.too_large' } });
     expect(storage.files.size).toBe(0);
+  });
+
+  it('rejects a body shorter than the signed size (cut on the way) and leaves no file', async () => {
+    const r = await put({}, 9);
+    expect(r).toMatchObject({ ok: false, error: { code: 'upload.incomplete' } });
+    expect(storage.files.size).toBe(0);
+    expect(logger.eventsOf()).toEqual(['upload.local_put.rejected']);
   });
 
   it.each([

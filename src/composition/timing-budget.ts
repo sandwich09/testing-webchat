@@ -77,3 +77,33 @@ export const extractJobWorstMs = (): number =>
     timeoutMs: CLAUDE_COUNT_TOKENS_TIMEOUT_MS,
     maxRetries: CLAUDE_EXTRACT_MAX_RETRIES,
   });
+
+// Worst cases of requests the screens wait for (the client timeouts of timeouts.contract.ts).
+
+/** POST /api/settings/guard/test: one topic guard call with its retry. */
+export const guardTestWorstMs = (): number =>
+  callDeadlineMs({ timeoutMs: GUARD_TIMEOUT_MS, maxRetries: CLAUDE_GUARD_MAX_RETRIES });
+
+/** A rich menu call that retries (set or clear the default, delete). */
+const richMenuCallWorstMs = (): number =>
+  lineCallWorstMs(LINE_REQUEST_TIMEOUT_MS, LINE_MAX_RETRIES);
+
+/**
+ * POST /api/settings/rich-menu: create and upload (no retry), set the default, then either delete
+ * the earlier menu or, after losing to a concurrent publish, set the winner again and delete its own.
+ */
+export const richMenuPublishWorstMs = (): number =>
+  lineCallWorstMs(LINE_REQUEST_TIMEOUT_MS, 0) +
+  lineCallWorstMs(LINE_CONTENT_TIMEOUT_MS, 0) +
+  richMenuCallWorstMs() * 3;
+
+/** DELETE /api/settings/rich-menu: clear the default, then delete the menu. */
+export const richMenuRemoveWorstMs = (): number => richMenuCallWorstMs() * 2;
+
+/**
+ * PUT /api/settings/line-credentials and POST /api/settings/line/test: the bot of the access
+ * token, then the client-credentials token, the bot of that channel and the revoke (no retry).
+ */
+export const lineCheckWorstMs = (): number =>
+  lineCallWorstMs(LINE_REQUEST_TIMEOUT_MS, LINE_MAX_RETRIES) +
+  lineCallWorstMs(LINE_REQUEST_TIMEOUT_MS, 0) * 3;

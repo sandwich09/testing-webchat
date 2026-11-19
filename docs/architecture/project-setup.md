@@ -240,7 +240,7 @@ Path ของหน้าเว็บ (`/welcome`, `/chats`, `/chats/[contactId
 | `cacheComponents` | ไม่เปิด เพราะเมื่อเปิด Next.js 16 ไม่รับ `export const dynamic` (ต้องยืนยัน) |
 | งานหลังตอบ | `after()` จาก `next/server` ห่อด้วยตัวดัก error กลางใน `src/composition/route.ts` |
 | `maxDuration` | `app/api/line/webhook/route.ts` export ค่าของ `WEBHOOK_MAX_DURATION_S` และ `app/api/knowledge/documents/route.ts` กับ `app/api/knowledge/documents/[id]/retry/route.ts` export ค่าของ `KNOWLEDGE_MAX_DURATION_S` (หัวข้อ 10) เขียนเป็น literal ในไฟล์ route เพราะ Next.js อ่านค่านี้แบบ static พร้อม comment ชื่อ constant ค่าทั้งสองต้องยืนยันกับเพดานของ Vercel ([แผนการสร้าง](../plans/implementation-plan.md)) `src/composition/timing-budget.spec.ts` อ่าน literal ของทั้งสามไฟล์และตรึงว่าเวลาแย่ที่สุดของงานหลังตอบอยู่ใต้ค่านี้ (หัวข้อ 10.4 "เวลาแย่ที่สุด") ถ้าเพดานต่ำกว่า ให้ลดค่าในไฟล์ route แล้วลด timeout หรือจำนวนครั้งที่ลองจน test ผ่าน |
-| ตรวจ environment variable | `instrumentation.ts` export `register()` ที่เรียก `assertEnv()` จาก composition เมื่อ `process.env.NEXT_RUNTIME === 'nodejs'` และไม่อยู่ในช่วง build (`process.env.NEXT_PHASE !== 'phase-production-build'`) ขาดตัวไหน process ล้มพร้อมบอกชื่อ ตาม [infrastructure](infrastructure.md) |
+| ตรวจ environment variable | `instrumentation.ts` export `register()` ที่เรียก `assertEnvOrExit()` จาก composition (เรียก `assertEnv()` แล้วจบ process ด้วย exit 1 เพราะ Next.js แค่ log error จาก `register()` แล้วตอบ 500 ต่อ) เมื่อ `process.env.NEXT_RUNTIME === 'nodejs'` และไม่อยู่ในช่วง build (`process.env.NEXT_PHASE !== 'phase-production-build'`) ขาดตัวไหน process ล้มพร้อมบอกชื่อ ตาม [infrastructure](infrastructure.md) |
 | Lint | Next.js 16 ไม่มี `next lint` และ `next build` ไม่รัน lint จึงรัน `eslint` ตรง |
 | รูป | ใช้ `<img>` ธรรมดา ไม่ใช้ `next/image` จึงไม่มี config ของ image optimization |
 
@@ -249,11 +249,11 @@ Path ของหน้าเว็บ (`/welcome`, `/chats`, `/chats/[contactId
 ทำงานตามลำดับ:
 
 1. Path ที่ยกเว้นการตรวจ cookie ตาม [access-gate](../specs/access-gate.md) ข้อ 6 (`POST /api/line/webhook`, `GET /api/health`, `POST /api/access/unlock`, `GET`/`HEAD /api/local-storage/*key`) และ `/welcome` ผ่านไปเลย
-2. คำขอ `/api/*` ที่ไม่ใช่ GET หรือ HEAD และไม่ใช่ webhook ต้องมี header `Origin` ตรงกับ `APP_BASE_URL` ไม่เช่นนั้นตอบ 403 ตามรูปแบบ error ใน [backend](backend.md)
+2. คำขอ `/api/*` ที่ไม่ใช่ GET หรือ HEAD และไม่ใช่ webhook ต้องมี header `Origin` ตรงกับ origin ของคำขอเองหรือของ `APP_BASE_URL` (`isAllowedOrigin` ใน `src/composition/request-origin.ts` ตัวเดียวกับของตัวห่อ route) ไม่เช่นนั้นตอบ 403 ตามรูปแบบ error ใน [backend](backend.md) Origin ของคำขอเองไม่ได้มาจาก `request.url` หรือ `nextUrl.origin`: ใน standalone สองค่านี้เป็น address ที่ server bind (`http://0.0.0.0:3000`) จึงประกอบจาก `x-forwarded-proto` (หรือ scheme ของ `request.url`) กับ `x-forwarded-host` (หรือ `Host`) ซึ่ง Next.js เติมให้เมื่อไม่มี proxy และ Vercel เขียนให้เมื่ออยู่หลัง Vercel ข้อสมมติเรื่องความไว้ใจอยู่ใน [ADR 0025](../adr/0025-same-origin-or-app-base-url.md)
 3. ตรวจ cookie ผ่าน `AccessTokenSigner` ที่ได้จาก `src/composition` ไม่ผ่าน: `/api/*` ตอบ 401, หน้าเว็บ rewrite ไป `/welcome` โดย URL เดิมไม่เปลี่ยน
 4. หน้าเว็บ: สร้าง nonce ต่อคำขอ ใส่ header `Content-Security-Policy` ตามหัวข้อ 6.2 และส่ง nonce ผ่าน request header `x-nonce`
 
-`config.matcher` ครอบทุก path ยกเว้น `/_next/static`, `/_next/image`, `/favicon.ico`, `/robots.txt`
+`config.matcher` ครอบทุก path ยกเว้น `/_next/static`, `/_next/image`, `/favicon.ico`, `/icon.svg`, `/apple-icon.png`, `/robots.txt` และ `/brand/*` (ไอคอนของแท็บและไฟล์ของแบรนด์เป็นสาธารณะ ไม่ต้องมี cookie)
 
 ## 5. package.json
 
@@ -284,6 +284,7 @@ Path ของหน้าเว็บ (`/welcome`, `/chats`, `/chats/[contactId
     "ai:eval": "tsx scripts/ai-eval.ts",
     "migrations:immutable": "tsx scripts/check-migrations-immutable.ts",
     "migrations:destructive": "tsx scripts/check-migrations-destructive.ts",
+    "migrations:applied": "tsx scripts/check-applied-migrations.ts",
     "docs:check": "tsx scripts/docs-check.ts",
     "vercel-build": "if [ \"$VERCEL_ENV\" = \"production\" ]; then prisma migrate deploy; fi && prisma generate && next build",
     "postinstall": "prisma generate"
@@ -295,16 +296,17 @@ Path ของหน้าเว็บ (`/welcome`, `/chats`, `/chats/[contactId
 | --- | --- |
 | `dev` | Turbopack เป็นค่าเริ่มต้นของ Next.js 16 ต้องมี Postgres และ stub ที่รันจาก compose (`docker compose up -d db stub`) กับ `.env` ที่คัดลอกจาก `.env.example` |
 | `start` | ใช้ตรวจ build ในเครื่องเท่านั้น Docker รัน `node server.js` ของ standalone เอง Next.js อาจเตือนว่า `next start` ไม่เหมาะกับ standalone (ต้องยืนยัน) |
-| `typecheck` | `next typegen` สร้าง type ของ route ใน `.next/types` ก่อน (ต้องยืนยันว่ามีใน 16.4) |
+| `typecheck` | `next typegen` สร้าง type ของ route ใน `.next/types` ก่อน (ยืนยันแล้วว่ามีใน 16.4 ดูหัวข้อ 11) |
 | `test`, `test:coverage` | ไม่ต้องใช้ Docker |
 | `test:adapters` | ต้องมี `db` และ `stub` จาก compose ตัวกรองที่ส่งผ่าน `pnpm test:adapters -- <path>` ไม่กรองไฟล์ (รันทั้งชุด) รันเฉพาะบางไฟล์ด้วย `pnpm exec vitest run --project adapters <path...>` ชุด `unit` ก็เช่นกัน: `pnpm exec vitest run --project unit <path...>` ฐานข้อมูลและ stub ส่วนตัวเมื่อหลายคนรันพร้อมกันบนเครื่องเดียว ดูหัวข้อ 6.7 |
 | `test:e2e` | ต้องมีทั้ง compose และ seed ดูหัวข้อ 7 รันด้วย `pnpm test:e2e` (ส่ง option ของ Playwright ต่อท้ายได้ เช่น `--trace on`) |
 | `db:seed` | `--conditions=react-server` ให้ `import 'server-only'` ใน `index.ts` ของ adapter (หัวข้อ 6.3) เป็น module ว่างเหมือนตอนรันใน server ของ Next.js ใต้ Node ธรรมดา package นี้ throw ทันที service `seed` ของ compose ตั้ง `NODE_OPTIONS` เป็นค่าเดียวกันด้วย (หัวข้อ 7.3) |
-| `db:migrate` | ใช้สร้าง migration ใหม่ในเครื่อง dev เท่านั้น migration ที่ลบหรือเปลี่ยนชนิดคอลัมน์ต้องถามก่อน ตาม `AGENTS.md` เมื่อไม่มี TTY (เช่น agent หรือ CI) สร้างไฟล์โดยไม่ apply ด้วย `pnpm exec prisma migrate dev --create-only --name <name> </dev/null` **คำเตือน:** ทุก migration ที่ Prisma สร้างมีคำสั่ง `DROP SEQUENCE "change_seq"` (พร้อม `SET`/`DROP DEFAULT` ของ `"Message"."seq"`) ที่ไม่ควรมี เพราะ Prisma อ่านค่าเริ่มต้น `nextval` แบบ `dbgenerated` ของ migration `init` ไม่ได้ ต้องลบคำสั่งเหล่านั้นด้วยมือก่อน apply ไม่เช่นนั้น polling ใช้ไม่ได้ (ดู comment บนสุดของ `prisma/migrations/*_topic_guard/migration.sql` และ [data-model](data-model.md#migration-ที่สอง-ขอบเขตหัวข้อ)) |
-| `ai:eval` | เรียก Claude จริงและเสียเงิน สคริปต์ปฏิเสธการทำงานถ้าไม่ได้ส่ง `--confirm` (`pnpm ai:eval -- --confirm`) ไม่อยู่ใน CI และ agent ไม่รันเอง ดู [test-strategy](../qa/test-strategy.md) |
+| `db:migrate` | ใช้สร้าง migration ใหม่ในเครื่อง dev เท่านั้น migration ที่ลบหรือเปลี่ยนชนิดคอลัมน์ต้องถามก่อน ตาม `AGENTS.md` เมื่อไม่มี TTY (เช่น terminal ที่ไม่โต้ตอบหรือ CI) สร้างไฟล์โดยไม่ apply ด้วย `pnpm exec prisma migrate dev --create-only --name <name> </dev/null` **คำเตือน:** ทุก migration ที่ Prisma สร้างมีคำสั่ง `DROP SEQUENCE "change_seq"` (พร้อม `SET`/`DROP DEFAULT` ของ `"Message"."seq"`) ที่ไม่ควรมี เพราะ Prisma อ่านค่าเริ่มต้น `nextval` แบบ `dbgenerated` ของ migration `init` ไม่ได้ ต้องลบคำสั่งเหล่านั้นด้วยมือก่อน apply ไม่เช่นนั้น polling ใช้ไม่ได้ (ดู comment บนสุดของ `prisma/migrations/*_topic_guard/migration.sql` และ [data-model](data-model.md#migration-ที่สอง-ขอบเขตหัวข้อ)) |
+| `ai:eval` | เรียก Claude จริงและเสียเงิน สคริปต์ปฏิเสธการทำงานถ้าไม่ได้ส่ง `--confirm` (`pnpm ai:eval -- --confirm`) ไม่อยู่ใน CI และผู้พัฒนาไม่รันเอง ดู [test-strategy](../qa/test-strategy.md) |
 | `vercel-build` | หัวข้อ 9 |
 | `migrations:immutable` | ล้มเมื่อการเปลี่ยนแก้ ลบ เปลี่ยนชื่อ หรือเพิ่มไฟล์ใน `prisma/migrations/<name>/` ที่มีอยู่แล้วบน base เพิ่ม directory ใหม่ได้ base คือ first parent ของ HEAD เมื่ออยู่บน `main` และ merge base กับ `origin/main` เมื่ออยู่ branch อื่น (ต้องมีประวัติครบ: `git fetch origin main`) ส่ง `--base <ref>` หรือ `CHECK_BASE_REF` เพื่อเลือก base เอง ตรวจรวมไฟล์ที่ยังไม่ commit กฎอยู่ใน `scripts/migrations.logic.ts` |
-| `migrations:destructive` | ล้มเมื่อไฟล์ `.sql` ของ migration ที่การเปลี่ยนนี้เพิ่มมี `DROP TABLE`, `DROP COLUMN`, `ALTER COLUMN ... TYPE`, `RENAME`, `TRUNCATE` หรือ `DELETE FROM` ที่ไม่มี `WHERE` (ไม่นับใน comment และ string literal) โดยไม่มีบรรทัดยืนยันรูปแบบ `-- approved-destructive: <เหตุผล>` อยู่ต้นบรรทัด เหตุผลต้องไม่ว่าง ใส่ได้หลังเจ้าของงานอนุมัติแล้วเท่านั้น ตาม `AGENTS.md` ใช้ base เดียวกับ `migrations:immutable` |
+| `migrations:destructive` | ล้มเมื่อไฟล์ `.sql` ใดของ migration ใน tree (ทุกไฟล์ทุกรอบ ไม่ใช่เฉพาะที่การเปลี่ยนนี้เพิ่ม) มี `DROP TABLE`, `DROP COLUMN`, `ALTER COLUMN ... TYPE`, `RENAME`, `TRUNCATE` หรือ `DELETE FROM` ที่ไม่มี `WHERE` (ไม่นับใน comment และ string literal) โดยไม่มีบรรทัดยืนยันรูปแบบ `-- approved-destructive: <เหตุผล>` อยู่ต้นบรรทัด เหตุผลต้องไม่ว่าง ใส่ได้หลังเจ้าของงานอนุมัติแล้วเท่านั้น ตาม `AGENTS.md` migration ที่ห้ามีบรรทัดนี้อยู่แล้ว |
+| `migrations:applied` | อ่าน `_prisma_migrations` ของฐานข้อมูลที่ `DIRECT_URL` (หรือ `DATABASE_URL`) ชี้ แล้วล้มเมื่อ migration ที่ apply แล้วหายจาก `prisma/migrations/` หรือ checksum (SHA-256 ของ `migration.sql`) ไม่ตรง ซึ่ง `prisma migrate deploy` ไม่ตรวจ ([deploy](../runbooks/deploy.md#ตรวจ-migration-ที่-apply-แล้ว)) ไม่อยู่ใน CI เพราะ CI ไม่มีฐานข้อมูลของ production |
 | `docs:check` | ล้มเมื่อลิงก์ relative หรือ `#anchor` ใน `docs/**`, `README.md` และ `AGENTS.md` ชี้ไปไม่ถึง (anchor ใช้กฎ slug ของ GitHub รวมอักษรไทย) เมื่อค่าในตารางหัวข้อ 10 ไม่ตรงกับค่าคงที่ในโค้ด หรือเมื่อ YAML ในหัวข้อ 8 ไม่เหมือน `.github/workflows/ci.yml` พิมพ์ไฟล์และบรรทัดของทุกจุดที่ไม่ตรง อ่านโค้ดเป็นข้อความ (ไม่ import) จึงไม่ต้องมี build ส่ง `--root <dir>` เพื่อตรวจสำเนาของ repo ที่อยู่ในโฟลเดอร์อื่น |
 | `postinstall` | สร้าง client ของ Prisma หลังติดตั้ง Docker ข้ามด้วย `--ignore-scripts` แล้วสั่ง `db:generate` เอง |
 
@@ -350,6 +352,7 @@ Path ของหน้าเว็บ (`/welcome`, `/chats`, `/chats/[contactId
 | `output` | `'standalone'` |
 | `reactStrictMode` | `true` |
 | `poweredByHeader` | `false` |
+| `experimental.proxyClientMaxBodySize` | `PROXY_BODY_MAX_BYTES` import แบบ relative จาก `src/core/domain/constants.ts` (ไฟล์นั้นไม่มี import ตอน runtime) เพราะ proxy.ts ทำให้ Next.js เก็บ body ไว้ในหน่วยความจำ และ body ที่เกินค่าเริ่มต้น 10 MB ถูกตัดโดยไม่มี error ([ข้อ 10.1](#101-แกนกลาง)) |
 | `headers()` | ทุก path (`/:path*`) ได้ header ในตารางถัดไป |
 | `images` | ไม่ตั้ง |
 
@@ -618,7 +621,7 @@ export default defineConfig({
 
 - Coverage บังคับ 90% เฉพาะ `src/core/**` และวัดจากชุด `unit` ตาม [test-strategy](../qa/test-strategy.md)
 - ชุด `adapters` ต่อ Postgres ที่ `postgresql://webchat:webchat@localhost:15432/webchat_test` และ stub ที่ `http://localhost:4010` ค่าเหล่านี้เป็นค่าคงที่ใน `test-support/adapters.constants.ts` ไม่ใช่ environment variable ของแอป
-- ฐานข้อมูลและ stub ส่วนตัว: หลายคน (หรือหลาย agent) รันชุด `adapters` พร้อมกันบนเครื่องเดียวได้โดยไม่ล้างตารางหรือ reset stub ของกันและกัน ด้วยตัวแปรของ test สองตัวที่ `test-support/adapters.constants.ts` อ่าน: `ADAPTER_TEST_DATABASE_NAME` (ชื่อฐานข้อมูลบน Postgres ตัวเดิม ต้องตรง `^[a-z0-9_]+$` ไม่เช่นนั้นใช้ `webchat_test`) และ `ADAPTER_TEST_STUB_URL` (URL ของ stub อีกตัวที่รันเองด้วย port อื่น เช่น `STUB_PORT=4011 node stubs/server.ts` ค่าว่างหรือไม่ตั้งใช้ `http://localhost:4010`) ตัวอย่าง: `ADAPTER_TEST_DATABASE_NAME=webchat_test_alice ADAPTER_TEST_STUB_URL=http://localhost:4011 pnpm exec vitest run --project adapters <path...>` ทั้งสองตัวไม่ใช่ environment variable ของแอปและไม่อยู่ใน `.env.example`
+- ฐานข้อมูลและ stub ส่วนตัว: ผู้พัฒนาหลายคนรันชุด `adapters` พร้อมกันบนเครื่องเดียวได้โดยไม่ล้างตารางหรือ reset stub ของกันและกัน ด้วยตัวแปรของ test สองตัวที่ `test-support/adapters.constants.ts` อ่าน: `ADAPTER_TEST_DATABASE_NAME` (ชื่อฐานข้อมูลบน Postgres ตัวเดิม ต้องตรง `^[a-z0-9_]+$` ไม่เช่นนั้นใช้ `webchat_test`) และ `ADAPTER_TEST_STUB_URL` (URL ของ stub อีกตัวที่รันเองด้วย port อื่น เช่น `STUB_PORT=4011 node stubs/server.ts` ค่าว่างหรือไม่ตั้งใช้ `http://localhost:4010`) ตัวอย่าง: `ADAPTER_TEST_DATABASE_NAME=webchat_test_alice ADAPTER_TEST_STUB_URL=http://localhost:4011 pnpm exec vitest run --project adapters <path...>` ทั้งสองตัวไม่ใช่ environment variable ของแอปและไม่อยู่ใน `.env.example`
 - `adapters.global-setup.ts` สร้างฐานข้อมูลตาม `ADAPTER_TEST_DATABASE_NAME` (ค่าเริ่มต้น `webchat_test`) ถ้ายังไม่มี แล้วรัน `prisma migrate deploy` กับฐานนั้น แต่ละไฟล์ test ล้างตารางที่ตัวเองใช้ด้วย `TRUNCATE ... CASCADE` ใน `beforeEach` ชุดนี้จึงรันทีละไฟล์
 - ชุด `unit` รวม `e2e/**/*.unit.ts` (unit test ของ helper ใน `e2e/helpers/` เช่น `line-webhook.unit.ts`) ซึ่ง Playwright ไม่เก็บเพราะไม่ลงท้ายด้วย `.spec.ts`
 - Adapter ของ `system` และตัวปลอมทดสอบในชุด `unit` เพราะไม่ต้องใช้ Docker
@@ -740,11 +743,11 @@ VERCEL_ENV=
 
 | ตัวแปร | บังคับ | ตรวจ |
 | --- | --- | --- |
-| `DATABASE_URL`, `ACCESS_CODE`, `SESSION_SECRET`, `CREDENTIALS_ENCRYPTION_KEY`, `ANTHROPIC_API_KEY`, `FILE_STORAGE`, `APP_BASE_URL` | บังคับ | `SESSION_SECRET` และ `CREDENTIALS_ENCRYPTION_KEY` ถอด base64 แล้วยาว 32 byte, `FILE_STORAGE` เป็น `local` หรือ `blob`, `APP_BASE_URL` เป็น URL ไม่มี `/` ท้าย |
+| `DATABASE_URL`, `ACCESS_CODE`, `SESSION_SECRET`, `CREDENTIALS_ENCRYPTION_KEY`, `ANTHROPIC_API_KEY`, `FILE_STORAGE`, `APP_BASE_URL` | บังคับ | `SESSION_SECRET` และ `CREDENTIALS_ENCRYPTION_KEY` ถอด base64 แล้วยาว 32 byte, `FILE_STORAGE` เป็น `local` หรือ `blob`, `ACCESS_CODE` ถูกตัดช่องว่างหน้าหลัง (รวมขึ้นบรรทัดใหม่) ให้ตรงกับช่องรหัสที่ถูกตัดเหมือนกัน และไม่มีความยาวขั้นต่ำ, `APP_BASE_URL` เป็น URL แบบ `http` หรือ `https` ที่สมบูรณ์ ไม่มี path, query, fragment หรือชื่อผู้ใช้ ช่องว่างหน้าหลังถูกตัด แล้วแปลงเป็น origin (`/` ท้ายถูกตัด host เป็นตัวเล็ก port ค่าเริ่มต้นถูกตัด) ใช้แสดง Webhook URL, สร้าง URL ของไฟล์เมื่อ `FILE_STORAGE=local` และเป็น origin หนึ่งที่การตรวจต้นทางรับ (อีกตัวคือ origin ของคำขอเอง) |
 | `BLOB_READ_WRITE_TOKEN` | บังคับเมื่อ `FILE_STORAGE=blob` | ไม่ว่าง |
 | `DIRECT_URL` | ไม่บังคับในแอป (ใช้โดย `prisma.config.ts`) | |
 | `LINE_API_BASE_URL`, `LINE_DATA_API_BASE_URL`, `ANTHROPIC_BASE_URL` | ไม่บังคับ | ค่าเริ่มต้น `https://api.line.me`, `https://api-data.line.me` และค่าเริ่มต้นของ SDK ตามลำดับ |
-| `POLL_INTERVAL_MS`, `AI_DEBOUNCE_MS` | ไม่บังคับ | จำนวนเต็มบวก ค่าเริ่มต้นตามหัวข้อ 10 |
+| `POLL_INTERVAL_MS`, `AI_DEBOUNCE_MS` | ไม่บังคับ | จำนวนเต็มบวก ค่าเริ่มต้นตามหัวข้อ 10 `AI_DEBOUNCE_MS` ต้องไม่เกิน `AI_DEBOUNCE_MAX_MS` (5000) ซึ่งเป็นค่าที่หัวข้อ 10.4 พิสูจน์งบเวลาไว้ ค่าที่เกินทำให้ `InvalidEnvError` บอกชื่อตัวแปร |
 | `RATE_LIMIT_SCALE` | ไม่บังคับ | จำนวนเต็ม ≥ 1 ค่าเริ่มต้น 1 คูณทุกค่าจำกัดความถี่ยกเว้น `RATE_LIMIT_UNLOCK` และ `RATE_LIMIT_UNLOCK_NO_IP` compose ตั้ง 10 ห้ามตั้งใน production |
 | `VERCEL_ENV` | ไม่บังคับ (Vercel ตั้งให้เอง) | สตริงใดก็ได้ เมื่อเป็น `production` schema ปฏิเสธเพิ่ม: `LINE_API_BASE_URL`, `LINE_DATA_API_BASE_URL` หรือ `ANTHROPIC_BASE_URL` ที่ถูกตั้ง (ไม่ว่าค่าใด เพราะ production ใช้ค่าเริ่มต้นซึ่งเป็น host ทางการ), `FILE_STORAGE=local` และ `RATE_LIMIT_SCALE` ที่ไม่ใช่ 1 แต่ละตัวที่ผิดอยู่ในรายชื่อของ `InvalidEnvError` โดยไม่มีค่า ค่าอื่นของ `VERCEL_ENV` หรือไม่ตั้ง (Docker, CI, `pnpm dev`) ไม่มีการตรวจข้อนี้ จึงใช้ stub ได้ตามเดิม |
 
@@ -964,9 +967,13 @@ on:
 permissions:
   contents: read
 
+# A run already in progress is never cancelled: each pushed commit that starts gets a result, so
+# a failing check stays visible on that commit. GitHub still keeps one pending run per group and
+# drops an older pending one, which is why the destructive check scans every migration file and
+# the deploy job deploys only the commit that is still the head of main.
 concurrency:
   group: ci-main
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   TZ: UTC
@@ -1057,10 +1064,21 @@ jobs:
       - name: Trigger Vercel Deploy Hook
         env:
           DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+          GH_TOKEN: ${{ github.token }}
+          TESTED_SHA: ${{ github.sha }}
         # Without the secret the checks above still gate main; the deploy starts once it is set.
+        # The hook builds whatever main is when it is called, so it is called only while main is
+        # still the commit these jobs tested; a newer commit's own run deploys that one.
         run: |
           if [ -z "$DEPLOY_HOOK_URL" ]; then
             echo "::notice::VERCEL_DEPLOY_HOOK_URL is not set, so the deploy is skipped."
+            exit 0
+          fi
+          MAIN_SHA=$(curl --fail --silent --show-error \
+            -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github.sha" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/commits/main")
+          if [ "$MAIN_SHA" != "$TESTED_SHA" ]; then
+            echo "::notice::main is now $MAIN_SHA, not the tested $TESTED_SHA, so the deploy is skipped."
             exit 0
           fi
           curl --fail --silent --show-error -X POST "$DEPLOY_HOOK_URL" > /dev/null
@@ -1069,16 +1087,17 @@ jobs:
 | เรื่อง | ข้อกำหนด |
 | --- | --- |
 | การล็อก action | ทุก action ล็อกด้วย commit SHA เต็มของรุ่นที่ระบุใน comment ท้ายบรรทัด: `actions/checkout` v7.0.1, `pnpm/action-setup` v6.1.1, `actions/setup-node` v7.1.0, `actions/upload-artifact` v7.0.2 และไฟล์ release ของ gitleaks v8.30.1 ล็อกด้วย SHA-256 การอัปเดตเปลี่ยนรุ่นและค่า hash พร้อมกัน |
-| ประวัติของ git | งาน `check` ใช้ `fetch-depth: 0` เพราะ `migrations:immutable` และ `migrations:destructive` ต้องใช้ first parent ของ commit ที่ push และ merge base กับ `origin/main` ซึ่ง clone แบบตื้นไม่มี |
-| migration เดิมแก้ไม่ได้ | ขั้น `pnpm migrations:immutable` ล้มเมื่อไฟล์ใน migration ที่มีอยู่แล้วบน base ถูกแก้ ลบ เปลี่ยนชื่อ หรือมีไฟล์เพิ่ม ([D1](../guidelines/pitfalls-and-prevention.md#d1-แก้หรือลบ-migration-ที่-apply-ไปแล้ว)) |
-| migration ที่ลบข้อมูล | ขั้น `pnpm migrations:destructive` สแกนเฉพาะไฟล์ migration ที่เพิ่มใหม่ และล้มเมื่อมีคำสั่งทำลายข้อมูลโดยไม่มีบรรทัด `-- approved-destructive: <เหตุผล>` ซึ่งใส่ได้หลังเจ้าของงานอนุมัติเท่านั้น ([D2](../guidelines/pitfalls-and-prevention.md#d2-migration-ที่ทำให้ย้อนกลับไม่ได้)) |
+| ประวัติของ git | งาน `check` ใช้ `fetch-depth: 0` เพราะ `migrations:immutable` ต้องใช้ first parent ของ commit ที่ push และ merge base กับ `origin/main` ซึ่ง clone แบบตื้นไม่มี |
+| migration เดิมแก้ไม่ได้ | ขั้น `pnpm migrations:immutable` ล้มเมื่อไฟล์ใน migration ที่มีอยู่แล้วบน base ถูกแก้ ลบ เปลี่ยนชื่อ หรือมีไฟล์เพิ่ม ([D1](../guidelines/pitfalls-and-prevention.md#d1-แก้หรือลบ-migration-ที่-apply-ไปแล้ว)) การเทียบกับ base เห็นเฉพาะการเปลี่ยนของ commit นั้น commit ที่รอบของตัวเองล้มหรือถูกข้ามแล้วตามด้วย commit ที่ผ่านจึงหลุดได้ และ `prisma migrate deploy` ไม่ปฏิเสธ migration ที่ apply แล้วซึ่งถูกแก้หรือหายไป (ทดสอบกับฐานข้อมูลชั่วคราวด้วย Prisma 7.10.1: ทั้งสองกรณีจบด้วย exit 0 และ `prisma migrate status` ก็ไม่เห็น) การตรวจที่ปิดช่องนี้คือ `pnpm migrations:applied` ซึ่งเทียบ checksum ใน `_prisma_migrations` ของฐานข้อมูลจริงกับไฟล์ ([deploy](../runbooks/deploy.md#ตรวจ-migration-ที่-apply-แล้ว)) |
+| migration ที่ลบข้อมูล | ขั้น `pnpm migrations:destructive` สแกนไฟล์ migration ทุกไฟล์ใน tree ทุกรอบ (ไม่ใช่เฉพาะที่ commit นั้นเพิ่ม) และล้มเมื่อมีคำสั่งทำลายข้อมูลโดยไม่มีบรรทัด `-- approved-destructive: <เหตุผล>` ซึ่งใส่ได้หลังเจ้าของงานอนุมัติเท่านั้น ([D2](../guidelines/pitfalls-and-prevention.md#d2-migration-ที่ทำให้ย้อนกลับไม่ได้)) |
 | เอกสารตรงกับโค้ด | ขั้น `pnpm docs:check` ตรวจลิงก์ anchor ค่าคงที่ในหัวข้อ 10 และบล็อก YAML ด้านบนซึ่งต้องเหมือน `ci.yml` ทุกบรรทัด แก้ workflow แล้วต้องคัดลอกลงบล็อกนี้ใน commit เดียวกัน ([P1](../guidelines/pitfalls-and-prevention.md#p1-เอกสารหรือ-comment-ไม่ตรงกับโค้ด)) |
 | Secret | มีตัวเดียวคือ `VERCEL_DEPLOY_HOOK_URL` ตาม [deploy](../runbooks/deploy.md) เมื่อยังไม่ได้ตั้ง งาน `deploy` แจ้งว่าข้ามและจบด้วยสถานะผ่าน สี่งานตรวจยังคุม `main` ตามปกติ |
 | E2E | seed รันแยกด้วย `docker compose run` เพราะ `up --wait` ไม่เหมาะกับ service ที่จบเอง |
 | สแกนความลับ | ดาวน์โหลดไฟล์ release ของ gitleaks ตรวจ SHA-256 แล้วรัน `gitleaks git .` กับประวัติทั้งหมด ไม่ใช้ action ของ gitleaks เพื่อไม่ต้องมี license key กฎเริ่มต้นเปิดครบ ไฟล์ `.gitleaks.toml` ยกเว้นเฉพาะค่า `SESSION_SECRET` และ `CREDENTIALS_ENCRYPTION_KEY` สองค่าของ `docker-compose.yml` ซึ่งใช้ได้เฉพาะ stack ในเครื่อง |
 | ช่องโหว่ของ dependency | `pnpm audit --audit-level high` ผลขึ้นกับประกาศช่องโหว่ ณ วันที่รัน จึงล้มได้โดยที่โค้ดไม่เปลี่ยน เมื่อ dependency ทางอ้อมติดประกาศและรุ่นที่แก้แล้วเข้ากันได้ ให้ล็อกรุ่นด้วย `overrides` ใน `pnpm-workspace.yaml` พร้อมเหตุผล (ตัวอย่าง: `zod` ของ `@vercel/cli-config`) |
 | ช่องโหว่ | `pnpm audit` ล้มเมื่อพบระดับ high ขึ้นไป |
-| `cancel-in-progress` | push ใหม่ยกเลิกรอบเก่า Deploy Hook สร้างจาก HEAD ของ `main` อยู่แล้ว |
+| `cancel-in-progress` | `false`: รอบที่เริ่มแล้วทำจนจบ ผลที่ล้มจึงอยู่บน commit นั้นให้เห็น ไม่ถูกลบด้วย push ถัดไป GitHub ยังเก็บรอบที่รอได้แค่รอบเดียวต่อกลุ่มและทิ้งรอบที่รออยู่ก่อน commit ระหว่างทางจึงอาจไม่ถูกตรวจ ข้อนี้ถูกชดเชยด้วยการสแกน migration ทุกไฟล์และการ deploy เฉพาะ commit ที่ยังเป็น HEAD ของ `main` |
+| Deploy ตรง commit ที่ตรวจ | Deploy Hook สร้างจาก HEAD ของ `main` ณ ตอนที่เรียก งาน `deploy` จึงอ่าน SHA ของ `main` ผ่าน GitHub API (`github.token` สิทธิ์ `contents: read`) ก่อนเรียก ถ้าไม่ใช่ `github.sha` ที่สี่งานตรวจ จะข้ามพร้อม notice เพราะรอบของ commit ใหม่จะ deploy เอง ช่วงเวลาระหว่างอ่าน SHA กับเรียก hook (ไม่กี่วินาที) ยังเหลือ |
 
 ## 9. Build บน Vercel
 
@@ -1103,6 +1122,7 @@ Environment variable ตั้งเฉพาะ Production ตาม [deploy](.
 | `POLL_OVERLAP_SEQ` | 20 | `constants.ts` | ช่วงย้อนหลังของ polling นับเป็นเลข sequence ตาม [api-contract](api-contract.md#protocol-ของ-polling) |
 | `POLL_PAGE_LIMIT` | 200 | `constants.ts` | จำนวนแถวสูงสุดต่อรอบ polling |
 | `AI_HISTORY_LIMIT` | 20 ข้อความ | `constants.ts` | ประวัติที่ส่งให้โมเดล |
+| `AI_QUOTE_SNIPPET_MAX_CHARS` | 40 ตัวอักษร | `constants.ts` | ความยาวของข้อความที่ถูกอ้างในบรรทัดนำหน้าของประวัติ ([ai-prompt ข้อ 4.2](../specs/ai-prompt.md#42-แปลงเป็น-turn)) |
 | `AI_REPLY_MAX_CHARS` | 1000 ตัวอักษร | `constants.ts` | คำตอบของ AI หลังทำความสะอาดยาวกว่านี้ถือว่าไม่ผ่าน schema ([ai-prompt](../specs/ai-prompt.md#6-การทำความสะอาดคำตอบ)) |
 | `AI_MAX_ROUNDS_PER_RUN` | 2 | `constants.ts` | จำนวนรอบที่งานหนึ่งของ `GenerateAiReply` ตอบต่อได้เมื่อมีข้อความใหม่ระหว่างถือล็อก |
 | `AI_STUCK_AFTER_MS` | 300000 ms | `constants.ts` | `aiState = replying` ที่เก่ากว่านี้ถือว่าค้าง ต้องมากกว่าเวลาแย่ที่สุดของงาน `GenerateAiReply` ทั้งงาน (หัวข้อ 10.4 "เวลาแย่ที่สุด") เพื่อให้จริงทั้งบน Vercel และใน Docker ที่ไม่มีเพดานเวลาของ function และไม่น้อยกว่า `WEBHOOK_MAX_DURATION_S` |
@@ -1121,6 +1141,8 @@ Environment variable ตั้งเฉพาะ Production ตาม [deploy](.
 | `PDF_MAX_PAGES` | 30 หน้า | `constants.ts` | `IngestDocument` ตรวจหลังแปลง และอยู่ในคำสั่งของการแปลง |
 | `IMAGE_MAX_BYTES` | 10 MB (10 × 1024 × 1024) | `constants.ts` | `IssueUpload`, `StoreInboundMedia`, หน้าแชท |
 | `VIDEO_MAX_BYTES` | 50 MB (50 × 1024 × 1024) | `constants.ts` | `IssueUpload`, `StoreInboundMedia`, หน้าแชท |
+| `PROXY_BODY_MAX_BYTES` | 58 MB (`VIDEO_MAX_BYTES` + 8 MB) | `constants.ts` | `experimental.proxyClientMaxBodySize` ของ `next.config.ts`: Next.js เก็บ body ของคำขอที่ไม่ใช่ GET ไว้ในหน่วยความจำให้ proxy.ts ได้ไม่เกินค่านี้ (ค่าเริ่มต้น 10 MB) body ที่ยาวกว่าถึง route แบบถูกตัดโดยไม่มี error ค่านี้จึงต้องรับวิดีโอที่อัปโหลดเข้าที่เก็บแบบ local ได้ทั้งไฟล์ (`next-config.unit.ts` ตรึงไว้) |
+| `AUDIO_MAX_BYTES` | 20 MB (20 × 1024 × 1024) | `constants.ts` | `StoreInboundMedia` ข้อความเสียงขาเข้า (เสียงของ LINE ยาวไม่กี่นาทีเป็นไฟล์ไม่กี่ MB) |
 | `PREVIEW_MAX_BYTES` | 1 MB (ต้องยืนยันขีดของภาพตัวอย่างใน LINE) | `constants.ts` | ภาพตัวอย่างที่ browser สร้าง |
 | `UPLOAD_TICKET_TTL_MS` | 900000 ms (15 นาที) | `constants.ts` | อายุของสิทธิ์อัปโหลด |
 | `LINE_TEXT_MAX_CHARS` | 5000 ตัวอักษร (ต้องยืนยันวิธีนับ) | `constants.ts` | การแบ่งข้อความยาวใน domain |
@@ -1130,17 +1152,27 @@ Environment variable ตั้งเฉพาะ Production ตาม [deploy](.
 | `LINE_CHANNEL_ID_MAX_CHARS` | 20 หลัก | `constants.ts` | Channel ID เป็นตัวเลขเท่านั้นไม่เกินค่านี้ ทั้ง API (`LINE_CHANNEL_ID_PATTERN`) และฟอร์ม |
 | `ADMIN_TEXT_MAX_CHARS` | 5000 ตัวอักษร | `constants.ts` | ข้อความที่แอดมินพิมพ์ |
 | `PREVIEW_TEXT_MAX_CHARS` | 100 ตัวอักษร | `constants.ts` | ข้อความล่าสุดในรายชื่อ |
+| `PREVIEW_TEXT_MAX_UNITS` | 800 ตัวอักษร | `constants.ts` | เพดานหน่วย UTF-16 ของตัวอย่างข้อความเดียวกัน `previewOf` ตัดที่ทั้งสองเพดาน หน้าเว็บตรวจด้วยความยาวอย่างเดียว ไม่ใช้กฎ grapheme ของ browser |
 | `MESSAGE_PAGE_LIMIT` | 50 | `constants.ts` | `GetMessages` และหน้าแชท |
 | `CONTACT_PAGE_LIMIT` | 50 | `constants.ts` | `ListContacts` หน้าละกี่คน |
 | `CONTACT_SEARCH_MAX_CHARS` | 50 ตัวอักษร | `constants.ts` | query `q` ของ `GET /api/contacts` |
 | `AI_INSTRUCTIONS_MAX_CHARS` | 2000 ตัวอักษร | `constants.ts` | คำแนะนำสำหรับ AI ทั้ง API และฟอร์ม |
+| `CONTACT_NOTE_MAX_CHARS` | 1000 ตัวอักษร | `constants.ts` | โน้ตของแอดมินหนึ่งโน้ตหลังตัดช่องว่าง ทั้ง API และฟอร์ม |
+| `CONTACT_NOTE_LIST_LIMIT` | 100 โน้ต | `constants.ts` | จำนวนโน้ตที่ `GET /api/contacts/:id/notes` คืน |
+| `AI_NAME_MAX_CHARS` | 40 ตัวอักษร | `constants.ts` | ชื่อ AI หลังตัดช่องว่าง ทั้ง API และฟอร์ม ([ai-prompt](../specs/ai-prompt.md#21-slot)) |
+| `HOW_TO_TEXT_MAX_CHARS` | 1500 ตัวอักษร | `constants.ts` | ข้อความของปุ่ม "วิธีทดสอบ" หลังตัดช่องว่าง ทั้ง API และฟอร์ม ต่ำกว่า `LINE_TEXT_MAX_CHARS` จึงส่งเป็นข้อความเดียว ([line-messaging](../specs/line-messaging.md#เมื่อลูกค้ากดปุ่ม)) |
+| `WELCOME_TEXT_MAX_CHARS` | 300 ตัวอักษร | `constants.ts` | ข้อความต้อนรับในการ์ด ทั้ง API และฟอร์ม ([line-messaging](../specs/line-messaging.md#ข้อความต้อนรับ)) |
+| `POSTBACK_DATA_MAX_CHARS` | 300 ตัวอักษร | `constants.ts` | `postback.data` ที่ยาวกว่านี้เป็น `unsupported` (ขีดจำกัดของ LINE) |
+| `RICH_MENU_WIDTH` | 2500 px | `constants.ts` | ความกว้างของรูปและพื้นที่กดของ rich menu |
+| `RICH_MENU_HEIGHT` | 843 px | `constants.ts` | ความสูงของ rich menu แบบ compact |
 | `AI_DAILY_BUDGET_MAX_USD` | "10.00" | `constants.ts` | งบต่อวันสูงสุดที่กรอกได้ ทั้ง API และฟอร์ม |
 | `ACCESS_COOKIE_TTL_MS` | 604800000 ms (7 วัน) | `constants.ts` | `UnlockAccess`, `AccessTokenSigner`, `Max-Age` ของ cookie |
 | `WEBHOOK_MAX_BODY_BYTES` | 1 MB | `constants.ts` | route webhook ปฏิเสธ body ที่ใหญ่กว่านี้ก่อนตรวจ signature |
 | `JSON_MAX_BODY_BYTES` | 64 KB | `constants.ts` | body แบบ JSON ของทุก endpoint อื่น |
-| `DEFAULT_AI_MODEL` | `claude-opus-5-5` | `constants.ts` และค่าเริ่มต้นใน `prisma/schema.prisma` | ค่าเริ่มต้นของ `Settings.aiModel` |
+| `DEFAULT_AI_MODEL` | `claude-sonnet-5-5` | `constants.ts` และค่าเริ่มต้นใน `prisma/schema.prisma` | ค่าเริ่มต้นของ `Settings.aiModel` ของระบบที่ติดตั้งใหม่ แถวที่มีอยู่แล้วคงค่าเดิม ([ADR 0026](../adr/0026-neutral-core-prompt-and-layered-settings.md)) |
 | `DEFAULT_AI_DAILY_BUDGET_USD` | "2.00" | `constants.ts` และ `prisma/schema.prisma` | ค่าเริ่มต้นของงบต่อวัน |
 | `DEFAULT_POLITE_PARTICLE` | "ค่ะ" | `constants.ts` และ `prisma/schema.prisma` (`kha`) | ค่าเริ่มต้นของคำลงท้าย |
+| `DEFAULT_AI_ANSWER_MODE` | `general` | `constants.ts` และ `prisma/schema.prisma` | ค่าเริ่มต้นของขอบเขตคำตอบ (`Settings.aiAnswerMode`) |
 | `GUARD_MAX_TOPICS` | 20 หัวข้อ | `constants.ts` | จำนวนหัวข้อสูงสุดของขอบเขตหัวข้อ ทั้ง API และฟอร์ม ([topic-guard](../specs/topic-guard.md)) |
 | `GUARD_TOPIC_MAX_CHARS` | 80 ตัวอักษร | `constants.ts` | ความยาวของหนึ่งหัวข้อหลังตัดช่องว่าง |
 | `GUARD_TEST_MAX_CHARS` | 1000 ตัวอักษร | `constants.ts` | ข้อความในกล่องทดลองของ `POST /api/settings/guard/test` |
@@ -1149,7 +1181,7 @@ Environment variable ตั้งเฉพาะ Production ตาม [deploy](.
 | `GUARD_TIMEOUT_MS` | 10000 ms | `constants.ts` | timeout ของการคัดกรองหนึ่งครั้ง ส่งใน `TopicGuardRequest.timeoutMs` |
 | `GUARD_CONTEXT_TURNS` | 4 turn | `constants.ts` | บริบทก่อนข้อความล่าสุดที่ส่งให้การคัดกรอง |
 
-ค่าเริ่มต้นของระบบที่ติดตั้งใหม่: kill switch ปิด, ขอบเขตหัวข้อปิดและไม่มีหัวข้อ, งบต่อวันตาม `DEFAULT_AI_DAILY_BUDGET_USD`, โมเดลตาม `DEFAULT_AI_MODEL`, คำลงท้ายตาม `DEFAULT_POLITE_PARTICLE`, ลูกค้าใหม่มี AI ตอบแทนปิด ส่วน seed เปิด kill switch และคงงบไว้ที่ค่าเริ่มต้น ([data-model](data-model.md#ข้อมูลตัวอย่าง-seed))
+ค่าเริ่มต้นของระบบที่ติดตั้งใหม่: kill switch ปิด, ขอบเขตหัวข้อปิดและไม่มีหัวข้อ, งบต่อวันตาม `DEFAULT_AI_DAILY_BUDGET_USD`, โมเดลตาม `DEFAULT_AI_MODEL`, คำลงท้ายตาม `DEFAULT_POLITE_PARTICLE`, ขอบเขตคำตอบตาม `DEFAULT_AI_ANSWER_MODE`, ไม่มีชื่อ AI และคำแนะนำสำหรับ AI ว่าง, ส่งการ์ดต้อนรับเมื่อเพิ่มเพื่อน (`welcomeEnabled` true) และข้อความวิธีทดสอบกับข้อความต้อนรับเป็นค่าเริ่มต้น, ไม่มี rich menu จนกว่าแอดมินกด publish, ลูกค้าใหม่มี AI ตอบแทนปิด ส่วน seed เปิด kill switch และคงงบไว้ที่ค่าเริ่มต้น ([data-model](data-model.md#ข้อมูลตัวอย่าง-seed))
 
 ### 10.2 การจำกัดความถี่
 
@@ -1164,6 +1196,8 @@ Rate limit ทั้งหมดเป็นแบบหน้าต่างค
 | `RATE_LIMIT_PDF_INGEST` | `pdf_ingest` | 5 ครั้งต่อ 3600 วินาที | IP | `IngestDocument` รวมการลองใหม่ |
 | `RATE_LIMIT_TYPING` | `typing` | 1 ครั้งต่อ 10 วินาที | id ของลูกค้า | `ShowTypingToCustomer` เกินแล้วข้ามเงียบ ๆ ไม่ใช่ error |
 | `RATE_LIMIT_GUARD_TEST` | `guard_test` | 10 ครั้งต่อ 60 วินาที | IP | `TestTopicGuard` ทุกครั้งเรียกโมเดลและมีค่าใช้จ่าย |
+| `RATE_LIMIT_NOTE_CREATE` | `note_create` | 30 ครั้งต่อ 60 วินาที | IP | `AddContactNote` เท่ากับการส่งข้อความ |
+| `RATE_LIMIT_RICH_MENU_TAP` | `rich_menu_tap` | 3 ครั้งต่อ 10 วินาที | id ของลูกค้า | การกดปุ่มของ rich menu และการ์ดต้อนรับใน `ReceiveLineEvents` เกินแล้วทิ้งการกดนั้นเงียบ ๆ ไม่ใช่ error |
 
 `RATE_LIMIT_SCALE` มาจาก environment variable ชื่อเดียวกัน ค่าเริ่มต้น 1 ส่งเข้าแกนกลางผ่าน `UseCaseConfig`
 
@@ -1172,7 +1206,8 @@ Rate limit ทั้งหมดเป็นแบบหน้าต่างค
 | ชื่อ | ค่าเริ่มต้น | อยู่ที่ | ใช้ที่ |
 | --- | --- | --- | --- |
 | `POLL_INTERVAL_MS` | 2000 ms | `src/composition/env.ts` | ช่วง polling ของหน้าเว็บ หน้าเว็บได้ค่าจาก `GET /api/settings` (`client.pollIntervalMs`) |
-| `AI_DEBOUNCE_MS` | 2500 ms | `src/composition/env.ts` | ช่วงรวมข้อความรัวใน `GenerateAiReply` ตั้งได้ไม่เกิน 5000 ms โดยเวลาแย่ที่สุดของ webhook ยังอยู่ในงบ (หัวข้อ 10.4 ตรึงทั้งค่าเริ่มต้นและ 5000) |
+| `AI_DEBOUNCE_MS` | 2500 ms | `src/composition/env.ts` | ช่วงรวมข้อความรัวใน `GenerateAiReply` ตั้งได้ไม่เกิน `AI_DEBOUNCE_MAX_MS` โดยเวลาแย่ที่สุดของ webhook ยังอยู่ในงบ (หัวข้อ 10.4 ตรึงทั้งค่าเริ่มต้นและค่าสูงสุด) |
+| `AI_DEBOUNCE_MAX_MS` | 5000 ms | `src/composition/env.ts` | ค่าสูงสุดของ `AI_DEBOUNCE_MS` ที่ `parseEnv` รับ |
 | `RATE_LIMIT_SCALE` | 1 | `src/composition/env.ts` | หัวข้อ 10.2 |
 
 ### 10.4 Adapter และ route
@@ -1220,6 +1255,7 @@ Rate limit ทั้งหมดเป็นแบบหน้าต่างค
 | --- | --- | --- | --- |
 | `TYPING_PING_INTERVAL_MS` | 15000 ms | `src/features/inbox/inbox.constants.ts` | ช่องตอบส่ง ping การพิมพ์ไม่เกินหนึ่งครั้งต่อช่วงนี้ ([ui-screens](../specs/ui-screens.md#58-loading-ฝั่ง-line-ขณะพิมพ์)) |
 | `SEND_UNCONFIRMED_TIMEOUT_MS` | 15000 ms | `inbox.constants.ts` | ข้อความที่ไม่ได้คำตอบถูกถือว่าไม่สำเร็จหลังช่วงนี้ |
+| `QUOTE_HIGHLIGHT_MS` | 1600 ms | `inbox.constants.ts` | เวลาที่ฟองต้นทางถูกเน้นหลังกดกล่องอ้างอิง |
 | `GROUP_GAP_MS` | 300000 ms (5 นาที) | `inbox.constants.ts` | ข้อความห่างกันไม่เกินนี้อยู่กลุ่มเดียว |
 | `SEARCH_DEBOUNCE_MS` | 300 ms | `inbox.constants.ts` | ช่องค้นหาลูกค้า |
 | `MARK_READ_DELAY_MS` | 1000 ms | `inbox.constants.ts` | หน่วงการล้างจำนวนยังไม่อ่าน |
@@ -1227,11 +1263,17 @@ Rate limit ทั้งหมดเป็นแบบหน้าต่างค
 | `LOAD_OLDER_THRESHOLD_PX` | 200 px | `inbox.constants.ts` | ระยะจากบนสุดที่เริ่มโหลดข้อความเก่า |
 | `TOAST_DURATION_MS` | 4000 ms | `src/common/common.constants.ts` | toast ปกติ ([ui-screens](../specs/ui-screens.md#10-toast)) |
 | `TOAST_ERROR_DURATION_MS` | 6000 ms | `common.constants.ts` | toast ที่เป็น error |
-| `CLIENT_REQUEST_TIMEOUT_MS` | 15000 ms | `src/common/common.constants.ts` | `apiFetch` ไม่ได้คำตอบภายในเวลานี้ได้ `client.network` |
+| `CLIENT_REQUEST_TIMEOUT_MS` | 15000 ms | `src/common/common.constants.ts` | `apiFetch` ไม่ได้คำตอบภายในเวลานี้ได้ `client.network` ค่าเริ่มต้นของทุกคำขอ คำขอที่งานฝั่ง server นานกว่าส่ง `timeoutMs` ของตัวเอง (สี่แถวถัดไป) |
+| `CLIENT_TIMEOUT_GUARD_TEST_MS` | 30000 ms | `src/contracts/timeouts.contract.ts` | `POST /api/settings/guard/test` เวลาแย่ที่สุดฝั่ง server คือการคัดกรองหนึ่งครั้งพร้อม retry (`guardTestWorstMs`) |
+| `CLIENT_TIMEOUT_RICH_MENU_PUBLISH_MS` | 120000 ms | `timeouts.contract.ts` | `POST /api/settings/rich-menu` สร้าง อัปโหลดรูป ตั้งค่าเริ่มต้น แล้วลบหนึ่งหรือสองเมนู (`richMenuPublishWorstMs`) |
+| `CLIENT_TIMEOUT_RICH_MENU_REMOVE_MS` | 60000 ms | `timeouts.contract.ts` | `DELETE /api/settings/rich-menu` (`richMenuRemoveWorstMs`) |
+| `CLIENT_TIMEOUT_LINE_CHECK_MS` | 50000 ms | `timeouts.contract.ts` | บันทึกและทดสอบ credential ของ LINE (`lineCheckWorstMs`) |
+| `CLIENT_TIMEOUT_MARGIN_MS` | 5000 ms | `timeouts.contract.ts` | ส่วนเผื่อที่ทุกค่าข้างบนต้องมีเหนือเวลาแย่ที่สุดฝั่ง server ซึ่ง `timing-budget.spec.ts` ตรวจ |
+| `CLIENT_UPLOAD_MIN_BYTES_PER_SECOND` | 32768 (32 × 1024 byte ต่อวินาที) | `timeouts.contract.ts` | การอัปโหลด PDF แบบ multipart รอ `CLIENT_REQUEST_TIMEOUT_MS` บวกเวลาที่ไฟล์ใช้ที่อัตรานี้ (`uploadTimeoutMs`) |
 | `POLL_BACKOFF_MAX_MS` | 30000 ms | `common.constants.ts` | ช่วง polling สูงสุดเมื่อล้มเหลวติดกัน |
 | `POLL_FAILURES_BEFORE_BANNER` | 2 | `common.constants.ts` | แถบการเชื่อมต่อแสดงเมื่อล้มเหลวติดกันถึงค่านี้ |
 | `SYSTEM_STATUS_POLL_MS` | 30000 ms | `src/features/settings/settings.constants.ts` | ส่วนสถานะระบบ |
-| `RAIL_WIDTH_EXPANDED` | 184px | `src/common/layout.constants.ts` | เมนูซ้าย |
+| `RAIL_WIDTH_EXPANDED` | 212px | `src/common/layout.constants.ts` | เมนูซ้าย |
 | `RAIL_WIDTH_COLLAPSED` | 56px | `layout.constants.ts` | เมนูซ้ายเมื่อพับ |
 | `RAIL_STRIP_HEIGHT` | 56px | `layout.constants.ts` | แถบเมนูบนเมื่อจอแคบ |
 | `LIST_WIDTH` | 296px | `layout.constants.ts` | รายชื่อลูกค้า |

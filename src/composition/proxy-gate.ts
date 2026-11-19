@@ -5,12 +5,13 @@ import type { VerifyAccessInput } from '@/core/use-cases';
 import { buildContentSecurityPolicy } from './csp';
 import type { HttpErrorCode } from './http-errors';
 import { errorResponse, readAccessToken } from './http-response';
+import { isAllowedOrigin } from './request-origin';
 
 export interface ProxyGateDeps {
   verifyAccess: UseCase<VerifyAccessInput, void, 'access.unauthorized'>;
   ids: Pick<IdGenerator, 'requestId'>;
   logger: Logger;
-  /** Origin of APP_BASE_URL. */
+  /** Origin of APP_BASE_URL; same-origin requests pass too (request-origin.ts). */
   appOrigin: string;
   development: boolean;
   nonce: () => string;
@@ -48,7 +49,8 @@ const isSafeMethod = (method: string): boolean => method === 'GET' || method ===
  * (project-setup "proxy.ts"):
  *
  * 1. Exempt paths pass the gate.
- * 2. `/api/*` that is not GET or HEAD needs `Origin` equal to APP_BASE_URL: else 403.
+ * 2. `/api/*` that is not GET or HEAD needs `Origin` equal to the request's own origin or to
+ *    the origin of APP_BASE_URL (`isAllowedOrigin`): else 403.
  * 3. The cookie goes through VerifyAccess (AccessTokenSigner). Else `/api/*` gets 401 and a
  *    page is rewritten to /welcome with the URL unchanged.
  * 4. Every response gets the CSP with a fresh nonce; pages also get it as request headers
@@ -93,7 +95,7 @@ export const makeProxyGate = (deps: ProxyGateDeps) => {
     };
 
     if (api && !isSafeMethod(method) && !isOriginExempt(method, pathname)) {
-      if (request.headers.get('origin') !== deps.appOrigin) {
+      if (!isAllowedOrigin(request, deps.appOrigin)) {
         const requestId = deps.ids.requestId();
         deps.logger.log('warn', 'http.origin.rejected', { requestId, method });
         return withCsp(reject('request.origin_forbidden', method, started, requestId));

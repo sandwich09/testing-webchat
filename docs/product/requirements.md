@@ -1,6 +1,6 @@
 # Requirement
 
-> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-18
+> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-19
 
 ## ที่มา
 
@@ -21,7 +21,7 @@
 
 ## การตีความ
 
-Webchat คือหน้าจอของแอดมินร้าน ลูกค้าเพิ่ม LINE OA เป็นเพื่อนแล้วทักเข้ามา แอดมินเห็นรายชื่อลูกค้า เลือกคนที่จะคุย แล้วตอบกลับผ่านเว็บ ข้อความไปปรากฏในแอป LINE ของลูกค้าคนนั้น
+Webchat คือหน้าจอของแอดมินของ LINE OA ลูกค้าเพิ่ม LINE OA เป็นเพื่อนแล้วทักเข้ามา แอดมินเห็นรายชื่อลูกค้า เลือกคนที่จะคุย แล้วตอบกลับผ่านเว็บ ข้อความไปปรากฏในแอป LINE ของลูกค้าคนนั้น
 
 ## ขอบเขตที่เพิ่มจากโจทย์
 
@@ -34,18 +34,23 @@ Webchat คือหน้าจอของแอดมินร้าน ล�
 | E11 | แสดง loading ฝั่ง LINE ขณะแอดมินพิมพ์ (ข้อความสำเร็จรูปถูกตัดออก [ADR 0024](../adr/0024-scope-reductions.md)) | [webchat-inbox](../specs/webchat-inbox.md) |
 | E5 | AI ตอบแทนรายลูกค้า อ่านประวัติแชทเป็นบริบท | [ai-reply](../specs/ai-reply.md) |
 | E6 | สวิตช์ปิด AI ทั้งระบบ ซึ่งทำให้สวิตช์รายลูกค้ากดไม่ได้ | [ai-reply](../specs/ai-reply.md) |
-| E7 | คลังความรู้จาก PDF ที่ AI ใช้ตอบคำถามทั่วไปของร้าน | [knowledge-base](../specs/knowledge-base.md) |
+| E7 | คลังความรู้จาก PDF ที่ AI ใช้ตอบคำถามที่พบบ่อยของบัญชี | [knowledge-base](../specs/knowledge-base.md) |
 | E8 | เลือกโมเดล และผู้ให้บริการ AI เปลี่ยนได้โดยไม่แตะแกนกลาง | [ai-reply](../specs/ai-reply.md) |
 | E9 | Token และค่าใช้จ่ายโดยประมาณต่อข้อความและต่อลูกค้า แสดงเฉพาะหลังบ้าน | [usage-cost](../specs/usage-cost.md) |
 | E10 | รันทั้งระบบในเครื่องได้ด้วย Docker คำสั่งเดียว | [infrastructure](../architecture/infrastructure.md) |
-| E12 | ขอบเขตหัวข้อ: เมื่อเปิด AI คุยได้เฉพาะหัวข้อที่เจ้าของร้านกำหนด ตรวจด้วยการเรียกโมเดลแยกก่อนการตอบ และอยู่เหนือคำแนะนำของร้านกับคลังความรู้ ตัวเลขของ guardrail ทุกชั้นอ่านได้จาก API ไม่แสดงบนหน้าจอ ([ADR 0024](../adr/0024-scope-reductions.md)) | [topic-guard](../specs/topic-guard.md), [ai-guardrails](../security/ai-guardrails.md) |
+| E12 | ขอบเขตหัวข้อ: เมื่อเปิด AI คุยได้เฉพาะหัวข้อที่แอดมินกำหนด ตรวจด้วยการเรียกโมเดลแยกก่อนการตอบ และอยู่เหนือคำแนะนำสำหรับ AI กับคลังความรู้ ตัวเลขของ guardrail ทุกชั้นอ่านได้จาก API ไม่แสดงบนหน้าจอ ([ADR 0024](../adr/0024-scope-reductions.md)) | [topic-guard](../specs/topic-guard.md), [ai-guardrails](../security/ai-guardrails.md) |
+| E13 | ข้อความที่ลูกค้าตอบกลับ (quote) แสดงกล่องอ้างอิงข้อความต้นทาง | [line-messaging](../specs/line-messaging.md#ข้อความที่ตอบกลับ) |
+| E14 | โน้ตของแอดมินรายลูกค้าในแผงข้อมูลลูกค้า ไม่ส่งให้ LINE หรือ AI | [webchat-inbox](../specs/webchat-inbox.md#โน้ตของแอดมิน) |
+| E15 | รับข้อความเสียงจากลูกค้าและเล่นในแชทได้ | [line-messaging](../specs/line-messaging.md#สื่อขาเข้า) |
+| E16 | Rich menu สามปุ่ม (คุยกับ AI, คุยกับแอดมิน, วิธีทดสอบ) และการ์ดต้อนรับเมื่อเพิ่มเพื่อน จัดการจากหน้าตั้งค่า แก้ข้อความวิธีทดสอบและข้อความต้อนรับได้ | [line-messaging](../specs/line-messaging.md#rich-menu), [admin-backoffice](../specs/admin-backoffice.md#ส่วน-rich-menu-และข้อความต้อนรับ) |
+| E17 | ตั้งชื่อ AI ขอบเขตคำตอบ (`general` หรือ `knowledge_only`) และคำแนะนำสำหรับ AI บนแกนของคำสั่งที่เป็นกลาง | [ai-prompt](../specs/ai-prompt.md), [admin-backoffice](../specs/admin-backoffice.md#ส่วน-ai-ตอบแทน) |
 
 ## สิ่งที่ไม่ทำ
 
 - บัญชีผู้ใช้หลายคน บทบาท และการมอบหมายแชท
 - หลาย LINE OA ในระบบเดียว
 - การอัปเดตแบบ real-time ด้วย WebSocket (ใช้ polling)
-- AI อ่านรูปหรือวิดีโอที่ลูกค้าส่งมา
+- AI อ่านรูป วิดีโอ หรือฟังข้อความเสียงที่ลูกค้าส่งมา
 - การค้นคลังความรู้ด้วย embedding (RAG)
 - UI สองภาษา และธีมมืด
 - การแปลงไฟล์วิดีโอ (รับเฉพาะ MP4)
@@ -64,5 +69,6 @@ Webchat คือหน้าจอของแอดมินร้าน ล�
 | R5 | [infrastructure](../architecture/infrastructure.md) | URL ของ webchat บน Vercel |
 | R6 | [webchat-inbox](../specs/webchat-inbox.md) | E2E เส้นที่ 1 และ 2: ชื่อและรูปของลูกค้าในรายชื่อ เลือกแล้วตอบได้ |
 | E12 | [topic-guard](../specs/topic-guard.md) | E2E เส้นที่ 9 และสคริปต์ทดสอบด้วยมือข้อ 9 |
+| E13 ถึง E16 | ตามตารางขอบเขตด้านบน | E2E เส้นที่ 10, 11, 13, 14 และ 15 และข้อ 10 ถึง 13 ของ [line-oa-setup](../runbooks/line-oa-setup.md#ทดสอบด้วยมือเมื่อมี-line-oa-จริง) |
 
 เส้นทาง E2E และสคริปต์ทดสอบด้วยมืออยู่ใน [test-strategy](../qa/test-strategy.md) และ [manual-test-script](../qa/manual-test-script.md)

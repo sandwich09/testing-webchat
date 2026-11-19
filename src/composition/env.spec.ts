@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { assertEnv, assertEnvOrExit, InvalidEnvError, parseEnv } from './env';
+import { AI_DEBOUNCE_MAX_MS, assertEnv, assertEnvOrExit, InvalidEnvError, parseEnv } from './env';
 
 const SECRET = Buffer.alloc(32, 7).toString('base64');
 const KEY = Buffer.alloc(32, 9).toString('base64');
@@ -87,6 +87,24 @@ describe('parseEnv', () => {
     ]);
   });
 
+  it('accepts AI_DEBOUNCE_MS up to AI_DEBOUNCE_MAX_MS and names the variable above it', () => {
+    expect(parseEnv({ ...valid(), AI_DEBOUNCE_MS: String(AI_DEBOUNCE_MAX_MS) }).ok).toBe(true);
+    expect(invalidNames({ ...valid(), AI_DEBOUNCE_MS: String(AI_DEBOUNCE_MAX_MS + 1) })).toEqual([
+      'AI_DEBOUNCE_MS',
+    ]);
+    expect(invalidNames({ ...valid(), AI_DEBOUNCE_MS: '60000' })).toEqual(['AI_DEBOUNCE_MS']);
+  });
+
+  it('trims surrounding whitespace of ACCESS_CODE like the unlock form trims its input', () => {
+    const r = parseEnv({ ...valid(), ACCESS_CODE: '  open sesame \n' });
+    expect(r.ok && r.env.accessCode).toBe('open sesame');
+  });
+
+  it('accepts a one-character ACCESS_CODE (no minimum length)', () => {
+    const r = parseEnv({ ...valid(), ACCESS_CODE: ' x ' });
+    expect(r.ok && r.env.accessCode).toBe('x');
+  });
+
   it('treats an empty optional value as unset', () => {
     const r = parseEnv({ ...valid(), RATE_LIMIT_SCALE: '', BLOB_READ_WRITE_TOKEN: '' });
     expect(r.ok && r.env.rateLimitScale).toBe(1);
@@ -108,16 +126,34 @@ describe('parseEnv', () => {
     expect(parseEnv({ ...valid(), SESSION_SECRET: url }).ok).toBe(true);
   });
 
-  it.each(['http://localhost:3000/', 'localhost:3000', 'ftp://host', 'http://h/?a=1', 'nope'])(
-    'rejects APP_BASE_URL=%s',
-    (value) => {
-      expect(invalidNames({ ...valid(), APP_BASE_URL: value })).toEqual(['APP_BASE_URL']);
-    },
-  );
+  it.each([
+    'localhost:3000',
+    'ftp://host',
+    'http://h/?a=1',
+    'http://h?',
+    'http://h/#top',
+    'https://shop.example.com/app',
+    'https://shop.example.com//',
+    'https://user:pass@shop.example.com',
+    '/relative',
+    'nope',
+    '   ',
+  ])('rejects APP_BASE_URL=%j', (value) => {
+    expect(invalidNames({ ...valid(), APP_BASE_URL: value })).toEqual(['APP_BASE_URL']);
+  });
 
-  it('keeps a path of APP_BASE_URL but compares the origin only', () => {
-    const r = parseEnv({ ...valid(), APP_BASE_URL: 'https://shop.example.com/app' });
-    expect(r.ok && r.env.appOrigin).toBe('https://shop.example.com');
+  it.each([
+    ['http://localhost:3000/', 'http://localhost:3000'],
+    ['  https://shop.example.com  ', 'https://shop.example.com'],
+    ['https://Shop.Example.COM/', 'https://shop.example.com'],
+    ['HTTPS://shop.example.com:443', 'https://shop.example.com'],
+    ['http://shop.example.com:8080', 'http://shop.example.com:8080'],
+  ])('normalises APP_BASE_URL=%j to its origin %s', (value, origin) => {
+    const r = parseEnv({ ...valid(), APP_BASE_URL: value });
+    expect(r.ok && { base: r.env.appBaseUrl, origin: r.env.appOrigin }).toEqual({
+      base: origin,
+      origin,
+    });
   });
 
   it('rejects FILE_STORAGE outside local and blob', () => {

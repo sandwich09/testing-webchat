@@ -2,7 +2,7 @@
 // the changed files as `git diff --name-status` lines. All I/O lives here; rules are in
 // migrations.logic.ts.
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 
 const git = (args: string[]): string =>
   execFileSync('git', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
@@ -57,4 +57,11 @@ export function basePaths(base: string): string[] {
 
 export function readWorkingFile(path: string): string {
   return readFileSync(path, 'utf8');
+}
+
+/** Every file under prisma/migrations in the working tree, as repository-relative paths. */
+export function workingMigrationPaths(): string[] {
+  return readdirSync('prisma/migrations', { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => `${entry.parentPath}/${entry.name}`.replace(/\\/g, '/'));
 }

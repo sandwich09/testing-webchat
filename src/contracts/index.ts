@@ -11,6 +11,7 @@ export * from './local-storage.contract';
 export * from './messages.contract';
 export * from './settings.contract';
 export * from './system.contract';
+export * from './timeouts.contract';
 export * from './uploads.contract';
 export * from './usage.contract';
 export * from './webhook.contract';

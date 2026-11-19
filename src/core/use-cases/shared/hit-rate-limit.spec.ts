@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { RATE_LIMIT_RULES, effectiveLimit } from '@/core/domain';
 import type { RateLimitRepository } from '@/core/ports';
 import { FakeContentHasher, FakeRateLimitRepository } from '@/adapters/fakes';
-import { makeHitRateLimit } from './hit-rate-limit';
+import { makeHitRateLimit, makeRefundRateLimit } from './hit-rate-limit';
 
 /** Records every key passed to the repository. */
 class RecordingRateLimits implements RateLimitRepository {
@@ -14,9 +14,9 @@ class RecordingRateLimits implements RateLimitRepository {
     return this.inner.hit(key, windowStart);
   };
 
-  readonly peek: RateLimitRepository['peek'] = (key, windowStart) => {
+  readonly refund: RateLimitRepository['refund'] = (key, windowStart) => {
     this.keys.push(key);
-    return this.inner.peek(key, windowStart);
+    return this.inner.refund(key, windowStart);
   };
 }
 
@@ -85,6 +85,20 @@ describe('hitRateLimit', () => {
       for (let i = 0; i < RATE_LIMIT_RULES.unlock.limit; i += 1) await hit('unlock', IP, T0);
 
       expect(await hit('unlock', IP, T0)).toMatchObject({ limited: true });
+    });
+  });
+
+  describe('refundRateLimit', () => {
+    it('takes back one hit of the same key and window', async () => {
+      const hit = hitter();
+      const refund = makeRefundRateLimit({ rateLimits, hasher });
+      const limit = RATE_LIMIT_RULES.unlock.limit;
+      for (let i = 0; i < limit; i += 1) await hit('unlock', IP, T0);
+      await refund('unlock', IP, T0);
+
+      expect(await hit('unlock', IP, T0)).toEqual({ limited: false });
+      expect(await hit('unlock', IP, T0)).toMatchObject({ limited: true });
+      expect(rateLimits.keys.every((k) => k === `unlock:${hasher.keyedHash(IP)}`)).toBe(true);
     });
   });
 });

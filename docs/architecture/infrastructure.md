@@ -38,15 +38,15 @@
 | ชื่อ | ใช้ทำอะไร |
 | --- | --- |
 | `DATABASE_URL`, `DIRECT_URL` | ฐานข้อมูลแบบ pooled และแบบตรง |
-| `ACCESS_CODE` | รหัสเข้าใช้ |
-| `SESSION_SECRET` | เซ็น cookie ร่วมกับ `ACCESS_CODE` (เปลี่ยนตัวใดตัวหนึ่ง cookie เดิมใช้ไม่ได้) |
-| `CREDENTIALS_ENCRYPTION_KEY` | เข้ารหัส credential ของ LINE |
+| `ACCESS_CODE` | รหัสเข้าใช้ (ตัดช่องว่างหน้าหลังตอนอ่าน ไม่มีความยาวขั้นต่ำ) |
+| `SESSION_SECRET` | เซ็น cookie ร่วมกับ `ACCESS_CODE` (เปลี่ยนตัวใดตัวหนึ่ง cookie เดิมใช้ไม่ได้) ต้องเป็น 32 ไบต์ในรูป base64 |
+| `CREDENTIALS_ENCRYPTION_KEY` | เข้ารหัส credential ของ LINE (AES-256-GCM) ต้องเป็น 32 ไบต์ในรูป base64 |
 | `ANTHROPIC_API_KEY` | เรียก Claude |
 | `FILE_STORAGE` | `blob` หรือ `local` |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob (Vercel ใส่ให้เมื่อสร้าง store) |
-| `APP_BASE_URL` | ใช้แสดง Webhook URL และตรวจต้นทางของคำขอ |
+| `APP_BASE_URL` | โดเมนถาวรของ production: ใช้แสดง Webhook URL, สร้าง URL ของไฟล์ในที่เก็บแบบ local และเป็น origin ที่การตรวจต้นทางรับเพิ่มจาก same-origin ([ADR 0025](../adr/0025-same-origin-or-app-base-url.md)) |
 | `LINE_API_BASE_URL`, `LINE_DATA_API_BASE_URL`, `ANTHROPIC_BASE_URL` | ชี้ไป stub ในการทดสอบ ไม่ตั้งใน production (ระบบไม่เริ่มถ้าตั้งเมื่อ `VERCEL_ENV=production`) |
-| `POLL_INTERVAL_MS`, `AI_DEBOUNCE_MS` | ตั้งให้สั้นในการทดสอบ |
+| `POLL_INTERVAL_MS`, `AI_DEBOUNCE_MS` | ไม่บังคับ ค่าเริ่มต้นตาม [project-setup ข้อ 10](project-setup.md#10-ค่าคงที่ของระบบ) (`AI_DEBOUNCE_MS` ไม่เกิน `AI_DEBOUNCE_MAX_MS`) ตั้งให้สั้นในการทดสอบ |
 | `RATE_LIMIT_SCALE` | ตัวเลข ≥ 1 ค่าเริ่มต้น 1 คูณทุกค่าจำกัดความถี่ยกเว้นการลองรหัสเข้าใช้ compose ตั้ง 10 เพื่อให้ E2E ที่รันขนานไม่ถูกจำกัด ห้ามตั้งใน production (ระบบไม่เริ่มถ้าไม่ใช่ 1 เมื่อ `VERCEL_ENV=production`) |
 | `VERCEL_ENV` | Vercel ตั้งให้เอง (`production`, `preview`, `development`) ไม่ต้องตั้งเองและไม่มีใน Docker, CI หรือเครื่อง dev เมื่อเป็น `production` ระบบปฏิเสธค่าที่ใช้เฉพาะการทดสอบตาม [project-setup ข้อ 6.10](project-setup.md#610-envexample) |
 
@@ -69,8 +69,8 @@
 
 รายละเอียดการตั้งค่าอยู่ใน [runbooks/deploy](../runbooks/deploy.md) และเหตุผลอยู่ใน [ADR 0013](../adr/0013-ci-on-main-then-deploy-hook.md)
 
-- CI รันเมื่อมี push เข้า `main` เท่านั้น มี 4 งานขนานกัน: ตรวจโค้ด (lint, typecheck, unit test, build), adapter test กับ Postgres, E2E กับ Docker compose และความปลอดภัย (ช่องโหว่ของ dependency, สแกนความลับ)
-- เมื่อทั้ง 4 งานผ่าน CI เรียก Deploy Hook ของ Vercel
+- CI รันเมื่อมี push เข้า `main` เท่านั้น มี 4 งานตรวจขนานกัน: ตรวจโค้ด (`migrations:immutable`, `migrations:destructive`, `docs:check`, format, lint, typecheck, unit test พร้อม coverage, build), adapter test กับ Postgres, E2E กับ Docker compose และความปลอดภัย (ช่องโหว่ของ dependency, สแกนความลับ) รอบที่เริ่มแล้วไม่ถูกยกเลิก
+- เมื่อทั้ง 4 งานผ่าน งานที่ห้า `deploy` เรียก Deploy Hook ของ Vercel เฉพาะเมื่อ `main` ยังเป็น commit ที่ตรวจ ([ADR 0028](../adr/0028-review-fixes-concurrency-polling-and-ci.md))
 - ปิดการ deploy อัตโนมัติจาก Git และ preview deployment ของ Vercel
 - Action ทุกตัวล็อกด้วย commit hash และ workflow มีสิทธิ์แค่อ่านโค้ด
 - CI ไม่มี secret อื่นนอกจาก URL ของ Deploy Hook

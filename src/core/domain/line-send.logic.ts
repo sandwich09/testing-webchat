@@ -3,6 +3,7 @@ import {
   LINE_RETRY_KEY_WINDOW_MS,
   LINE_TEXT_MAX_CHARS,
   PREVIEW_TEXT_MAX_CHARS,
+  PREVIEW_TEXT_MAX_UNITS,
   REPLY_TOKEN_USABLE_MS,
 } from './constants';
 import type { Contact } from './contact.model';
@@ -14,7 +15,7 @@ import type { Settings } from './settings.model';
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
 /** Start offsets of every grapheme in `text`, followed by `text.length`. */
-const graphemeBoundaries = (text: string): number[] => {
+export const graphemeBoundaries = (text: string): number[] => {
   const bounds: number[] = [];
   for (const part of segmenter.segment(text)) {
     bounds.push(part.index);
@@ -22,6 +23,9 @@ const graphemeBoundaries = (text: string): number[] => {
   bounds.push(text.length);
   return bounds;
 };
+
+/** Characters as a person counts them (graphemes): a Thai letter with its marks is one. */
+export const graphemeCount = (text: string): number => graphemeBoundaries(text).length - 1;
 
 /** Reply tokens are not reusable on a LINE redelivery, so none is kept then. */
 export const replyTokenExpiry: (eventTimestamp: Date, isRedelivery: boolean) => Date | null = (
@@ -128,6 +132,7 @@ export const toOutboundParts: (
       parts = [{ type: m.type, originalUrl: m.mediaUrl, previewUrl: m.previewUrl }];
       break;
     }
+    case 'audio':
     case 'sticker':
     case 'other':
     case 'event':
@@ -149,7 +154,9 @@ export const previewOf: (m: Pick<Message, 'type' | 'text'>) => {
   const bounds = graphemeBoundaries(flat);
   // bounds holds one entry per grapheme plus the end offset.
   const count = bounds.length - 1;
-  const text =
-    count <= PREVIEW_TEXT_MAX_CHARS ? flat : flat.slice(0, bounds[PREVIEW_TEXT_MAX_CHARS]);
-  return { type: 'text', text };
+  let end = count <= PREVIEW_TEXT_MAX_CHARS ? flat.length : (bounds[PREVIEW_TEXT_MAX_CHARS] ?? 0);
+  // Long clusters (stacked combining marks) also stop at PREVIEW_TEXT_MAX_UNITS, at a boundary.
+  if (end > PREVIEW_TEXT_MAX_UNITS)
+    end = bounds.filter((b) => b <= PREVIEW_TEXT_MAX_UNITS).at(-1) ?? 0;
+  return { type: 'text', text: flat.slice(0, end) };
 };

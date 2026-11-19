@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PREVIEW_TEXT_MAX_UNITS, previewOf } from '@/core/domain';
 import {
   contactDetailDtoSchema,
   contactDtoSchema,
@@ -45,6 +46,7 @@ const message = {
   sticker: null,
   otherKind: null,
   eventCode: null,
+  quote: null,
   delivery: null,
   createdAt: NOW,
   sentAt: null,
@@ -133,6 +135,8 @@ describe('DTO schemas', () => {
           todayCostUsd: '0.000000',
           politeParticle: 'ครับ',
           instructions: '',
+          name: null,
+          answerMode: 'general',
         },
         guard: {
           enabled: true,
@@ -148,6 +152,19 @@ describe('DTO schemas', () => {
           secretStatus: 'no_channel_id',
           webhookUrl: 'https://x.test/api/line/webhook',
           lastWebhookAt: null,
+        },
+        richMenu: {
+          published: false,
+          publishedAt: null,
+          lastError: null,
+          howToText: '',
+          howToDefault: 'ลองได้ตามนี้เลยค่ะ',
+        },
+        welcome: {
+          enabled: true,
+          text: '',
+          defaultText: 'ขอบคุณที่เพิ่มเพื่อน',
+          accountName: 'Test webchat',
         },
         client: { pollIntervalMs: 3000 },
       }).success,
@@ -179,10 +196,24 @@ describe('DTO schemas', () => {
     expect(contactDtoSchema.safeParse({ ...contact, followStatus: 'blocked' }).success).toBe(false);
     expect(contactDtoSchema.safeParse({ ...contact, updatedSeq: 1048576 }).success).toBe(false);
     expect(contactDtoSchema.safeParse({ ...contact, createdAt: '2026-11-18' }).success).toBe(false);
+    // The screens check code units only (PREVIEW_TEXT_MAX_UNITS), never graphemes with the
+    // browser's own rules: whatever previewOf can emit passes, in any browser.
+    const thai = previewOf({ type: 'text', text: 'กี้'.repeat(150) }).text ?? '';
+    const devanagari = previewOf({ type: 'text', text: 'क्षि'.repeat(150) }).text ?? '';
+    const stacked = previewOf({ type: 'text', text: `a${'\u0301'.repeat(2000)}b` }).text ?? '';
+    for (const text of [thai, devanagari, stacked, 'x'.repeat(100)]) {
+      expect(text.length).toBeLessThanOrEqual(PREVIEW_TEXT_MAX_UNITS);
+      expect(
+        contactDtoSchema.safeParse({ ...contact, lastMessage: { ...contact.lastMessage, text } })
+          .success,
+      ).toBe(true);
+    }
+    expect(thai.length).toBe(300);
+    expect(devanagari.length).toBeGreaterThan(100);
     expect(
       contactDtoSchema.safeParse({
         ...contact,
-        lastMessage: { ...contact.lastMessage, text: 'x'.repeat(101) },
+        lastMessage: { ...contact.lastMessage, text: 'x'.repeat(PREVIEW_TEXT_MAX_UNITS + 1) },
       }).success,
     ).toBe(false);
     const withoutSentAt: Record<string, unknown> = { ...message };
@@ -224,6 +255,8 @@ describe('topic guard DTOs', () => {
       todayCostUsd: '0.000000',
       politeParticle: 'ค่ะ',
       instructions: '',
+      name: null,
+      answerMode: 'general',
     },
     guard: { enabled: false, topics: [], blockedToday: 0 },
     line: {
@@ -236,6 +269,14 @@ describe('topic guard DTOs', () => {
       webhookUrl: 'https://x.test/api/line/webhook',
       lastWebhookAt: null,
     },
+    richMenu: {
+      published: false,
+      publishedAt: null,
+      lastError: null,
+      howToText: '',
+      howToDefault: 'ลองได้ตามนี้เลยค่ะ',
+    },
+    welcome: { enabled: true, text: '', defaultText: 'ขอบคุณที่เพิ่มเพื่อน', accountName: 'Test webchat' },
     client: { pollIntervalMs: 2000 },
   };
 
@@ -297,6 +338,33 @@ describe('topic guard DTOs', () => {
     expect(usageRecordDtoSchema.safeParse(record).success).toBe(true);
     expect(usageRecordDtoSchema.safeParse({ ...record, kind: 'moderation' }).success).toBe(false);
     expect(usageRecordDtoSchema.safeParse({ ...record, outcome: 'filtered' }).success).toBe(false);
+  });
+
+  it('MessageDto takes a quote, available or not, and rejects a partial one', () => {
+    const quote = {
+      available: true,
+      messageId: '0193a0b1-0000-7000-8000-000000000009',
+      author: 'ai',
+      type: 'image',
+      textPreview: null,
+      mediaKind: 'image',
+    };
+    expect(messageDtoSchema.safeParse({ ...message, quote }).success).toBe(true);
+    const unavailable = {
+      available: false,
+      messageId: null,
+      author: null,
+      type: null,
+      textPreview: null,
+      mediaKind: null,
+    };
+    expect(messageDtoSchema.safeParse({ ...message, quote: unavailable }).success).toBe(true);
+    expect(messageDtoSchema.safeParse({ ...message, quote: { available: true } }).success).toBe(
+      false,
+    );
+    expect(
+      messageDtoSchema.safeParse({ ...message, quote: { ...quote, mediaKind: 'gif' } }).success,
+    ).toBe(false);
   });
 
   it('MessageDto takes the guard.blocked event code', () => {

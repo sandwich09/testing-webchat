@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { v7 } from 'uuid';
-import type { ContactId, DocumentId, MessageId, UsageId } from '@/core/domain';
+import type { ContactId, DocumentId, MessageId, NoteId, UsageId } from '@/core/domain';
 import type { IdGenerator } from '@/core/ports';
 
 /** 128 bits, which base64url encodes as 22 characters. */
@@ -16,6 +16,7 @@ export const createUuidV7IdGenerator = (): IdGenerator => ({
   messageId: () => v7() as MessageId,
   documentId: () => v7() as DocumentId,
   usageId: () => v7() as UsageId,
+  noteId: () => v7() as NoteId,
   requestId: () => randomUUID(),
   randomToken: () => randomBytes(RANDOM_TOKEN_BYTES).toString('base64url'),
 });

@@ -22,10 +22,12 @@ import {
   sanitizeAiReply,
 } from '@/core/domain';
 import {
+  EVAL_AI_NAME,
+  EVAL_CUSTOM_INSTRUCTIONS,
   EVAL_GUARD_TOPICS,
   EVAL_PARTICLE,
-  EVAL_QUESTIONS,
-  EVAL_SHOP_NAME,
+  EVAL_SAMPLE_ANSWER_MODE,
+  questionsOfRound,
   bangkokDate,
   judgeRun,
   parseArgs,
@@ -34,6 +36,7 @@ import {
   suiteResult,
   type ChatRun,
   type EvalQuestion,
+  type EvalRound,
   type GuardRun,
   type Judged,
   type QuestionRun,
@@ -43,7 +46,7 @@ const PDF_URL = new URL('../e2e/fixtures/kb/tonhom-cafe.pdf', import.meta.url);
 const QA_DIR = new URL('../docs/qa/', import.meta.url);
 const KB_FILE_NAME = 'tonhom-cafe.pdf';
 
-/** What the later questions of a chat need: the history so far and the last shop reply. */
+/** What the later questions of a chat need: the history so far and the last assistant reply. */
 interface ChatState {
   history: ChatTurn[];
   reply: string | null;
@@ -114,26 +117,36 @@ async function main(): Promise<number> {
     textChars: kbText.length,
   };
 
-  // 2. Prompts (ai-prompt 8.1 item 2: shop name, particle ค่ะ, empty instructions).
+  // 2. Prompts (ai-prompt 8.1 item 2). Rounds 1 and 2: the café sample (AI name, knowledge-only
+  // scope and the sample custom instructions). Round 3: the neutral defaults of a fresh install.
   const topics = [...EVAL_GUARD_TOPICS];
   const baseSystem = buildSystemInstructions({
-    lineBotName: EVAL_SHOP_NAME,
+    aiName: EVAL_AI_NAME,
+    aiAnswerMode: EVAL_SAMPLE_ANSWER_MODE,
+    aiPoliteParticle: EVAL_PARTICLE,
+    aiInstructions: EVAL_CUSTOM_INSTRUCTIONS,
+  });
+  const neutralSystem = buildSystemInstructions({
+    aiName: null,
+    aiAnswerMode: 'general',
     aiPoliteParticle: EVAL_PARTICLE,
     aiInstructions: '',
   });
   const guardedSystem = `${baseSystem}\n\n${buildGuardRulesBlock(topics)}`;
   const refusal = guardRefusalText(EVAL_PARTICLE);
   const knowledgeText = formatKnowledgeBase([{ fileName: KB_FILE_NAME, text: kbText }]);
+  const emptyKnowledge = formatKnowledgeBase([]);
 
   const askChat = async (
     system: string,
     history: ChatTurn[],
+    knowledge = knowledgeText,
   ): Promise<{ run: ChatRun; blockedOffTopic: boolean }> => {
     const t = nowMs();
     const r = await chatModel.generateReply({
       model,
       systemInstructions: system,
-      knowledgeText,
+      knowledgeText: knowledge,
       history,
       now: startedAt,
       maxTokens: AI_MAX_TOKENS,
@@ -196,23 +209,28 @@ async function main(): Promise<number> {
   };
 
   // 3. One round over all questions. Each chat starts empty unless the question continues another.
-  const runRound = async (round: 1 | 2): Promise<Judged[]> => {
+  const runRound = async (round: EvalRound): Promise<Judged[]> => {
     const states = new Map<string, ChatState>();
     const judged: Judged[] = [];
-    for (const question of EVAL_QUESTIONS) {
+    for (const question of questionsOfRound(round)) {
       const before: ChatState | undefined =
         question.after === null ? undefined : states.get(question.after);
       const history = withCustomerTurn(before?.history ?? [], question.text);
       const run: QuestionRun =
-        round === 1 ? await runRound1(question, history) : await runRound2(question, history);
+        round === 2
+          ? await runRound2(question, history)
+          : await runChatOnly(round, question, history);
       const visible = run.visibleText;
       states.set(question.id, {
-        history: visible === null ? history : [...history, { role: 'shop', text: visible }],
+        history: visible === null ? history : [...history, { role: 'assistant', text: visible }],
         reply: visible,
       });
       const j = judgeRun(
         run,
-        { systemInstructions: baseSystem, previousReply: before?.reply ?? null },
+        {
+          systemInstructions: round === 3 ? neutralSystem : baseSystem,
+          previousReply: before?.reply ?? null,
+        },
         refusal,
       );
       judged.push(j);
@@ -225,12 +243,19 @@ async function main(): Promise<number> {
     return judged;
   };
 
-  const runRound1 = async (question: EvalQuestion, history: ChatTurn[]): Promise<QuestionRun> => {
-    const { run: chat } = await askChat(baseSystem, history);
+  const runChatOnly = async (
+    round: 1 | 3,
+    question: EvalQuestion,
+    history: ChatTurn[],
+  ): Promise<QuestionRun> => {
+    const { run: chat } =
+      round === 1
+        ? await askChat(baseSystem, history)
+        : await askChat(neutralSystem, history, emptyKnowledge);
     const reply = chat.output?.reply ?? null;
     return {
       id: question.id,
-      round: 1,
+      round,
       guard: null,
       chat,
       visibleText: reply === null ? null : (sanitizeAiReply(reply) ?? reply),
@@ -267,6 +292,7 @@ async function main(): Promise<number> {
 
   const round1 = await runRound(1);
   const round2 = await runRound(2);
+  const round3 = await runRound(3);
 
   const report = renderReport({
     date: bangkokDate(startedAt),
@@ -276,9 +302,10 @@ async function main(): Promise<number> {
     extraction,
     round1,
     round2,
+    round3,
   });
   await writeFile(fileURLToPath(outUrl), report, { encoding: 'utf8', flag: 'wx' });
-  const suite = suiteResult(round1, round2);
+  const suite = suiteResult(round1, round2, round3);
   console.log(
     `ai-eval: wrote docs/qa/${resultFileName(startedAt, model)}, suite ${suite.pass ? 'pass' : 'fail'}`,
   );

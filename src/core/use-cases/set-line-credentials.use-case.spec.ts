@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   FAKE_LINE_CHANNEL_ID,
   FAKE_LINE_INVALID_TOKEN,
+  FAKE_LINE_OTHER_CHANNEL_TOKEN,
   FakeClock,
   FakeLogger,
   FakeMessagingGateway,
@@ -47,6 +48,28 @@ describe('SetLineCredentials', () => {
     settings = new FakeSettingsRepository();
     logger = new FakeLogger(clock);
     run = makeSetLineCredentials({ gateway, cipher, settings, clock, logger }, config);
+  });
+
+  it('saves nothing and answers line.channel_mismatch for a token of another channel', async () => {
+    const result = await run(input({ channelAccessToken: FAKE_LINE_OTHER_CHANNEL_TOKEN }), ctx);
+
+    expect(result).toEqual({ ok: false, error: { code: 'line.channel_mismatch' } });
+    expect((await settings.get()).lineConfigured).toBe(false);
+    expect(logger.entries).toContainEqual(
+      expect.objectContaining({
+        event: 'line.credentials.rejected',
+        errorCode: 'line.channel_mismatch',
+      }),
+    );
+  });
+
+  it('saves as unchecked when the bot of the Channel ID cannot be read', async () => {
+    gateway.channelBotUnreadable = true;
+
+    const result = await run(input(), ctx);
+
+    expect(result).toMatchObject({ ok: true, value: { secretStatus: 'unchecked' } });
+    expect((await settings.get()).lineSecretVerifiedAt).toBeNull();
   });
 
   it('saves a valid token encrypted with the verified pair and returns the bot info', async () => {

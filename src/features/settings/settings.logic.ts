@@ -3,10 +3,14 @@ import { bangkokParts, formatMonthYear } from '@/common/common.logic';
 import {
   AI_DAILY_BUDGET_MAX_USD,
   AI_INSTRUCTIONS_MAX_CHARS,
+  AI_NAME_MAX_CHARS,
   LINE_CHANNEL_ID_PATTERN,
   PDF_MAX_BYTES,
+  PDF_MAX_PAGES,
   type UsageReportResponse,
 } from '@/contracts';
+
+import { copy } from './settings.constants';
 
 /** Knowledge base usage from the server's token counts. */
 export function kbUsage(list: { usedTokens: number; capacityTokens: number }): {
@@ -63,6 +67,19 @@ export function validateInstructions(
     : { ok: true };
 }
 
+/**
+ * The AI name as the admin typed it: at most AI_NAME_MAX_CHARS after trimming. Blank is valid and
+ * clears the name. `value` is what is sent, trimmed.
+ */
+export function validateAiName(
+  text: string,
+): { ok: true; value: string } | { ok: false; code: 'ai_name_too_long' } {
+  const value = text.trim();
+  return value.length > AI_NAME_MAX_CHARS
+    ? { ok: false, code: 'ai_name_too_long' }
+    : { ok: true, value };
+}
+
 /** Field of the LINE credentials form that a check refers to. */
 export type LineCredentialField = 'channelId' | 'channelSecret' | 'channelAccessToken';
 
@@ -113,4 +130,44 @@ export function usageTokenTotal(
     (sum, row) => sum + row.totalTokens,
     report.ingest.totalTokens + report.guard.totalTokens,
   );
+}
+
+// ---------------------------------------------------------------------------
+// Rich menu and welcome texts (ui-screens 9.4.1): '' saved means the default text is sent.
+// ---------------------------------------------------------------------------
+
+/** What a default-backed text field shows: what was typed, else the saved text or the default. */
+export function defaultBackedValue(
+  draft: string | null,
+  saved: string,
+  defaultText: string,
+): string {
+  return draft ?? (saved === '' ? defaultText : saved);
+}
+
+/** The value to save: trimmed, and '' when it is the default, so the default keeps following the particle. */
+export function defaultBackedPatch(value: string, defaultText: string): string {
+  const trimmed = value.trim();
+  return trimmed === defaultText.trim() ? '' : trimmed;
+}
+
+/** Whether the typed text would change what is saved. */
+export function defaultBackedDirty(
+  draft: string | null,
+  saved: string,
+  defaultText: string,
+): boolean {
+  return draft !== null && defaultBackedPatch(draft, defaultText) !== saved;
+}
+
+/** "12/300". */
+export function textCounter(length: number, max: number): string {
+  return `${String(length)}/${String(max)}`;
+}
+
+/** The hint by "อัปโหลด PDF": the limits of a file, from the constants (ui-copy `settings.kb.uploadHint`). */
+export function pdfUploadHintText(): string {
+  return copy.kb.uploadHint
+    .replace('{maxMb}', String(PDF_MAX_BYTES / (1024 * 1024)))
+    .replace('{maxPages}', String(PDF_MAX_PAGES));
 }

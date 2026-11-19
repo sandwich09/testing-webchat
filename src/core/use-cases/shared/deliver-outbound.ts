@@ -1,4 +1,11 @@
-import type { Contact, ErrorCode, LineCredentials, Message, SendChannel } from '@/core/domain';
+import type {
+  Contact,
+  ErrorCode,
+  LineCredentials,
+  LineMessageId,
+  Message,
+  SendChannel,
+} from '@/core/domain';
 import { chooseSendChannel, toOutboundParts } from '@/core/domain';
 import type { AllPorts } from '../types';
 
@@ -29,8 +36,13 @@ export const makeDeliverOutbound: (deps: DeliverOutboundDeps) => DeliverOutbound
   clock,
   logger,
 }) => {
-  const succeeded = async (message: Message, channel: SendChannel): Promise<Message> => {
-    const updated = await messages.markSent(message.id, clock.now());
+  const succeeded = async (
+    message: Message,
+    channel: SendChannel,
+    sentIds: LineMessageId[],
+  ): Promise<Message> => {
+    // The LINE ids let a later quote of this message by the customer be shown (line-messaging).
+    const updated = await messages.markSent(message.id, clock.now(), sentIds);
     logger.log('info', 'line.send.succeeded', {
       channel,
       messageId: message.id,
@@ -65,7 +77,7 @@ export const makeDeliverOutbound: (deps: DeliverOutboundDeps) => DeliverOutbound
         (await contacts.consumeReplyToken(contact.id, choice.replyToken))
       ) {
         const replied = await gateway.reply(access.channelAccessToken, choice.replyToken, parts);
-        if (replied.ok) return succeeded(message, 'reply');
+        if (replied.ok) return succeeded(message, 'reply', replied.value.sentIds);
         if (replied.error.code !== 'line.reply_token_invalid') {
           return failed(message, 'reply', replied.error.code);
         }
@@ -87,7 +99,7 @@ export const makeDeliverOutbound: (deps: DeliverOutboundDeps) => DeliverOutbound
       parts,
       retryKey,
     );
-    if (pushed.ok) return succeeded(message, 'push');
+    if (pushed.ok) return succeeded(message, 'push', pushed.value.sentIds);
     return failed(message, 'push', pushed.error.code);
   };
 };

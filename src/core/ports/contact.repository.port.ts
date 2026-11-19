@@ -31,7 +31,13 @@ export interface ContactRepository {
     id: ContactId,
     p: { displayName: string | null; pictureUrl: string | null },
   ): Promise<void>;
-  setFollowStatus(id: ContactId, status: FollowStatus, at: Date): Promise<void>;
+  /**
+   * Compare-and-set by event time: applies only when the event that set the current status is
+   * not newer than `at`, and the status changes (or, for `following`, the row has no followedAt
+   * yet: a contact just created by its follow). `following` sets followedAt; `unfollowed` clears
+   * the reply token. Returns true when the row changed.
+   */
+  setFollowStatus(id: ContactId, status: FollowStatus, at: Date): Promise<boolean>;
 
   /**
    * After a new inbound message: unreadCount + 1, the latest inbound time (`lastMessageAt`, the sort

@@ -1,7 +1,9 @@
 import {
   bodyStream,
   json,
+  parseByteRange,
   serveLocalMedia,
+  sliceStream,
   toLocalStorageKey,
   withRoute,
   writeLocalUpload,
@@ -39,14 +41,35 @@ export const PUT = withRoute(
 
 export const GET = withRoute(
   { route, access: 'open', params: localStorageParamsSchema },
-  async ({ params, ctx }) => {
+  async ({ params, ctx, request }) => {
     const r = await serveLocalMedia({ key: toLocalStorageKey(params.key) }, ctx);
     if (!r.ok) return r;
-    return new Response(r.value.stream, {
+    const { stream, contentType, sizeBytes } = r.value;
+    const base = {
+      'Content-Type': contentType,
+      'X-Content-Type-Options': 'nosniff',
+      'Accept-Ranges': 'bytes',
+    };
+    // Seeking in audio and video asks for byte ranges (Blob storage serves them itself).
+    const range = parseByteRange(request.headers.get('range'), sizeBytes);
+    if (range === 'unsatisfiable') {
+      await stream.cancel().catch(() => undefined);
+      return new Response(null, {
+        status: 416,
+        headers: { ...base, 'Content-Range': `bytes */${String(sizeBytes)}` },
+      });
+    }
+    if (range === null) {
+      return new Response(stream, {
+        headers: { ...base, 'Content-Length': String(sizeBytes) },
+      });
+    }
+    return new Response(sliceStream(stream, range.start, range.end), {
+      status: 206,
       headers: {
-        'Content-Type': r.value.contentType,
-        'Content-Length': String(r.value.sizeBytes),
-        'X-Content-Type-Options': 'nosniff',
+        ...base,
+        'Content-Length': String(range.end - range.start + 1),
+        'Content-Range': `bytes ${String(range.start)}-${String(range.end)}/${String(sizeBytes)}`,
       },
     });
   },

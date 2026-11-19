@@ -2,6 +2,7 @@ import type {
   ErrorCode,
   LineAccessToken,
   LineMessageId,
+  MediaFailure,
   MediaStatus,
   MessageId,
   StorageKey,
@@ -12,6 +13,7 @@ import {
   MEDIA_NOT_READY_POLL_MS,
   MEDIA_STATUS_CALL_WORST_MS,
   PREVIEW_MAX_BYTES,
+  inboundAudioFormat,
   inboundMediaMaxBytes,
   inboundStorageKeys,
   err,
@@ -19,6 +21,7 @@ import {
   ok,
   sniffContentType,
 } from '@/core/domain';
+import type { InboundMediaType } from '@/core/domain';
 import type { StoredObject } from '@/core/ports';
 import { makeLoadLineAccess } from './shared/load-line-access';
 import type { AllPorts, RequestContext, UseCase, UseCaseConfig } from './types';
@@ -91,6 +94,59 @@ const isCapError = (error: unknown, sizeBytes: number | null, maxBytes: number):
     'code' in error &&
     error.code === 'media.too_large');
 
+/** Bytes an audio container is told apart by (sniffContentType reads at most 12). */
+const AUDIO_SNIFF_BYTES = 16;
+
+/**
+ * Reads the first `n` bytes of a stream (fewer when it is shorter) and gives back a stream that
+ * still yields every byte, so the type can be known before the file is stored.
+ */
+const peekHead = async (
+  source: ReadableStream<Uint8Array>,
+  n: number,
+): Promise<{ head: Uint8Array; stream: ReadableStream<Uint8Array> }> => {
+  const reader = source.getReader();
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  let done = false;
+  while (length < n && !done) {
+    const r = await reader.read();
+    if (r.done) done = true;
+    else {
+      chunks.push(r.value);
+      length += r.value.length;
+    }
+  }
+  const head = new Uint8Array(Math.min(n, length));
+  let offset = 0;
+  for (const c of chunks) {
+    if (offset >= head.length) break;
+    head.set(c.subarray(0, head.length - offset), offset);
+    offset += Math.min(c.length, head.length - offset);
+  }
+  const buffered = [...chunks];
+  const stream = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const next = buffered.shift();
+      if (next !== undefined) {
+        controller.enqueue(next);
+        return;
+      }
+      if (done) {
+        controller.close();
+        return;
+      }
+      const r = await reader.read();
+      if (r.done) controller.close();
+      else controller.enqueue(r.value);
+    },
+    cancel(reason) {
+      return reader.cancel(reason);
+    },
+  });
+  return { head, stream };
+};
+
 export const makeStoreInboundMedia: (
   deps: StoreInboundMediaDeps,
   config: UseCaseConfig,
@@ -156,7 +212,7 @@ export const makeStoreInboundMedia: (
   const downloadWhenReady = async (
     token: LineAccessToken,
     id: MessageId,
-    type: 'image' | 'video',
+    type: InboundMediaType,
     lineMessageId: LineMessageId,
     max: number,
     startedMs: number,
@@ -191,8 +247,9 @@ export const makeStoreInboundMedia: (
     status: Exclude<MediaStatus, 'ready' | 'pending'>,
     ctx: RequestContext,
     errorCode?: ErrorCode,
+    failure: MediaFailure = 'download_failed',
   ): Promise<{ status: MediaStatus }> => {
-    if (!(await messages.setMediaStatus(id, status))) {
+    if (!(await messages.setMediaStatus(id, status, failure))) {
       // Another run already finished this message; its result stands.
       return { status: await currentStatus(id, status) };
     }
@@ -207,7 +264,7 @@ export const makeStoreInboundMedia: (
 
   const store = async (
     id: MessageId,
-    type: 'image' | 'video',
+    type: InboundMediaType,
     lineMessageId: LineMessageId,
     ctx: RequestContext,
   ): Promise<{ status: MediaStatus }> => {
@@ -216,9 +273,6 @@ export const makeStoreInboundMedia: (
     const token = access.value.channelAccessToken;
 
     const max = inboundMediaMaxBytes(type);
-    // The extension follows the message type; a PNG named .jpg is fine because browsers read the
-    // type from the content and the header.
-    const keys = inboundStorageKeys(ids.randomToken(), type === 'image' ? 'jpg' : 'mp4');
 
     const startedMs = clock.now().getTime();
     let download = await gateway.downloadContent(token, lineMessageId, 'original', max);
@@ -231,7 +285,25 @@ export const makeStoreInboundMedia: (
         : finish(id, 'failed', ctx, download.error.code);
     }
 
-    const put = await putCapped(keys.original, download.value, max);
+    // Images and video: the extension follows the message type; a PNG named .jpg is fine because
+    // browsers read the type from the content and the header. Audio: the container is read from
+    // the first bytes before storing, so the file gets the extension and Content-Type a browser
+    // needs to play it (an unknown container is not stored at all).
+    let file: Download = download.value;
+    let ext = type === 'image' ? 'jpg' : 'mp4';
+    if (type === 'audio') {
+      const peeked = await peekHead(file.stream, AUDIO_SNIFF_BYTES);
+      const format = inboundAudioFormat(sniffContentType(peeked.head));
+      if (format === null) {
+        await peeked.stream.cancel().catch(() => undefined);
+        return finish(id, 'failed', ctx, undefined, 'unsupported_type');
+      }
+      file = { ...file, stream: peeked.stream, contentType: format.contentType };
+      ext = format.ext;
+    }
+    const keys = inboundStorageKeys(ids.randomToken(), ext);
+
+    const put = await putCapped(keys.original, file, max);
     if (put.kind === 'too_large') return finish(id, 'too_large', ctx, 'media.too_large');
     if (put.kind === 'failed') return finish(id, 'failed', ctx, put.code);
 
@@ -241,14 +313,16 @@ export const makeStoreInboundMedia: (
       !isAllowedInboundType(type, sniffContentType(inspected.value.leadingBytes))
     ) {
       await dropFile(keys.original);
-      return finish(id, 'failed', ctx, inspected.ok ? undefined : inspected.error.code);
+      return inspected.ok
+        ? finish(id, 'failed', ctx, undefined, 'unsupported_type')
+        : finish(id, 'failed', ctx, inspected.error.code);
     }
 
     const mediaUrl = put.object.publicUrl;
     const previewUrl =
-      type === 'image'
-        ? mediaUrl
-        : ((await storePreview(token, lineMessageId, keys.preview)) ?? mediaUrl);
+      type === 'video'
+        ? ((await storePreview(token, lineMessageId, keys.preview)) ?? mediaUrl)
+        : mediaUrl;
 
     if (!(await messages.setMediaReady(id, mediaUrl, previewUrl))) {
       // A concurrent run for the same message finished first (a second store_media job after a
@@ -268,7 +342,7 @@ export const makeStoreInboundMedia: (
   return async (input, ctx) => {
     const message = await messages.findById(input.messageId);
     if (message === null) return ok({ status: 'failed' });
-    if (message.type !== 'image' && message.type !== 'video') {
+    if (message.type !== 'image' && message.type !== 'video' && message.type !== 'audio') {
       return ok({ status: message.mediaStatus ?? 'failed' });
     }
     // Already handled (or never downloadable): repeat calls do nothing.

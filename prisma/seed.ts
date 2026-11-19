@@ -1,5 +1,5 @@
 /**
- * Docker sample data for the fictional shop "ต้นหอม คาเฟ่" (docs/architecture/data-model.md,
+ * Docker sample data for the fictional café "ต้นหอม คาเฟ่" (docs/architecture/data-model.md,
  * section "ข้อมูลตัวอย่าง (seed)"). Every person, id and credential here is fake.
  *
  * Idempotent: every row has a fixed id and is written with `createMany({ skipDuplicates: true })`;
@@ -25,6 +25,10 @@ import {
   STUB_CHANNEL_ID,
   STUB_CHANNEL_SECRET,
 } from '../e2e/fixtures/line/credentials';
+import {
+  SAMPLE_AI_NAME,
+  SAMPLE_CUSTOM_INSTRUCTIONS,
+} from '../e2e/fixtures/kb/tonhom-cafe.settings';
 
 // ---------------------------------------------------------------------------
 // Environment
@@ -97,7 +101,6 @@ const ago = (offsetMs: number): Date => new Date(runAt - offsetMs);
 // ---------------------------------------------------------------------------
 
 const MALEE_ADMIN_NOTICE = 'ขออนุญาตให้แอดมินมาตอบเรื่องนี้นะคะ';
-const AI_INSTRUCTIONS = 'ตอบสุภาพ เป็นกันเอง ถ้าลูกค้าถามเรื่องจัดเลี้ยงหรือสั่งจำนวนมาก ให้แอดมินตอบ';
 const GUARD_TOPICS = ['มุกตลกไทย', 'มีมจากละครและซีรีส์', 'มุกจากภาพยนตร์'];
 
 const MENU_TEXT = [
@@ -441,7 +444,9 @@ async function main(): Promise<void> {
     const contacts = buildContacts(stored.value.publicUrl);
 
     // Settings: upsert with an empty update, so a re-run never overwrites what an admin edited.
-    // aiModel, aiDailyBudgetUsd and aiPoliteParticle are left to the schema defaults.
+    // aiModel, aiDailyBudgetUsd and aiPoliteParticle are left to the schema defaults. The café
+    // behaviour of the demo comes from the AI name, the knowledge-only scope and the sample
+    // custom instructions; a fresh install without the seed has none of them.
     await prisma.settings.upsert({
       where: { id: 1 },
       update: {},
@@ -454,7 +459,9 @@ async function main(): Promise<void> {
         lineChannelId: STUB_CHANNEL_ID,
         lineSecretVerifiedAt: ago(MINUTE),
         aiEnabled: true,
-        aiInstructions: AI_INSTRUCTIONS,
+        aiInstructions: SAMPLE_CUSTOM_INSTRUCTIONS,
+        aiName: SAMPLE_AI_NAME,
+        aiAnswerMode: 'knowledge_only',
         guardEnabled: false,
         guardTopics: GUARD_TOPICS,
         lastWebhookAt: ago(MINUTE),

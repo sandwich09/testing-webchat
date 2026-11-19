@@ -67,6 +67,7 @@ const message: MessageDto = {
   sticker: null,
   otherKind: null,
   eventCode: null,
+  quote: null,
   delivery: { status: 'sent', errorCode: null, retryExpiresAt: null },
   createdAt: '2026-11-18T07:00:00.000Z',
   sentAt: '2026-11-18T07:00:01.000Z',

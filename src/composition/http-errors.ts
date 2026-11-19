@@ -31,6 +31,10 @@ export const ERROR_HTTP = {
     status: 422,
     message: 'LINE rejected the Channel ID and channel secret pair',
   },
+  'line.channel_mismatch': {
+    status: 422,
+    message: 'The channel access token is of another channel than the Channel ID',
+  },
   'line.unauthorized': { status: null, message: 'LINE rejected the channel access token' },
   'line.quota_exceeded': { status: null, message: 'The LINE message quota is used up' },
   'line.rate_limited': { status: null, message: 'LINE rate limited the request' },
@@ -45,6 +49,11 @@ export const ERROR_HTTP = {
     message: 'LINE has not finished preparing the content',
   },
   'line.loading_failed': { status: null, message: 'LINE rejected the loading request' },
+  'line.rich_menu_failed': { status: 502, message: 'LINE refused the rich menu request' },
+  'line.rich_menu_conflict': {
+    status: 409,
+    message: 'Another rich menu publish finished at the same time',
+  },
   'line.send_interrupted': {
     status: null,
     message: 'The send stopped before its result was known',
@@ -60,6 +69,8 @@ export const ERROR_HTTP = {
   },
   'message.id_conflict': { status: 409, message: 'The message id is already used' },
   'message.rate_limited': { status: 429, message: 'Too many messages' },
+  'note.not_found': { status: 404, message: 'The note does not exist' },
+  'note.rate_limited': { status: 429, message: 'Too many notes' },
   // Uploads and media
   'upload.rate_limited': { status: 429, message: 'Too many upload requests' },
   'upload.type_not_allowed': { status: 415, message: 'The file type is not allowed' },
@@ -68,6 +79,10 @@ export const ERROR_HTTP = {
   'upload.content_mismatch': {
     status: 422,
     message: 'The file content does not match its declared type',
+  },
+  'upload.incomplete': {
+    status: 422,
+    message: 'The uploaded body is shorter than the size the upload was issued for',
   },
   'upload.signature_invalid': { status: 403, message: 'The upload signature is not valid' },
   'upload.expired': { status: 403, message: 'The upload ticket has expired' },
@@ -84,7 +99,10 @@ export const ERROR_HTTP = {
   'ai.auth_failed': { status: 502, message: 'The AI provider rejected the API key' },
   'ai.bad_request': { status: 502, message: 'The AI provider rejected the request' },
   'ai.no_response': { status: 503, message: 'The AI provider sent no answer in time' },
-  'ai.link_not_allowed': { status: null, message: 'The AI reply held a link the shop never wrote' },
+  'ai.link_not_allowed': {
+    status: null,
+    message: 'The AI reply held a link the admin never wrote',
+  },
   // Settings
   'settings.guard_topics_required': {
     status: 409,

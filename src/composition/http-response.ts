@@ -95,3 +95,66 @@ export const accessClearedResponse = (): Response => {
   response.headers.append('Set-Cookie', clearedAccessCookieHeader());
   return response;
 };
+
+/**
+ * The byte range of a `Range: bytes=start-end` header for a file of `size` bytes, as inclusive
+ * offsets. `null`: no header or a form not served (several ranges, other units) → the whole file.
+ * `'unsatisfiable'`: a range that starts past the end → 416. Browsers ask for ranges to seek in
+ * audio and video.
+ */
+export function parseByteRange(
+  header: string | null,
+  size: number,
+): { start: number; end: number } | null | 'unsatisfiable' {
+  if (header === null) return null;
+  const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (m === null || (m[1] === '' && m[2] === '')) return null;
+  if (m[1] === '') {
+    // A suffix: the last N bytes.
+    const n = Number(m[2]);
+    if (n === 0) return 'unsatisfiable';
+    return { start: Math.max(0, size - n), end: size - 1 };
+  }
+  const start = Number(m[1]);
+  if (start >= size) return 'unsatisfiable';
+  const end = m[2] === '' ? size - 1 : Math.min(Number(m[2]), size - 1);
+  if (end < start) return null;
+  return { start, end };
+}
+
+/** The bytes `start` to `end` (inclusive) of a stream; the rest of the source is cancelled. */
+export function sliceStream(
+  source: ReadableStream<Uint8Array>,
+  start: number,
+  end: number,
+): ReadableStream<Uint8Array> {
+  const reader = source.getReader();
+  let offset = 0;
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      for (;;) {
+        if (offset > end) {
+          controller.close();
+          await reader.cancel().catch(() => undefined);
+          return;
+        }
+        const r = await reader.read();
+        if (r.done) {
+          controller.close();
+          return;
+        }
+        const chunk = r.value;
+        const chunkStart = offset;
+        offset += chunk.length;
+        if (offset <= start) continue;
+        const from = Math.max(0, start - chunkStart);
+        const to = Math.min(chunk.length, end - chunkStart + 1);
+        controller.enqueue(chunk.subarray(from, to));
+        return;
+      }
+    },
+    cancel(reason) {
+      return reader.cancel(reason);
+    },
+  });
+}

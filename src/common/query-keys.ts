@@ -6,6 +6,7 @@ export const qk = {
   contacts: (p: { filter: ContactFilter; q: string }) => ['contacts', p] as const,
   contact: (id: string) => ['contact', id] as const,
   messages: (id: string) => ['messages', id] as const,
+  contactNotes: (id: string) => ['contact-notes', id] as const,
   kbDocuments: () => ['kb-documents'] as const,
   kbDocument: (id: string) => ['kb-document', id] as const,
   usage: (month: string) => ['usage', month] as const,

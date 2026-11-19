@@ -104,17 +104,30 @@ export class FakeContactRepository implements ContactRepository {
     return Promise.resolve();
   };
 
+  /** `Contact.followStatusAt`, a column the domain model does not carry. */
+  private readonly followStatusAt = new Map<ContactId, number>();
+
   readonly setFollowStatus: ContactRepository['setFollowStatus'] = (id, status, at) => {
-    this.write(id, (c) => {
-      c.followStatus = status;
+    const c = this.rows.get(id);
+    const statusAt = this.followStatusAt.get(id);
+    const changes =
+      status === 'following'
+        ? c?.followStatus === 'unfollowed' || c?.followedAt === null
+        : c?.followStatus === 'following';
+    if (c === undefined || !changes || (statusAt !== undefined && statusAt > at.getTime())) {
+      return Promise.resolve(false);
+    }
+    this.followStatusAt.set(id, at.getTime());
+    this.write(id, (row) => {
+      row.followStatus = status;
       if (status === 'following') {
-        c.followedAt = at;
+        row.followedAt = at;
       } else {
-        c.replyToken = null;
-        c.replyTokenExpiresAt = null;
+        row.replyToken = null;
+        row.replyTokenExpiresAt = null;
       }
     });
-    return Promise.resolve();
+    return Promise.resolve(true);
   };
 
   readonly recordInbound: ContactRepository['recordInbound'] = (id, i) => {

@@ -26,7 +26,7 @@ describe('FakeFileStorage test controls', () => {
       await storage.issueUpload({
         key,
         contentType: 'image/png',
-        maxSizeBytes: 1,
+        sizeBytes: 1,
         expiresAt: new Date(),
       }),
     ].map((r) => (r.ok ? 'ok' : r.error.code));

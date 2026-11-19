@@ -18,8 +18,15 @@ const DEFAULTS: Settings = {
   aiDailyBudget: DEFAULT_BUDGET,
   aiPoliteParticle: DEFAULT_POLITE_PARTICLE,
   aiInstructions: '',
+  aiName: null,
+  aiAnswerMode: 'general',
   guardEnabled: false,
   guardTopics: [],
+  howToText: '',
+  welcomeEnabled: true,
+  welcomeText: '',
+  richMenu: null,
+  richMenuError: null,
   lineConfigured: false,
   lineBotName: null,
   lineBasicId: null,
@@ -94,6 +101,65 @@ export const describeSettingsRepositorySuite = (
       await repo.update({ guardTopics: topics });
       topics.push('b');
       expect((await repo.get()).guardTopics).toEqual(['a']);
+    });
+
+    it('stores the AI name and the answer scope, and null clears the name', async () => {
+      const named = await repo.update({ aiName: 'มินนี่', aiAnswerMode: 'knowledge_only' });
+      expect(named).toEqual({ ...DEFAULTS, aiName: 'มินนี่', aiAnswerMode: 'knowledge_only' });
+      expect(await repo.update({ aiInstructions: 'x' })).toEqual({ ...named, aiInstructions: 'x' });
+      const cleared = await repo.update({ aiName: null, aiAnswerMode: 'general' });
+      expect(cleared).toEqual({ ...DEFAULTS, aiInstructions: 'x' });
+      expect(await repo.get()).toEqual(cleared);
+    });
+
+    it('stores the rich menu texts, the welcome switch, the published menu and its error', async () => {
+      await repo.update({ howToText: 'ลองนะ', welcomeEnabled: false, welcomeText: 'สวัสดี' });
+      await repo.recordRichMenuError({ code: 'line.unavailable', at: at('2026-11-18T03:00:00Z') });
+      expect(await repo.get()).toMatchObject({
+        howToText: 'ลองนะ',
+        welcomeEnabled: false,
+        welcomeText: 'สวัสดี',
+        richMenu: null,
+        richMenuError: { code: 'line.unavailable', at: at('2026-11-18T03:00:00Z') },
+      });
+      await repo.recordRichMenu({ id: 'richmenu-1', publishedAt: at('2026-11-18T03:01:00Z') });
+      expect(await repo.get()).toMatchObject({
+        richMenu: { id: 'richmenu-1', publishedAt: at('2026-11-18T03:01:00Z') },
+        richMenuError: null,
+      });
+      await repo.recordRichMenu(null);
+      expect((await repo.get()).richMenu).toBeNull();
+    });
+
+    it('replaceRichMenu stores the menu only while the stored id is the expected one', async () => {
+      const t = at('2026-11-18T03:01:00Z');
+      expect(await repo.replaceRichMenu('richmenu-x', { id: 'richmenu-1', publishedAt: t })).toBe(
+        false,
+      );
+      await repo.recordRichMenuError({ code: 'line.unavailable', at: t });
+      expect(await repo.replaceRichMenu(null, { id: 'richmenu-1', publishedAt: t })).toBe(true);
+      expect(await repo.get()).toMatchObject({
+        richMenu: { id: 'richmenu-1', publishedAt: t },
+        richMenuError: null,
+      });
+      expect(await repo.replaceRichMenu(null, { id: 'richmenu-2', publishedAt: t })).toBe(false);
+      expect(await repo.replaceRichMenu('richmenu-1', { id: 'richmenu-2', publishedAt: t })).toBe(
+        true,
+      );
+      expect((await repo.get()).richMenu?.id).toBe('richmenu-2');
+    });
+
+    it('replaceRichMenu lets one of two concurrent publishes from the same menu win', async () => {
+      const t = at('2026-11-18T03:01:00Z');
+      await repo.recordRichMenu({ id: 'richmenu-0', publishedAt: t });
+      const results = await Promise.all(
+        ['richmenu-a', 'richmenu-b', 'richmenu-c'].map((id) =>
+          repo.replaceRichMenu('richmenu-0', { id, publishedAt: t }),
+        ),
+      );
+      expect(results.filter(Boolean)).toHaveLength(1);
+      const winner = ['richmenu-a', 'richmenu-b', 'richmenu-c'][results.indexOf(true)];
+      expect((await repo.get()).richMenu?.id).toBe(winner);
     });
 
     it('update works before the row exists', async () => {

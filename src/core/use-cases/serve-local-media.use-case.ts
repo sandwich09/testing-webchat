@@ -12,7 +12,8 @@ export type ServeLocalMediaOutput = {
 
 export type ServeLocalMediaDeps = Pick<AllPorts, 'storage'>;
 
-const MEDIA_KEY = /^(inbound|outbound)\/[A-Za-z0-9_-]{22}\/(original\.(jpg|png|mp4)|preview\.jpg)$/;
+const MEDIA_KEY =
+  /^(inbound|outbound)\/[A-Za-z0-9_-]{22}\/(original\.(jpg|png|mp4|m4a|mp3|aac)|preview\.jpg)$/;
 
 export const makeServeLocalMedia: (
   deps: ServeLocalMediaDeps,

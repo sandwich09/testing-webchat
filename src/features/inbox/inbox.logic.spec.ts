@@ -13,6 +13,8 @@ import {
   formatListTime,
   groupMessagesForDisplay,
   isSubmitKey,
+  isWelcomeCard,
+  showsAsEventLine,
   linkify,
   matchesContactFilter,
   mergeThread,
@@ -65,6 +67,7 @@ function msg(over: Partial<ThreadMessage> & { id: string }): ThreadMessage {
     sticker: null,
     otherKind: null,
     eventCode: null,
+    quote: null,
     delivery: null,
     createdAt: '2026-11-18T07:00:00.000Z',
     sentAt: null,
@@ -209,6 +212,34 @@ describe('mergeThread', () => {
 });
 
 describe('groupMessagesForDisplay', () => {
+  it('shows rich menu taps as event lines and the welcome card as its own item', () => {
+    const items = [
+      msg({ id: 'w', seq: '1', author: 'ai', direction: 'outbound', eventCode: 'welcome.sent' }),
+      msg({ id: 't1', seq: '2', text: 'คุยกับ AI', eventCode: 'customer.tapped_ai_on' }),
+      msg({ id: 'r', seq: '3', author: 'ai', direction: 'outbound', text: 'สวัสดี' }),
+      msg({ id: 't2', seq: '4', text: 'วิธีทดสอบ', eventCode: 'customer.tapped_how_to' }),
+      msg({ id: 'x', seq: '5', text: 'คุยกับ AI' }),
+    ];
+    expect(groupMessagesForDisplay(items, NOW).map((i) => [i.kind, i.key])).toEqual([
+      ['day', 'day-2026-11-18'],
+      ['welcome', 'w'],
+      ['event', 't1'],
+      ['group', 'r'],
+      ['event', 't2'],
+      ['group', 'x'],
+    ]);
+  });
+
+  it('tells event lines and the welcome card apart from other messages', () => {
+    expect(showsAsEventLine({ type: 'event', eventCode: 'guard.blocked' })).toBe(true);
+    expect(showsAsEventLine({ type: 'text', eventCode: 'customer.tapped_admin' })).toBe(true);
+    expect(showsAsEventLine({ type: 'text', eventCode: null })).toBe(false);
+    expect(showsAsEventLine({ type: 'text', eventCode: 'welcome.sent' })).toBe(false);
+    expect(isWelcomeCard({ direction: 'outbound', eventCode: 'welcome.sent' })).toBe(true);
+    expect(isWelcomeCard({ direction: 'inbound', eventCode: 'welcome.sent' })).toBe(false);
+    expect(isWelcomeCard({ direction: 'outbound', eventCode: null })).toBe(false);
+  });
+
   it('adds a day chip before each Thai day', () => {
     const items = [
       msg({ id: 'a', seq: '1', createdAt: '2026-11-17T08:00:00.000Z' }),

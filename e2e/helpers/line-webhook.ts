@@ -20,6 +20,10 @@ export type FixtureVars = {
   /** Texts of the second and third event of `burst-three-texts`; default to `text` + " 2" / " 3". */
   text2?: string;
   text3?: string;
+  /** LINE id of the quoted message of `message-text-quote`; a fresh id when not given. */
+  quotedMessageId?: string;
+  /** `postback.data` of `postback`; the data of the "วิธีทดสอบ" button when not given. */
+  postbackData?: string;
 };
 
 const DESTINATION = 'Ustub00000000000000000000000000000';
@@ -86,6 +90,8 @@ export function renderFixture(name: string, vars: FixtureVars): string {
     webhookEventId2: vars.webhookEventId2,
     webhookEventId3: vars.webhookEventId3,
     replyToken: vars.replyToken,
+    quotedMessageId: vars.quotedMessageId ?? newMessageId(),
+    postbackData: vars.postbackData ?? 'tw1:how_to',
   };
   const jsonTexts: Record<string, string> = {
     text,

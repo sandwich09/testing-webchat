@@ -13,7 +13,15 @@ export type MessageDirection = (typeof MESSAGE_DIRECTIONS)[number];
 export const MESSAGE_AUTHORS = ['customer', 'admin', 'ai', 'system'] as const;
 export type MessageAuthor = (typeof MESSAGE_AUTHORS)[number];
 
-export const MESSAGE_TYPES = ['text', 'image', 'video', 'sticker', 'other', 'event'] as const;
+export const MESSAGE_TYPES = [
+  'text',
+  'image',
+  'video',
+  'audio',
+  'sticker',
+  'other',
+  'event',
+] as const;
 export type MessageType = (typeof MESSAGE_TYPES)[number];
 
 export const OTHER_KINDS = ['audio', 'file', 'location', 'unknown'] as const;
@@ -21,6 +29,18 @@ export type OtherKind = (typeof OTHER_KINDS)[number];
 
 export const MEDIA_STATUSES = ['pending', 'ready', 'failed', 'too_large'] as const;
 export type MediaStatus = (typeof MEDIA_STATUSES)[number];
+
+/**
+ * Why inbound media is `failed`: a file whose content is not an accepted type, media LINE does
+ * not host (never fetched), a download or store that did not work, or a job stopped midway.
+ */
+export const MEDIA_FAILURES = [
+  'unsupported_type',
+  'external_source',
+  'download_failed',
+  'interrupted',
+] as const;
+export type MediaFailure = (typeof MEDIA_FAILURES)[number];
 
 export const DELIVERY_STATUSES = ['pending', 'sent', 'failed'] as const;
 export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
@@ -55,6 +75,10 @@ export type AiModelId = (typeof AI_MODEL_IDS)[number];
 export const POLITE_PARTICLES = ['ค่ะ', 'ครับ'] as const;
 export type PoliteParticle = (typeof POLITE_PARTICLES)[number];
 
+/** Which "ข้อมูลที่ใช้ตอบ" block the prompt carries (ai-prompt section 2.2). */
+export const AI_ANSWER_MODES = ['knowledge_only', 'general'] as const;
+export type AiAnswerMode = (typeof AI_ANSWER_MODES)[number];
+
 export const SEND_CHANNELS = ['reply', 'push'] as const;
 export type SendChannel = (typeof SEND_CHANNELS)[number];
 
@@ -66,6 +90,8 @@ export const RATE_LIMIT_ACTIONS = [
   'pdf_ingest',
   'typing',
   'guard_test',
+  'note_create',
+  'rich_menu_tap',
 ] as const;
 export type RateLimitAction = (typeof RATE_LIMIT_ACTIONS)[number];
 
@@ -90,6 +116,8 @@ export const HANDOFF_REASONS = [
   'ai_other',
   'ai_failed', // model call failed, refused, truncated, off-schema, or the reply could not be sent
   'ai_timeout', // aiState stuck longer than AI_STUCK_AFTER_MS
+  'customer_asked_admin', // rich menu or welcome card button "คุยกับแอดมิน"
+  'ai_unavailable', // "คุยกับ AI" pressed while the kill switch is off
 ] as const;
 export type HandoffReason = (typeof HANDOFF_REASONS)[number];
 
@@ -100,5 +128,12 @@ export const EVENT_CODES = [
   'guard.blocked', // outside the topic guard: the AI sent the refusal text, no admin handoff
   'contact.followed',
   'contact.unfollowed',
+  // Rich menu and welcome card buttons. Stored on the inbound row of the tap (type text, the
+  // button title as text) and shown as an event line, see specs/line-messaging.md.
+  'customer.tapped_ai_on',
+  'customer.tapped_admin',
+  'customer.tapped_how_to',
+  // The outbound welcome card (type text, the card body as text), shown as a welcome bubble.
+  'welcome.sent',
 ] as const;
 export type EventCode = (typeof EVENT_CODES)[number];

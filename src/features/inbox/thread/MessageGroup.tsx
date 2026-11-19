@@ -11,6 +11,7 @@ type MessageGroupProps = {
   customer: { id: string; name: string; pictureUrl: string | null };
   onRetry: (messageId: string) => void;
   onOpenMedia: (message: ThreadMessage, trigger: HTMLElement) => void;
+  onJumpToMessage: (messageId: string) => void;
 };
 
 /**
@@ -23,6 +24,7 @@ export function MessageGroup({
   customer,
   onRetry,
   onOpenMedia,
+  onJumpToMessage,
 }: MessageGroupProps) {
   const isCustomer = author === 'customer';
   const bubbles = (
@@ -38,6 +40,8 @@ export function MessageGroup({
           isLast={index === messages.length - 1}
           onRetry={onRetry}
           onOpenMedia={onOpenMedia}
+          customerName={customer.name}
+          onJumpToMessage={onJumpToMessage}
         />
       ))}
     </div>

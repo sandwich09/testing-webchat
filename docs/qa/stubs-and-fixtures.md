@@ -2,7 +2,7 @@
 
 > สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-19
 
-Stub server ที่ใช้แทน LINE และ Claude ใน Docker, adapter test และ E2E, ไฟล์ fixture และขั้นตอนของ E2E ทั้ง 9 เส้น เหตุผลของการใช้ stub อยู่ใน [ADR 0012](../adr/0012-testing-with-fakes-and-stubs.md) และชั้นของการทดสอบอยู่ใน [test-strategy](test-strategy.md)
+Stub server ที่ใช้แทน LINE และ Claude ใน Docker, adapter test และ E2E, ไฟล์ fixture และขั้นตอนของ E2E ทั้ง 15 เส้น (รับข้อความ, แอดมินตอบ, AI ตอบแทน, kill switch, ส่งรูปและวิดีโอ, คลังความรู้, ส่งไม่สำเร็จ, รหัสเข้าใช้, ขอบเขตหัวข้อ, ข้อความที่ตอบกลับ, โน้ตของแอดมิน, ปุ่มพับเมนู, ข้อความเสียงขาเข้า, rich menu และการ์ดต้อนรับ) เหตุผลของการใช้ stub อยู่ใน [ADR 0012](../adr/0012-testing-with-fakes-and-stubs.md) และชั้นของการทดสอบอยู่ใน [test-strategy](test-strategy.md)
 
 ## 1. กฎ
 
@@ -63,6 +63,7 @@ type RecordedRequest = {
   };
   body: unknown;            // JSON ที่ parse แล้ว หรือ null
   status: number;           // status ที่ stub ตอบ
+  sentIds?: string[];       // reply และ push ที่ตอบ 200: id ของ sentMessages ใน test ใช้เป็น quotedMessageId
 };
 ```
 
@@ -79,6 +80,8 @@ type RecordedRequest = {
 | มี `Authorization: Bearer <ค่าไม่ว่าง>` | 401 `{ "message": "Authentication failed. Confirm that the access token in the authorization header is valid." }` |
 | token เท่ากับ `stub-invalid-token` | 401 แบบเดียวกัน (ใช้ทดสอบ token ผิด) |
 | คำขอแบบ POST มี `Content-Type: application/json` และ body เป็น JSON | 400 `{ "message": "The request body has 1 error(s)" }` |
+
+Route `richmenu-upload` รับ body เป็นรูป (`Content-Type: image/png` หรือ `image/jpeg` ไม่ใช่ตอบ 400) และ `richmenu-default` เป็น POST ที่ไม่มี body ทั้งสองยังต้องมี Authorization คำขอที่ body ไม่ใช่ JSON ถูกบันทึกเป็น `{ contentType, bytes }` แทนเนื้อไฟล์
 
 Route `oauth-token` และ `oauth-revoke` ไม่ใช้สามข้อนี้: ไม่ต้องมี Authorization และ body เป็น form (`Content-Type: application/x-www-form-urlencoded` ไม่ใช่ตอบ 400 `{ "error": "invalid_request" }`)
 
@@ -98,6 +101,11 @@ Route `oauth-token` และ `oauth-revoke` ไม่ใช้สามข้�
 | `content-transcoding` | `GET /line-data/v2/bot/message/:messageId/content/transcoding` | | 200 `{ "status": "succeeded" }` ยกเว้น `messageId` ที่ใส่ไว้ด้วย `POST /__control/line/transcoding`: `processing` ระหว่างที่ยังเหลือคำตอบ "ยังไม่พร้อม" และ `failed` เมื่อใส่ `failed: true` |
 | `oauth-token` | `POST /line/v2/oauth/accessToken` | form: `grant_type=client_credentials`, `client_id`, `client_secret` | 200 `{ "access_token": "stub-issued-<เลข>", "expires_in": 2592000, "token_type": "Bearer" }` เฉพาะ `client_id` = `STUB_CHANNEL_ID` กับ `client_secret` = `STUB_CHANNEL_SECRET` นอกนั้น 400 `{ "error": "invalid_client" }` (`grant_type` อื่น 400 `unsupported_grant_type`) |
 | `oauth-revoke` | `POST /line/v2/oauth/revoke` | form: `access_token` | 200 `{}` เฉพาะ token ที่ `oauth-token` ออกและยังไม่ถูกเพิกถอน นอกนั้น 400 test จึงเห็นการเพิกถอนที่ผิด |
+| `richmenu-create` | `POST /line/v2/bot/richmenu` | `size` 2500×843 หรือ 2500×1686, `selected` boolean, `name` 1 ถึง 300 ตัว, `chatBarText` 1 ถึง 14 ตัว, `areas` 1 ถึง 20 รายการที่อยู่ในรูปและเป็น postback (`data` 1 ถึง 300 ตัว, `displayText` ไม่บังคับ 1 ถึง 300 ตัว) | 200 `{ "richMenuId": "richmenu-<เลข 32 หลัก>" }` |
+| `richmenu-upload` | `POST /line-data/v2/bot/richmenu/:id/content` | รูปไม่ว่างไม่เกิน 1 MB, PNG ต้องขึ้นต้นด้วย signature ของ PNG | 200 `{}` เมนูที่ไม่มี 404 อัปโหลดซ้ำ 400 |
+| `richmenu-default` | `POST /line/v2/bot/user/all/richmenu/:id` | | 200 `{}` เมนูที่ไม่มี 404 ยังไม่มีรูป 400 |
+| `richmenu-default-clear` | `DELETE /line/v2/bot/user/all/richmenu` | | 200 `{}` เสมอ |
+| `richmenu-delete` | `DELETE /line/v2/bot/richmenu/:id` | | 200 `{}` และล้างค่าเริ่มต้นถ้าเป็นเมนูนั้น เมนูที่ไม่มี 404 |
 | `asset` | `GET /assets/:name` | | ไฟล์รูปปลอมของโปรไฟล์และ OA (ไม่ต้องมี Authorization) |
 
 รายการที่ต้องยืนยันกับเอกสาร LINE: รูปแบบคำตอบของ `reply`, `push` และ `info`, status 202 และเงื่อนไขของ `loadingSeconds`, การมีอยู่และรูปแบบของ `content/preview` และ `content/transcoding`, ขีดจำกัด 5 ข้อความต่อคำขอ
@@ -109,6 +117,7 @@ Route `oauth-token` และ `oauth-revoke` ไม่ใช้สามข้�
 | `text` | `text` | ยาว 1 ถึง 5,000 ตัวอักษร (ต้องยืนยันกับเอกสาร LINE) |
 | `image` | `originalContentUrl`, `previewImageUrl` | ทั้งคู่เป็น URL แบบ `http` หรือ `https` (LINE จริงรับเฉพาะ `https` stub ผ่อนให้เพราะ Docker ใช้ `http` ข้อนี้ทดสอบด้วยมือ) |
 | `video` | `originalContentUrl`, `previewImageUrl` | เหมือนรูป |
+| `flex` | `altText`, `contents` | `altText` 1 ถึง 400 ตัว, `contents.type` เป็น `bubble` หรือ `carousel` และ JSON ของ `contents` ไม่เกิน 30 KB (ไม่ตรวจโครงภายใน ซึ่ง adapter test และ E2E เส้นที่ 15 ตรวจเอง) |
 
 ชนิดอื่นตอบ 400 เพราะแอปไม่ส่งชนิดอื่น
 
@@ -126,6 +135,7 @@ Route `oauth-token` และ `oauth-revoke` ไม่ใช้สามข้�
 | profile ของ `userId` อื่นที่ไม่ได้ลงทะเบียน | `displayName` = `ลูกค้าทดสอบ ` + 4 ตัวท้ายของ userId ไม่มี `pictureUrl` | ค่าเริ่มต้นไม่มีรูป เพราะรูปบน origin ของ stub ถูก CSP ของแอป (`img-src`) กันและทำให้ browser ขึ้น console error |
 | content ของ `messageId` ขึ้นต้นด้วย `img` | `tiny.jpg` `Content-Type: image/jpeg` | |
 | ขึ้นต้นด้วย `vid` | `tiny.mp4` `Content-Type: video/mp4` | |
+| ขึ้นต้นด้วย `aud` | `tiny.m4a` `Content-Type: audio/x-m4a` (ค่าที่ LINE ส่งจริงต้องยืนยัน) | ข้อความเสียง |
 | ขึ้นต้นด้วย `bigimg` | stream ขนาด 11 MiB ขึ้นต้นด้วย byte ของ JPEG ตามด้วยศูนย์ ไม่ส่ง `Content-Length` | รูปเกิน 10 MB ไม่ถูกเก็บ |
 | ขึ้นต้นด้วย `bigvid` | stream 51 MiB ขึ้นต้นด้วย header ของ MP4 | วิดีโอเกิน 50 MB |
 | ขึ้นต้นด้วย `fakeimg` | ข้อความ `not an image` แต่ `Content-Type: image/jpeg` | ตรวจชนิดจากเนื้อไฟล์ |
@@ -207,6 +217,7 @@ Stub แยกชนิดคำขอตามลำดับนี้ แล�
 | `POST /__control/line/delay-next` | `{ endpoint, match?, ms, times?: 1 }` | หน่วงคำตอบ ใช้ทำให้เห็นสถานะ "กำลังส่ง" ได้แน่นอน |
 | `POST /__control/line/content` | `{ messageId, data, contentType, preview?, previewContentType?: "image/jpeg", sendContentLength?: true }` (`data` และ `preview` เป็น base64) | ใส่ byte ที่ `content` และ `content/preview` ของ `messageId` นั้นตอบแทนกฎ prefix ในข้อ 4.4 ใส่ซ้ำแทนค่าเดิม |
 | `GET /__control/line/requests` | query `endpoint?`, `to?`, `since?` | `{ "items": RecordedRequest[] }` ของ `line` และ `line-data` |
+| `GET /__control/line/rich-menus` | | `{ "menus": [{ richMenuId, ...body ของการสร้าง, image: { contentType, bytes } \| null }], "defaultRichMenuId": string \| null }` สถานะของ rich menu ที่ stub ถืออยู่ ล้างด้วย `reset` |
 | `POST /__control/claude/next-reply` | `{ match?, kind?: "reply" \| "extract" \| "guard", json?, text?, stopReason?, model?, usage?, withThinkingBlock?, times?: 1 }` | คำตอบถัดไปที่ตรงเงื่อนไข `json` ถูกแปลงเป็นข้อความด้วย `JSON.stringify` ถ้าไม่ระบุ `kind` และ `json` มี property `allowed` ถือเป็น `guard` คำขอชนิด `guard` ใช้เฉพาะรายการชนิด `guard` และรายการชนิดอื่นไม่ถูกใช้กับคำขอ `guard` |
 | `POST /__control/claude/fail-next` | `{ match?, endpoint?: "messages" \| "count_tokens", status, errorType, times?: 1 }` | คำขอถัดไปของ `endpoint` นั้น (ค่าเริ่มต้น `messages`) ที่ตรงเงื่อนไขได้ error ในรูป `{ type: "error", error: { type: errorType, message } }` |
 | `POST /__control/claude/delay-next` | `{ match?, endpoint?: "messages" \| "count_tokens", ms, times?: 1 }` | หน่วงคำตอบของ `endpoint` นั้น (ค่าเริ่มต้น `messages`) ใช้ทดสอบ timeout ของการตอบแชท การแปลง และการคัดกรอง |
@@ -228,7 +239,7 @@ Stub แยกชนิดคำขอตามลำดับนี้ แล�
 
 - แต่ละ test สร้าง `userId`, ข้อความ และชื่อไฟล์ไม่ซ้ำกัน และใส่ `match` ทุกครั้งที่สั่ง stub จึงไม่ชนกับ test อื่น
 - `POST /__control/reset` เรียกครั้งเดียวใน global setup ของ Playwright ห้ามเรียกระหว่าง test
-- Test ที่แตะค่ารวมของระบบ (kill switch, คลังความรู้, งบต่อวัน, ขอบเขตหัวข้อ) อยู่ในไฟล์เดียว `e2e/global-state.serial.spec.ts` แบบ `mode: 'serial'` ซึ่งรันใน project `serial-desktop` แล้ว `serial-mobile` หลัง project อื่นจบ และคืนค่าเดิมเมื่อจบ ([project-setup](../architecture/project-setup.md#68-playwrightconfigts), [test-strategy](test-strategy.md))
+- Test ที่แตะค่ารวมของระบบ (kill switch, คลังความรู้, งบต่อวัน, ขอบเขตหัวข้อ, rich menu, ข้อความวิธีทดสอบ และข้อความต้อนรับ) อยู่ในไฟล์เดียว `e2e/global-state.serial.spec.ts` แบบ `mode: 'serial'` ซึ่งรันใน project `serial-desktop` แล้ว `serial-mobile` หลัง project อื่นจบ และคืนค่าเดิมเมื่อจบ ([project-setup](../architecture/project-setup.md#68-playwrightconfigts), [test-strategy](test-strategy.md))
 - ไม่ทดสอบการจำกัดความถี่ของรหัสเข้าใช้ใน E2E เพราะทุก test มาจาก IP เดียวกัน กฎนี้ทดสอบใน unit ด้วยเวลาปลอม
 
 ## 7. Fixture ของ webhook
@@ -246,21 +257,25 @@ Stub แยกชนิดคำขอตามลำดับนี้ แล�
 | `{{replyToken}}` | hex 32 ตัว |
 | `{{timestamp}}` | `Date.now()` เป็นมิลลิวินาที |
 | `{{text}}` | ข้อความที่ test ส่งมา escape เป็น JSON string แล้ว |
+| `{{quotedMessageId}}` | id ที่ test ให้ หรือตัวเลข 18 หลักใหม่ |
+| `{{postbackData}}` | data ที่ test ให้ หรือ `tw1:how_to` |
 
 ### 7.2 รายการไฟล์
 
 | ไฟล์ | เนื้อหา |
 | --- | --- |
 | `message-text.json` | หนึ่ง event ข้อความตัวอักษร |
+| `message-text-quote.json` | ข้อความตัวอักษรที่ตอบกลับข้อความอื่น: `message.quotedMessageId` เป็น `{{quotedMessageId}}` (ค่าใหม่เมื่อไม่ให้) ใช้ id จาก `sentMessages` ของคำขอที่ stub บันทึก หรือ `messageId` ของข้อความขาเข้าก่อนหน้า |
 | `message-image.json` | หนึ่ง event รูป `message.id` = `img{{messageId}}` |
 | `message-video.json` | หนึ่ง event วิดีโอ `message.id` = `vid{{messageId}}` |
 | `message-image-too-large.json` | รูป `message.id` = `bigimg{{messageId}}` |
 | `message-image-gone.json` | รูป `message.id` = `gone{{messageId}}` |
 | `message-sticker.json` | หนึ่ง event สติกเกอร์ |
-| `message-audio.json` | หนึ่ง event เสียง |
+| `message-audio.json` | หนึ่ง event เสียง `message.id` = `aud{{messageId}}`, `duration` 4000 และ `contentProvider.type` `line` |
 | `message-file.json` | หนึ่ง event ไฟล์ |
 | `message-location.json` | หนึ่ง event ตำแหน่ง |
-| `follow.json` | ลูกค้าเพิ่มเพื่อน |
+| `follow.json` | ลูกค้าเพิ่มเพื่อน มี `replyToken` แอปจึงตอบด้วยการ์ดต้อนรับเมื่อสวิตช์เปิด (คำขอ `reply` เพิ่มหนึ่งรายการต่อ follow ที่ใช้ reply token ของ follow เอง ไม่กระทบ token ของข้อความ) |
+| `postback.json` | ลูกค้ากดปุ่มของ rich menu หรือการ์ดต้อนรับ `postback.data` = `{{postbackData}}` |
 | `unfollow.json` | ลูกค้าเลิกติดตาม |
 | `redelivery-duplicate.json` | event ข้อความเดียวกับ `message-text.json` ทุก field (`webhookEventId` และ `message.id` เดิม) แต่ `deliveryContext.isRedelivery: true` ใช้ส่งหลัง `message-text.json` ด้วยตัวแปรชุดเดียวกัน |
 | `unknown-type.json` | หนึ่ง event `type: "futureEventType"` |
@@ -372,7 +387,11 @@ function postLineWebhook(
 | `e2e/send-media.spec.ts` | เส้นที่ 5 | `desktop`, `mobile` |
 | `e2e/send-failure.spec.ts` | เส้นที่ 7 | `desktop`, `mobile` |
 | `e2e/access-gate.spec.ts` | เส้นที่ 8 | `desktop`, `mobile` |
-| `e2e/global-state.serial.spec.ts` | เส้นที่ 3, 4, 6 และ 9 | `serial-desktop`, `serial-mobile` |
+| `e2e/quote.spec.ts` | เส้นที่ 10 | `desktop`, `mobile` |
+| `e2e/notes.spec.ts` | เส้นที่ 11 | `desktop`, `mobile` |
+| `e2e/rail.spec.ts` | เส้นที่ 12 | `desktop`, `mobile` |
+| `e2e/audio.spec.ts` | เส้นที่ 13 | `desktop`, `mobile` |
+| `e2e/global-state.serial.spec.ts` | เส้นที่ 3, 4, 6, 9, 14 และ 15 | `serial-desktop`, `serial-mobile` |
 | `e2e/helpers/line-webhook.unit.ts`, `e2e/ai-eval.unit.ts` | unit test ของ helper ของ webhook และของ `scripts/ai-eval.logic.ts` รันในชุด `unit` ของ Vitest ไม่ใช่ Playwright | |
 
 Helper อื่นใน `e2e/helpers/`:
@@ -388,7 +407,7 @@ Helper อื่นใน `e2e/helpers/`:
 | `test.ts` | `test` และ `expect` ที่ทุกเส้นใช้: fixture อัตโนมัติที่ทำให้ test ตกเมื่อหน้าเว็บมี console error, page error หรือ CSP violation ยกเว้นบรรทัดที่ test อนุญาตด้วย `consoleErrors.allow(failedResourceLine(status))` สำหรับ status ที่เส้นนั้นตั้งใจทำให้เกิด (เช่น 401 ของรหัสผิด 409 ของไฟล์ซ้ำ) และตอบ URL ของ CDN สติกเกอร์ของ LINE (`stickershop.line-scdn.net`) ด้วย `e2e/fixtures/media/tiny.png` เพราะ E2E ไม่เรียกบริการภายนอกจริง |
 | `copy.ts` | `uiCopy(key, vars?)`: ถ้อยคำตาม key ของ [ui-copy](../specs/ui-copy.md) อ่านจากตารางในเอกสารนั้น เพราะกฎ boundary ของ lint ไม่ให้ `e2e/` import `src/features/*/*.constants.ts` และ `src/common/*.constants.ts` ข้อความที่มาจาก domain (`handoffText`, `DEFAULT_GUARD_REFUSAL_TEXT`) import จาก `src/core/domain` |
 | `inbox.ts` | `row`, `bubbles`, `bubbleBlock` (ฟองพร้อมผู้ส่ง เวลา และบรรทัดสถานะการส่ง), `systemLine`, `openChat`, `backToList`, `showInfoPanel`, `hideInfoPanel`, `sendText`, `toastWith(page, text, tone?)` (toast ที่มี `data-testid="toast"` และข้อความนั้น `tone` กรองด้วย `data-type` ตาม [ui-screens](../specs/ui-screens.md#10-toast)), `uniqueSuffix` |
-| `settings.ts` | `getSettings`, `patchSettings`, `listKbDocuments`, `deleteKbDocument` ผ่าน API ใช้เฉพาะอ่านค่าเดิมและคืนค่ารวมของระบบใน `afterEach` และ `finally` ของไฟล์ serial |
+| `settings.ts` | `getSettings`, `patchSettings`, `listKbDocuments`, `deleteKbDocument`, `removeRichMenu` ผ่าน API ใช้เฉพาะอ่านค่าเดิมและคืนค่ารวมของระบบใน `afterEach` และ `finally` ของไฟล์ serial |
 | `layout.ts` | `expectDocumentNotScrollable(page)`: เลื่อนทุกกล่องที่เลื่อนได้จนสุด หมุนล้อเมาส์กลางหน้า กด End แล้วตรวจว่า document ไม่เลื่อนและไม่สูงกว่าหน้าต่าง ([ui-screens ข้อ 1.4](../specs/ui-screens.md#14-ช่วงความกว้างจอ)) |
 
 ## 8. ไฟล์สื่อและ PDF สำหรับทดสอบ
@@ -408,6 +427,7 @@ Helper อื่นใน `e2e/helpers/`:
 | `e2e/fixtures/kb/tiny-copy.pdf` | ไม่มีไฟล์แยก test อัปโหลด `tiny.pdf` ซ้ำเพื่อทดสอบไฟล์ซ้ำ | |
 | `e2e/fixtures/kb/not-a-pdf.pdf` | ข้อความ `not a pdf` | `echo` |
 | `e2e/fixtures/kb/tonhom-cafe.pdf` | เนื้อหาจาก [ai-prompt](../specs/ai-prompt.md) ข้อ 8.2 ใช้กับชุดคำถามวัดคุณภาพเท่านั้น | Playwright `page.pdf()` จาก HTML ที่ใช้ฟอนต์ LINE Seed Sans TH |
+| `e2e/fixtures/kb/tonhom-cafe.settings.ts` | ค่าของตัวอย่างคาเฟ่สมมติ (`SAMPLE_AI_NAME`, `SAMPLE_CUSTOM_INSTRUCTIONS` และค่าอื่นของ [ai-prompt](../specs/ai-prompt.md) ข้อ 8.1) ที่ seed ของ Docker และชุดคำถามวัดคุณภาพใช้ร่วม | เขียนมือ |
 
 ไฟล์ขนาดใหญ่ไม่ commit: test สร้าง buffer ในหน่วยความจำ เช่น 11 MB ที่ขึ้นต้นด้วย byte ของ JPEG หรือ 5 MB ที่ขึ้นต้นด้วย `%PDF-` แล้วส่งด้วย `setInputFiles({ name, mimeType, buffer })`
 
@@ -438,7 +458,7 @@ Helper อื่นใน `e2e/helpers/`:
 | 1.9 | `postLineWebhook("unknown-type.json", v3)` | status 200 และรายชื่อไม่เปลี่ยน |
 | 1.10 | `postLineWebhook("message-text.json", v4, { signature: "invalid" })` | status 401 |
 | 1.11 | ส่ง `message-image.json` | `message-bubble[data-type="image"]` ได้ `data-media-status="ready"` และมี `<img>` |
-| 1.12 | ส่ง `message-image-gone.json` | `data-media-status="failed"` และมีข้อความ `inbox.media.imageFailed` |
+| 1.12 | ส่ง `message-image-gone.json` | `data-media-status="failed"`, `data-failure="download_failed"` และมีข้อความ `inbox.media.problem.download_failed` |
 | 1.13 | `expectNoA11yViolations(page)` | ไม่มี violation |
 
 ### เส้นที่ 2: แอดมินตอบ
@@ -483,7 +503,7 @@ Test ที่สองในไฟล์เดียวกัน (ลำดั�
 | 3.9 | แอดมินส่งข้อความเอง | `thread-ai-switch` เป็น `aria-checked="false"`, `info-ai-note` เป็น `inbox.ai.noteOff`, `system-line[data-event-code="ai.turned_off_by_admin"]` มองเห็น และ `row(name)` มี `data-needs-admin="false"` |
 | 3.10 | ลูกค้าส่ง `q3` แล้ว `waitAiIdle` | `stubClaudeRequests({ match: q3 })` ว่าง |
 | 3.11 | ส่ง `message-image.json` หลังเปิดสวิตช์อีกครั้ง | `system-line[data-event-code="handoff.customer_sent_image"]` มองเห็น |
-| 3.12 | หน้าตั้งค่า ส่วนค่าใช้จ่าย AI | `usage-row` ของลูกค้ามีราคาเท่ากับผลรวมของคำตอบที่ stub ตอบ ($0.0064 ต่อครั้งของ Opus 5.5) |
+| 3.12 | หน้าตั้งค่า ส่วนค่าใช้จ่าย AI | `usage-row` ของลูกค้ามีราคาเท่ากับผลรวมของคำตอบที่ stub ตอบตามโมเดลที่ตั้งอยู่ ($0.0032 ต่อครั้งของ Sonnet 5.5 ซึ่งเป็นค่าเริ่มต้น หรือ $0.0064 ของ Opus 5.5) |
 
 ### เส้นที่ 4: Kill switch และ Channel ID
 
@@ -517,6 +537,7 @@ Test ที่สองในไฟล์เดียวกัน (ลำดั�
 | 5.8 | แนบ `tiny.webp` | `data-state="ready"` และ request ขออัปโหลดมี `contentType: "image/jpeg"` |
 | 5.9 | แนบ `tiny.jpg` รอ `ready` กด `attachment-cancel` | tray หาย และ `page.waitForRequest` เห็น `DELETE /api/uploads/:uploadId` (uploadId จริงของ ticket) |
 | 5.10 | แนบ `tiny.mp4` แล้วส่ง | `message-bubble[data-type="video"]` ได้ `data-status="sent"` และ stub ได้ `type: "video"` |
+| 5.12 | test แยกที่ใช้ `request` ของ API: `POST /api/uploads` วิดีโอ 12 MB แล้ว `PUT` ไปที่ `original.url` | `url` เป็น path ไม่มี origin, body ที่สั้นกว่าหนึ่ง byte ได้ 422 `upload.incomplete`, body ครบได้ 200 และ `GET` คืนไฟล์ครบทุก byte (body เกิน 10 MB ผ่าน proxy.ts โดยไม่ถูกตัด `PROXY_BODY_MAX_BYTES`) |
 | 5.11 | แนบ `tiny.heic` (ข้ามขั้นนี้เมื่อไม่มีไฟล์ ตามข้อ 8) | `data-state="ready"`, request ขออัปโหลดมี `contentType: "image/jpeg"` และ `page.on("request")` เห็นการโหลด chunk ของ `heic-to` หลังเลือกไฟล์เท่านั้น ไม่ใช่ตอนเปิดหน้า |
 
 ### เส้นที่ 6: คลังความรู้
@@ -584,7 +605,82 @@ Test ที่สองในไฟล์เดียวกัน (ลำดั�
 | 9.4 | ส่ง `qa` | `message-bubble[data-author="ai"]` มี `"มุกทดสอบ " + suffix`, `stubClaudeRequests({ match: qa, purpose: "guard" })` มีหนึ่งคำขอที่ `body.model` เป็น `GUARD_MODEL` และ `stubClaudeRequests({ match: qa, purpose: "reply" })` มีหนึ่งคำขอที่ `system[0].text` มี `<topic_guard>` |
 | 9.5 | `stubClaudeNextReply({ match: qb, json: { allowed: false, matchedTopic: null } })` โดย `qb = "ร้านเปิดกี่โมง " + suffix` แล้วส่ง `qb` | `stubLineRequests` ของ `reply` หรือ `push` ถึง `v.userId` มีข้อความเท่ากับ `guardRefusalText(คำลงท้ายที่บันทึกไว้)`, `message-bubble[data-author="ai"]` ใหม่มีข้อความนั้นและ `message-sender` เป็น `inbox.message.senderAi`, `system-line[data-event-code="guard.blocked"]` มองเห็นใต้ฟองนั้น |
 | 9.6 | `waitAiIdle` | `stubClaudeRequests({ match: qb, purpose: "reply" })` ว่าง, `row(name)` มี `data-needs-admin="false"` และ `thread-ai-switch` ยังเป็น `aria-checked="true"` |
-| 9.7 | เปิด `/settings` | `guard-blocked-today` แสดงค่า `before` + 1 |
+| 9.6a | คำทักทาย: `stubClaudeNextReply({ match: hello, kind: "guard", json: { allowed: true, matchedTopic: null } })` (fixture คำตอบของคำทักทายที่ผ่าน) และ `kind: "reply"` ที่ตอบ `intro` โดย `hello = "สวัสดีค่ะ " + suffix` แล้วส่ง `hello` | `message-bubble[data-author="ai"]` มี `intro`, คำขอ `guard` หนึ่งคำขอ และคำขอ `reply` หนึ่งคำขอที่ `system[0].text` มีบรรทัดคำทักทายของ `<topic_guard>` |
+| 9.6b | คำทักทายพร้อมคำขอนอกหัวข้อ: `stubClaudeNextReply({ match: helloWeather, json: { allowed: false, matchedTopic: null } })` (fixture คำตอบของคำทักทายพ่วงคำขอที่ถูกกัน) โดย `helloWeather = "สวัสดีค่ะ ขอพยากรณ์อากาศ " + suffix` แล้วส่ง | ข้อความปฏิเสธมีสองฟอง และ `stubClaudeRequests({ match: helloWeather, purpose: "reply" })` ว่าง |
+| 9.7 | เปิด `/settings` | `guard-blocked-today` แสดงค่า `before` + 2 (9.5 และ 9.6b) |
 | 9.8 | finally: ปิด `guard-switch` ทางหน้าจอ และคืนหัวข้อเดิมด้วย `patchSettings` | `guard-switch` `aria-checked="false"` ขอบเขตหัวข้อปิดก่อนเส้นอื่นของไฟล์นี้ |
 
-ข้อ 9.7 ตรวจ "เพิ่มขึ้นหนึ่ง" แทน "เป็น 1" เพราะตัวนับเป็นยอดของทั้งวันและเส้นนี้รันทั้งใน `serial-desktop` และ `serial-mobile`
+ข้อ 9.7 ตรวจ "เพิ่มขึ้น" แทน "เป็น 1" เพราะตัวนับเป็นยอดของทั้งวันและเส้นนี้รันทั้งใน `serial-desktop` และ `serial-mobile`
+
+### เส้นที่ 10: ข้อความที่ตอบกลับ
+
+ไฟล์ `e2e/quote.spec.ts` project `desktop` และ `mobile`
+
+| ขั้น | ทำ | ตรวจ |
+| --- | --- | --- |
+| 10.1 | `createContactWithMessage` แล้วแอดมินพิมพ์ตอบ `answer` | ฟองของแอดมิน `data-status="sent"` และคำขอ `reply` ที่ใช้ reply token ของลูกค้ามี `sentIds` |
+| 10.2 | ส่ง `message-text-quote.json` สามครั้ง: อ้าง `sentIds[0]`, อ้าง `messageId` ของข้อความแรกของลูกค้า และอ้าง id ที่ไม่มี | status 200 |
+| 10.3 | | `message-quote` ของข้อความแรก `data-available="true"` ชื่อ `inbox.quote.label` ที่มี `inbox.message.senderYou` และ `answer`, ของข้อความที่สองมีชื่อลูกค้าและข้อความแรก, ของข้อความที่สาม `data-available="false"` ข้อความ `inbox.quote.unavailable` |
+| 10.4 | กด `message-quote` ของข้อความแรก | ฟองของแอดมินมี `data-highlight="true"` |
+
+### เส้นที่ 11: โน้ตของแอดมิน
+
+ไฟล์ `e2e/notes.spec.ts` project `desktop` (คอลัมน์ข้าง) และ `mobile` (แผงเต็มจอ)
+
+| ขั้น | ทำ | ตรวจ |
+| --- | --- | --- |
+| 11.1 | `createContactWithMessage` จด `seq` ล่าสุดของคำขอที่ stub บันทึก เปิดแชทและแผงข้อมูล | `info-notes` มี `inbox.notes.title` และ `info-notes-empty` |
+| 11.2 | พิมพ์โน้ต กด Shift+Enter พิมพ์ต่อ แล้วกด Enter | ช่องว่าง, `info-note` หนึ่งแถวมีข้อความและไม่มี `data-pending` |
+| 11.3 | โหลดหน้าใหม่แล้วเปิดแผง | โน้ตยังอยู่ |
+| 11.4 | `stubLineRequests({ since })` และ `stubClaudeRequests({ since })` | ไม่มี body ใดมีข้อความของโน้ต |
+| 11.5 | กด `info-note-delete` แล้ว `info-note-delete-confirm` | `info-notes-empty` |
+| 11.6 | test ที่สอง: สร้างลูกค้าสองคน เปิดแชทคนแรก พิมพ์โน้ตค้างไว้ แล้วเปิดแชทคนที่สองจากรายชื่อ (desktop คลิกแถวขณะแชทเปิดอยู่ mobile ปิดแผงแล้วกลับรายชื่อ) | ช่องโน้ตของคนที่สองว่าง |
+| 11.7 | เพิ่มโน้ต ตอบ `DELETE` ครั้งแรกด้วย 503 (`page.route`) กดลบแล้วยืนยัน | dialog แสดง `role="alert"` กด Escape แล้วเปิด dialog ใหม่ ไม่มี alert |
+
+### เส้นที่ 12: ปุ่มพับเมนู
+
+ไฟล์ `e2e/rail.spec.ts` project `desktop` และ `mobile`
+
+| ขั้น | ทำ | ตรวจ |
+| --- | --- | --- |
+| 12.1 | เปิด `/chats` | จอแคบ: `rail-collapse` ไม่แสดง จอกว้าง: ปุ่มชื่อ `common.nav.collapse` ไม่มีข้อความที่มองเห็น เมนูไม่มีคำนั้น อยู่ใกล้ขอบบนของเมนู กว้างอย่างน้อย 44px และชื่อแอปไม่ถูกตัด (`scrollWidth <= clientWidth`) |
+| 12.2 | focus ปุ่มแล้วกด Enter | `aria-expanded="false"` ชื่อ `common.nav.expand` `app-rail` `data-collapsed="true"` ปุ่มยังอยู่ส่วนบน (ใต้โลโก้) |
+| 12.3 | finally: กด Space | `aria-expanded="true"` |
+
+### เส้นที่ 14: Rich menu
+
+ไฟล์ `e2e/global-state.serial.spec.ts` project `serial-desktop` แล้ว `serial-mobile` (การ publish เปลี่ยนค่ารวมของระบบ) `afterEach` นำเมนูออกและคืนข้อความเดิม
+
+| ขั้น | ทำ | ตรวจ |
+| --- | --- | --- |
+| 14.1 | หน้าตั้งค่า กด `rich-menu-publish` | toast `settings.richMenu.publishedToast`, `rich-menu-status` เป็น `published`, stub บันทึก `richmenu-create`, `richmenu-upload` (service `line-data`, `image/png`) และ `richmenu-default` ตามลำดับ body ของการสร้างเป็น 2500×843 สาม postback |
+| 14.2 | แก้ `settings-how-to` แล้วบันทึก | ค่าเริ่มต้นในช่องเท่ากับ `defaultHowToText` ของคำลงท้าย และ toast `common.toast.saved` |
+| 14.3 | สร้างลูกค้า เปิดแชท ส่ง `postback.json` ด้วย `tw1:how_to` | บรรทัด `customer.tapped_how_to` "ลูกค้ากดปุ่ม วิธีทดสอบ" และฟอง AI ที่เป็นข้อความที่แก้ ส่งด้วย reply token ของ postback |
+| 14.4 | `tw1:admin` | บรรทัด `customer.tapped_admin` และ `handoff.customer_asked_admin` ฟอง `adminRequestedText` สวิตช์ AI ปิด |
+| 14.5 | stub ตอบคำทักทายเมื่อเห็น "เพื่อเริ่มคุย" แล้ว `tw1:ai_on` | บรรทัด `customer.tapped_ai_on` ฟองคำทักทาย สวิตช์ AI เปิด และ user turn สุดท้ายของคำขอ Claude มี `AI_START_MARKER` |
+| 14.6 | หน้าตั้งค่า กด `rich-menu-remove` แล้ว `settings-how-to-reset` | toast, สถานะ `not_published`, stub บันทึก `richmenu-default-clear` แล้ว `richmenu-delete` และช่องกลับเป็นค่าเริ่มต้น |
+
+### เส้นที่ 15: การ์ดต้อนรับ
+
+ไฟล์ `e2e/global-state.serial.spec.ts` project `serial-desktop` แล้ว `serial-mobile`
+
+| ขั้น | ทำ | ตรวจ |
+| --- | --- | --- |
+| 15.1 | หน้าตั้งค่า แก้ `settings-welcome-text` แล้วบันทึก | `settings-welcome-switch` เปิด ตัวอย่าง `welcome-preview` มีข้อความใหม่ |
+| 15.2 | ส่ง `follow.json` ของผู้ใช้ใหม่ | stub มีคำขอ `reply` หนึ่งรายการด้วย reply token ของ follow ข้อความเป็น `flex` มีข้อความที่แก้ และปุ่มใน footer เป็น postback `tw1:ai_on`, `tw1:admin`, `tw1:how_to` ตามลำดับ |
+| 15.3 | เปิดแชท | `welcome-bubble` หนึ่งกล่อง มี `inbox.welcome.label` ข้อความที่แก้ และชื่อปุ่มทั้งสาม |
+| 15.4 | ส่ง `postback.json` `tw1:how_to` | บรรทัด `customer.tapped_how_to` (ตัวจัดการเดียวกับ rich menu) |
+| 15.5 | ปิดสวิตช์ แล้ว follow ของผู้ใช้อีกคน | ไม่มีคำขอ `reply` ด้วย reply token นั้น |
+
+### เส้นที่ 13: ข้อความเสียงขาเข้า
+
+ไฟล์ `e2e/audio.spec.ts` project `desktop` และ `mobile` ไฟล์ `e2e/fixtures/media/tiny.m4a` (และสำเนา `stubs/assets/tiny.m4a`) คือเสียง 440 Hz สามวินาที AAC ใน M4A สร้างด้วยคำสั่งใน `scripts/generate-fixtures.sh`
+
+| ขั้น | ทำ | ตรวจ |
+| --- | --- | --- |
+| 13.1 | `createContactWithMessage` เปิดแชท แล้ว `postLineWebhook("message-audio.json")` | status 200 |
+| 13.2 | | ฟอง `data-type="audio"` `data-media-status="ready"` มี `message-audio` และ `message-audio-toggle` ชื่อ `inbox.media.audioPlay` |
+| 13.3 | GET `src` ของ `<audio>` และ GET พร้อม `Range: bytes=0-15` | 200 `audio/mp4` `nosniff` และ 206 ยาว 16 byte |
+| 13.4 | focus ปุ่ม กด Enter แล้ว Space | `data-playing` เป็น `false` ก่อน (ไม่ autoplay) แล้ว `true` แล้ว `false` |
+| 13.5 | จอกว้าง | แถวในรายชื่อมี `inbox.media.audio` |
+

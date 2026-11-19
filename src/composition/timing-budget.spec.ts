@@ -10,7 +10,14 @@ import {
   MEDIA_STUCK_AFTER_MS,
   SEND_STUCK_AFTER_MS,
 } from '@/core/domain';
-import { DEFAULT_AI_DEBOUNCE_MS } from './env';
+import {
+  CLIENT_TIMEOUT_GUARD_TEST_MS,
+  CLIENT_TIMEOUT_LINE_CHECK_MS,
+  CLIENT_TIMEOUT_MARGIN_MS,
+  CLIENT_TIMEOUT_RICH_MENU_PUBLISH_MS,
+  CLIENT_TIMEOUT_RICH_MENU_REMOVE_MS,
+} from '@/contracts';
+import { AI_DEBOUNCE_MAX_MS, DEFAULT_AI_DEBOUNCE_MS } from './env';
 import {
   JOB_BUDGET_SHARE,
   aiRoundWorstMs,
@@ -23,6 +30,10 @@ import {
   mediaDownloadsWorstMs,
   mediaJobWorstMs,
   webhookWorstMs,
+  guardTestWorstMs,
+  lineCheckWorstMs,
+  richMenuPublishWorstMs,
+  richMenuRemoveWorstMs,
 } from './timing-budget';
 
 /** `export const maxDuration = N;` of a route file, in seconds. Next.js needs it as a literal. */
@@ -35,8 +46,6 @@ const maxDurationOf = (route: string): number => {
 
 const WEBHOOK_MS = maxDurationOf('line/webhook');
 const KNOWLEDGE_MS = maxDurationOf('knowledge/documents');
-/** The highest debounce project-setup 10.3 allows AI_DEBOUNCE_MS to be set to. */
-const AI_DEBOUNCE_MAX_MS = 5000;
 
 describe('timing budget (project-setup 10.4, "เวลาแย่ที่สุด")', () => {
   it('uses the values written in project-setup section 10', () => {
@@ -91,5 +100,16 @@ describe('timing budget (project-setup 10.4, "เวลาแย่ที่ส�
     expect(SEND_STUCK_AFTER_MS).toBeGreaterThan(Math.max(deliverWorstMs(), WEBHOOK_MS));
     // A processing document belongs to a PDF route.
     expect(KNOWLEDGE_STUCK_AFTER_MS).toBeGreaterThan(Math.max(extractJobWorstMs(), KNOWLEDGE_MS));
+  });
+});
+
+describe('client timeouts of slow requests (timeouts.contract.ts)', () => {
+  it.each([
+    ['guard test', CLIENT_TIMEOUT_GUARD_TEST_MS, guardTestWorstMs()],
+    ['rich menu publish', CLIENT_TIMEOUT_RICH_MENU_PUBLISH_MS, richMenuPublishWorstMs()],
+    ['rich menu removal', CLIENT_TIMEOUT_RICH_MENU_REMOVE_MS, richMenuRemoveWorstMs()],
+    ['LINE credentials save and test', CLIENT_TIMEOUT_LINE_CHECK_MS, lineCheckWorstMs()],
+  ])('the %s wait covers the server worst case with the margin', (_label, clientMs, serverMs) => {
+    expect(clientMs).toBeGreaterThanOrEqual(serverMs + CLIENT_TIMEOUT_MARGIN_MS);
   });
 });

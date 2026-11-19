@@ -108,7 +108,9 @@ test('journey 1: a new customer and their messages show up in the inbox', async 
   expect(gone.status()).toBe(200);
   const failed = bubbles(page, { type: 'image' }).and(page.locator('[data-media-status="failed"]'));
   await expect(failed).toHaveCount(1);
-  await expect(failed).toContainText(uiCopy('inbox.media.imageFailed'));
+  // The bubble names why: LINE no longer has the content, so the download failed.
+  await expect(failed).toContainText(uiCopy('inbox.media.problem.download_failed'));
+  await expect(failed.locator('[data-failure="download_failed"]')).toHaveCount(1);
 
   // 1.13
   await expectNoA11yViolations(page);

@@ -6,6 +6,8 @@ import {
   accessClearedResponse,
   accessCookieHeader,
   accessGrantedResponse,
+  parseByteRange,
+  sliceStream,
   clearedAccessCookieHeader,
   errorResponse,
   fail,
@@ -106,5 +108,33 @@ describe('access cookie', () => {
     expect(readAccessToken(h('twa_access='))).toBeNull();
     expect(readAccessToken(h('twa_access=has space'))).toBeNull();
     expect(readAccessToken(h())).toBeNull();
+  });
+});
+
+describe('byte ranges', () => {
+  it('parses the forms browsers send, and answers null for the rest', () => {
+    expect(parseByteRange(null, 100)).toBeNull();
+    expect(parseByteRange('bytes=0-', 100)).toEqual({ start: 0, end: 99 });
+    expect(parseByteRange('bytes=10-19', 100)).toEqual({ start: 10, end: 19 });
+    expect(parseByteRange('bytes=90-500', 100)).toEqual({ start: 90, end: 99 });
+    expect(parseByteRange('bytes=-10', 100)).toEqual({ start: 90, end: 99 });
+    expect(parseByteRange('bytes=-500', 100)).toEqual({ start: 0, end: 99 });
+    expect(parseByteRange('bytes=100-', 100)).toBe('unsatisfiable');
+    expect(parseByteRange('bytes=-0', 100)).toBe('unsatisfiable');
+    for (const h of ['bytes=0-1,5-6', 'items=0-1', 'bytes=5-1', 'bytes=-', 'x']) {
+      expect(parseByteRange(h, 100)).toBeNull();
+    }
+  });
+
+  it('slices a chunked stream to the inclusive range', async () => {
+    const chunks = [new Uint8Array([0, 1, 2]), new Uint8Array([3, 4, 5]), new Uint8Array([6, 7])];
+    const source = new ReadableStream<Uint8Array>({
+      start(c) {
+        for (const x of chunks) c.enqueue(x);
+        c.close();
+      },
+    });
+    const out = new Uint8Array(await new Response(sliceStream(source, 2, 6)).arrayBuffer());
+    expect([...out]).toEqual([2, 3, 4, 5, 6]);
   });
 });

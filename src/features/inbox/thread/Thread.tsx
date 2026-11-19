@@ -13,7 +13,8 @@ import { testIds } from '@/common/test-ids';
 import { Skeleton } from '@/common/ui/skeleton';
 import { Composer } from '@/features/inbox/composer/Composer';
 import { copy } from '@/features/inbox/inbox.constants';
-import { useContacts, useSendMessage } from '@/features/inbox/inbox.hooks';
+import { useLineConfigured } from '@/common/polling';
+import { useSendMessage } from '@/features/inbox/inbox.hooks';
 import { composerDisabledReason, type ComposerBlock } from '@/features/inbox/inbox.logic';
 import { useContactDetail, useThread } from '@/features/inbox/thread/inbox.thread.hooks';
 import { MediaLightbox } from '@/features/inbox/thread/MediaLightbox';
@@ -68,7 +69,8 @@ function ThreadInner({ contactId, infoOpen, onToggleInfo }: ThreadProps) {
   const contact = useContactDetail(contactId);
   const thread = useThread(contactId);
   const settings = useSettings();
-  const contacts = useContacts();
+  // The contact list on screen (or the shell's) already polls; the chat only reads its answer.
+  const lineConfigured = useLineConfigured();
   const { retry } = useSendMessage(contactId);
   const rootRef = useRef<HTMLDivElement>(null);
   const focusedRef = useRef(false);
@@ -85,7 +87,6 @@ function ThreadInner({ contactId, infoOpen, onToggleInfo }: ThreadProps) {
   }, []);
 
   const detail = contact.data;
-  const lineConfigured = contacts.data?.lineConfigured ?? true;
   const block = detail === undefined ? null : composerDisabledReason(detail, lineConfigured);
   const normal = detail !== undefined && !thread.isPending;
 

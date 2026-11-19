@@ -22,7 +22,7 @@
 ## 3. ใส่ credential ใน webchat
 
 1. เข้า webchat แล้วเปิดหน้าตั้งค่า ส่วน LINE Official Account
-2. กรอก Channel ID, Channel secret และ Channel access token แล้วบันทึก ระบบตรวจกับ LINE ก่อนบันทึกสองเรื่อง: access token ใช้ได้ (ถาม LINE ว่า token เป็นของ OA ใด) และ Channel secret เป็นของ Channel ID นี้ (ขอ token อายุสั้นแบบ client credentials แล้วเพิกถอนทันที ไม่เก็บ) คู่ที่ผิดไม่ถูกบันทึก ถ้า LINE ตอบไม่ได้ตอนนั้น ระบบบันทึกให้และส่วน LINE แสดงว่ายังตรวจ Channel secret ไม่ได้ ให้กด "ทดสอบการเชื่อมต่อ" อีกครั้งภายหลัง
+2. กรอก Channel ID, Channel secret และ Channel access token แล้วบันทึก ระบบตรวจกับ LINE ก่อนบันทึกสามเรื่อง: access token ใช้ได้ (ถาม LINE ว่า token เป็นของ OA ใด), Channel secret เป็นของ Channel ID นี้ (ขอ token อายุสั้นแบบ client credentials) และ token อายุสั้นนั้นเป็นของบอทเดียวกับ access token (อ่านบอทด้วย token อายุสั้นแล้วเพิกถอนทันที ไม่เก็บ) คู่ที่ผิดหรือเป็นคนละ channel ไม่ถูกบันทึก ([ADR 0028](../adr/0028-review-fixes-concurrency-polling-and-ci.md)) ถ้า LINE ตอบไม่ได้ตอนนั้น ระบบบันทึกให้และส่วน LINE แสดงว่ายังตรวจ Channel secret ไม่ได้ ให้กด "ทดสอบการเชื่อมต่อ" อีกครั้งภายหลัง
 3. คัดลอก Webhook URL ที่หน้าจอแสดง
 
 Credential ที่บันทึกไว้ก่อนมีช่อง Channel ID ยังใช้งานได้ ส่วน LINE จะบอกว่ายังไม่ได้ตรวจ Channel secret จนกว่าจะบันทึกใหม่พร้อม Channel ID
@@ -37,13 +37,35 @@ Credential ที่บันทึกไว้ก่อนมีช่อง Ch
 
 ## 5. ปิดการตอบอัตโนมัติของ LINE
 
-ใน LINE Official Account Manager ปิดข้อความตอบกลับอัตโนมัติและข้อความทักทายอัตโนมัติ ไม่เช่นนั้นลูกค้าจะได้ข้อความจากทั้ง LINE และ webchat
+ใน LINE Official Account Manager ปิดข้อความตอบกลับอัตโนมัติและข้อความทักทายอัตโนมัติ (Greeting message) ไม่เช่นนั้นลูกค้าจะได้ข้อความจากทั้ง LINE และ webchat การ์ดต้อนรับและ rich menu ตั้งจาก webchat ในขั้นที่ 8
 
 ## 6. ตรวจ
 
 1. เพิ่ม OA เป็นเพื่อนจากมือถือ แล้วส่งข้อความ
 2. ข้อความต้องขึ้นใน webchat และส่วนสถานะระบบต้องแสดงเวลาที่รับ webhook ล่าสุด
 3. ทำต่อตาม [manual-test-script](../qa/manual-test-script.md)
+
+## 7. รูปโปรไฟล์ของ LINE OA
+
+ไฟล์อยู่ที่ `public/brand/line-profile-1024.png` (1024×1024) และ `public/brand/line-profile-640.png` (640×640) ใน repo และที่ `APP_BASE_URL/brand/line-profile-1024.png` หลัง deploy ([frontend Brand assets](../architecture/frontend.md#brand-assets))
+
+1. เปิด LINE Official Account Manager เลือกบัญชี แล้วไปที่หน้าตั้งค่าบัญชี (ไอคอนเฟือง) ส่วนข้อมูลบัญชี
+2. กดที่รูปโปรไฟล์ แล้วเลือกไฟล์ `line-profile-1024.png` (ถ้าหน้าจอแจ้งว่าไฟล์ใหญ่เกิน ใช้ `line-profile-640.png`)
+3. LINE แสดงรูปเป็นวงกลม ตัว "T" ต้องอยู่กลางวงกลมครบ กดบันทึก
+4. LINE อาจจำกัดจำนวนครั้งที่เปลี่ยนรูปโปรไฟล์ในช่วงเวลาหนึ่ง ตรวจภาพให้ถูกก่อนบันทึก
+
+ชื่อเมนู ขนาดไฟล์ที่รับ และข้อจำกัดการเปลี่ยนรูปต้องยืนยันกับหน้าจอจริงของ LINE Official Account Manager
+
+## 8. Rich menu และข้อความต้อนรับ
+
+Rich menu (สามปุ่ม คุยกับ AI, คุยกับแอดมิน, วิธีทดสอบ) และการ์ดต้อนรับตั้งจาก webchat เท่านั้น ([line-messaging](../specs/line-messaging.md#rich-menu))
+
+1. ทำขั้นที่ 3 ให้เสร็จก่อน (ปุ่ม "Publish rich menu" ปิดอยู่จนกว่าจะเชื่อม LINE)
+2. ใน webchat ไปที่ ตั้งค่า › Rich menu และข้อความต้อนรับ แล้วกด "Publish rich menu" สถานะต้องเป็น "Publish แล้ว"
+3. อย่าตั้ง rich menu ใน LINE Official Account Manager อีกที่หนึ่ง เมนูที่ตั้งผ่าน API กับที่ตั้งใน Manager ทับกัน และ webchat ไม่รู้ว่ามีเมนูจาก Manager ถ้าเคยตั้งไว้ ให้ปิดใน Manager ก่อน
+4. ข้อความทักทายอัตโนมัติ (Greeting message) ของ LINE Official Account Manager ต้องปิด (ขั้นที่ 5) ไม่เช่นนั้นลูกค้าที่เพิ่มเพื่อนได้ทั้งข้อความของ LINE และการ์ดต้อนรับของ webchat สวิตช์ "ส่งข้อความต้อนรับเมื่อเพิ่มเพื่อน" เปิดอยู่ตั้งแต่ติดตั้ง
+5. แก้ "ข้อความวิธีทดสอบ" และ "ข้อความต้อนรับ" ได้ในส่วนเดียวกัน ปุ่ม "ใช้ข้อความเริ่มต้น" กลับไปใช้ข้อความที่ระบบกำหนด (ลงท้ายตามคำลงท้ายที่ตั้ง)
+6. ถ้าเปลี่ยนรูปของเมนู (`scripts/brand/richmenu-3x1.html`) ให้รัน `pnpm exec tsx scripts/render-brand-assets.ts` แล้ว deploy และกด "Publish อีกครั้ง" LINE เปลี่ยนรูปของเมนูเดิมไม่ได้ ระบบจึงสร้างเมนูใหม่แล้วลบเมนูเก่า
 
 ## โควตา push
 
@@ -68,11 +90,15 @@ Credential ที่บันทึกไว้ก่อนมีช่อง Ch
 | 2 | ข้อความ error จริงของ LINE: 400 ของ reply token ที่ใช้ไม่ได้ (`Invalid reply token`), 429 ของโควตา push เต็ม (`isMonthlyQuotaError` อ่าน `monthly limit`) และ 4xx ของ client credentials ที่คู่ผิด | ตอบลูกค้าด้วย reply token เดิมสองครั้ง (curl), บันทึก Channel ID ที่ผิดหนึ่งหลักในหน้าตั้งค่า และอ่านข้อความ 429 ของโควตาจากเอกสารของ LINE หรือเมื่อโควตาเต็มจริง | log มี `line.send.reply_token_rejected` เมื่อใช้ token ซ้ำ, หน้าตั้งค่าแสดงข้อความของ `line.channel_secret_invalid`, ข้อความของโควตาตรงกับ regex ใน [`line-http.ts`](../../src/adapters/line/line-http.ts) |
 | 3 | "ส่งอีกครั้ง" ไม่ทำให้ลูกค้าได้ข้อความซ้ำ ([line-messaging ส่งข้อความ](../specs/line-messaging.md#ส่งข้อความ) ข้อ 5) | ส่งข้อความจาก webchat แล้วใน Neon ตั้ง `deliveryStatus = 'failed'` ของแถวนั้นด้วยมือ (จำลองการส่งที่ไม่รู้ผล) แล้วกด "ส่งอีกครั้ง" | ฟองเป็น "ส่งแล้ว" มือถือมีข้อความเดียว และ log มี `line.send.succeeded` ที่ `channel` เป็น `push` |
 | 4 | อายุจริงของ reply token ใช้ได้อย่างน้อย `REPLY_TOKEN_USABLE_MS` และใช้ได้ครั้งเดียว | ส่งข้อความจากมือถือ แล้วตอบจาก webchat ที่ราว 10, 45 และ 55 วินาทีหลังส่ง (คนละรอบ) | ที่ 10 และ 45 วินาที log มี `line.send.succeeded` ด้วย `channel = reply` ไม่มี `line.send.reply_token_rejected` ที่ 55 วินาทีระบบใช้ push เอง |
-| 5 | AI ส่งด้วย reply token ภายในเวลาและ loading `LINE_LOADING_SECONDS` ใช้ได้ | เปิด AI ทั้งระบบและของลูกค้าคนนั้น แล้วถามเวลาเปิดร้าน | มือถือแสดง loading ระหว่างรอ ไม่มี `line.loading.failed` และคำตอบมาถึง |
+| 5 | AI ส่งด้วย reply token ภายในเวลาและ loading `LINE_LOADING_SECONDS` ใช้ได้ | เปิด AI ทั้งระบบและของลูกค้าคนนั้น แล้วถามคำถามที่ตอบได้จากคลังความรู้ | มือถือแสดง loading ระหว่างรอ ไม่มี `line.loading.failed` และคำตอบมาถึง |
 | 6 | วิดีโอขาเข้าและขาออก: ไฟล์ขาเข้าได้ 202 ระหว่าง transcode แล้วเก็บได้, ภาพตัวอย่างที่ `content/preview` และขนาดสื่อขาออก (`IMAGE_MAX_BYTES`, `VIDEO_MAX_BYTES`, `PREVIEW_MAX_BYTES`) | ส่งวิดีโอยาวราวหนึ่งนาทีจากมือถือ แล้วส่งรูป JPEG ใกล้ 10 MB และวิดีโอ MP4 ใกล้ 50 MB จาก webchat | วิดีโอขาเข้าเล่นได้ในแชทพร้อมภาพตัวอย่าง (log อาจมี `media.store.not_ready` ก่อน `media.store.succeeded`) และมือถือเปิดไฟล์ขาออกได้ทั้งสอง |
 | 7 | Host ของรูปโปรไฟล์และสติกเกอร์อยู่ใน CSP (`profile.line-scdn.net`, `stickershop.line-scdn.net`) | ส่งสติกเกอร์จากมือถือด้วยบัญชีที่มีรูปโปรไฟล์ | รูปโปรไฟล์และสติกเกอร์ขึ้นในแชท และ console ของ browser ไม่มี CSP violation |
 | 8 | `events[].mode` เป็น `standby` เมื่อ channel ไม่ได้เป็น active และระบบไม่ใช้ reply token ของ event นั้น | ถ้าเปิดใช้โหมดแชทของ LINE Official Account Manager คู่กับ webhook ให้ส่งข้อความระหว่างที่แชทอยู่ในโหมดนั้น | ข้อความขึ้นใน webchat และคำตอบจาก webchat ไปทาง push (log `channel = push`) |
 | 9 | ความยาวข้อความ `LINE_TEXT_MAX_CHARS` และจำนวน `LINE_MAX_PARTS_PER_REQUEST` ต่อคำขอ | วางข้อความภาษาไทยที่มีวรรณยุกต์ยาว 5000 ตัวอักษรใน webchat แล้วส่ง และเรียก push ด้วยมือด้วย 5 และ 6 ข้อความใน `messages` | ข้อความยาวส่งเป็นข้อความเดียว, 5 ได้ 200 และ 6 ได้ 400 |
+| 10 | การตอบกลับ: `message.quotedMessageId` ของข้อความตัวอักษร และ `sentMessages[].id` ของ reply และ push ([line-messaging](../specs/line-messaging.md#ข้อความที่ตอบกลับ)) | ส่งข้อความจากหน้าแชท แล้วในมือถือกดค้างที่ข้อความนั้น เลือก "ตอบกลับ" และพิมพ์ตอบ ทำซ้ำกับข้อความของลูกค้าเอง รูป และข้อความเก่าก่อน migration ที่เจ็ด | ฟองของลูกค้ามีกล่องอ้างอิงที่ชี้ข้อความที่ถูกต้อง กดแล้วเลื่อนไปหา ข้อความเก่าแสดง "ข้อความต้นทางไม่พร้อมแสดง" |
+| 11 | ข้อความเสียงขาเข้า: ชนิดไฟล์จริงของ LINE (สมมติ M4A), `Content-Type` ที่ LINE ส่ง, `message.duration`, เสียงยาว และเสียงจาก `contentProvider` ภายนอก ([line-messaging](../specs/line-messaging.md#สื่อขาเข้า)) | จากมือถือ กดค้างปุ่มไมค์อัดเสียงสั้น ๆ ส่งหนึ่งครั้ง อัดยาวราวหนึ่งนาทีอีกครั้ง แล้วเปิดแชทใน Chromium และ Safari กดเล่นและเลื่อนตำแหน่ง | ฟองเสียงแสดงตัวเล่น เวลาตรงกับความยาวที่อัด เล่นได้และเลื่อนได้ log `media.store.succeeded` ถ้าได้ `failed` ให้ดูว่าไฟล์ขึ้นต้นด้วย byte แบบใดแล้วเพิ่มการตรวจใน `sniffContentType` เสียงจากบอทหรือแอปภายนอก (ถ้าหาได้) ต้องเป็น "โหลดข้อความเสียงไม่สำเร็จ" |
+| 12 | Rich menu: รูป 2500×843, `selected: true`, postback กับ `displayText` และสามเส้นทางของปุ่ม ([line-messaging](../specs/line-messaging.md#เมื่อลูกค้ากดปุ่ม)) | กด "Publish rich menu" แล้วเปิดแชทของ OA ในมือถือ กด "วิธีทดสอบ", "คุยกับแอดมิน" แล้ว "คุยกับ AI" (เปิด AI ทั้งระบบเฉพาะข้อนี้) จากนั้นปิด kill switch แล้วกด "คุยกับ AI" อีกครั้ง และกด "นำ rich menu ออก" | เมนูขึ้นเปิดอยู่ รูปคมไม่ถูกตัด ชื่อปุ่มขึ้นเป็นข้อความของลูกค้า ได้ข้อความวิธีทดสอบ ข้อความรับทราบ คำทักทายของ AI และ "ตอนนี้ AI ปิดให้บริการอยู่ …" ตามลำดับ webchat มีบรรทัด "ลูกค้ากดปุ่ม …" ทุกครั้ง หลังนำออกเมนูหายจากแชท |
+| 13 | การ์ดต้อนรับ: Flex `linearGradient`, รูปโลโก้จาก `APP_BASE_URL` และปุ่มในการ์ด ([line-messaging](../specs/line-messaging.md#ข้อความต้อนรับ)) | บล็อก OA แล้วเลิกบล็อก (หรือเพิ่มเพื่อนด้วยบัญชีที่สอง) บน iOS, Android และ LINE บน desktop เท่าที่มี แล้วกดปุ่มทั้งสามในการ์ด | การ์ดมาครั้งเดียว หัวเป็น gradient (หรือสีชมพูบานเย็นทึบ) มีโลโก้และชื่อ OA ปุ่มทำงานเหมือน rich menu webchat มีกล่อง "ข้อความต้อนรับ" ถ้าไม่ได้การ์ด ดู log `line.welcome.failed` |
 
 ข้อที่ทดสอบด้วยมือไม่ได้ ให้ยืนยันจากเอกสารของ LINE: ระยะเวลาที่ LINE เก็บไฟล์ของข้อความขาเข้า และช่วงของ `loadingSeconds` ที่รับได้
 
@@ -82,6 +108,7 @@ Credential ที่บันทึกไว้ก่อนมีช่อง Ch
 | --- | --- |
 | LINE ตรวจ webhook ไม่ผ่าน | ส่วน LINE ในหน้าตั้งค่าบอกว่า LINE ยืนยัน Channel secret แล้วหรือไม่ (ถ้ายัง ให้บันทึกใหม่พร้อม Channel ID) และ URL เป็นของ production หรือไม่ |
 | บันทึกไม่ได้เพราะ Channel ID กับ Channel secret ไม่ตรงกัน | คัดลอกทั้งสองค่าจากแท็บ Basic settings ของ channel เดียวกันอีกครั้ง ถ้าเพิ่งออก secret ใหม่ ให้ใช้ค่าใหม่ |
+| บันทึกไม่ได้เพราะ Channel access token เป็นของ channel อื่น (`line.channel_mismatch`) | ออก Channel access token จากแท็บ Messaging API ของ channel เดียวกับ Channel ID และ Channel secret แล้วบันทึกทั้งสามค่าอีกครั้ง |
 | ส่งไม่สำเร็จ โควตาข้อความของ LINE เต็ม | ดูยอดใน LINE Official Account Manager ตาม [โควตา push](#โควตา-push) |
 | ข้อความไม่ขึ้นใน webchat | "Use webhook" เปิดอยู่หรือไม่ และดูข้อผิดพลาดล่าสุดในส่วนสถานะระบบ |
 | ส่งจาก webchat ไม่สำเร็จ | กด "ทดสอบการเชื่อมต่อ" ถ้าไม่ผ่านให้ออก access token ใหม่ |

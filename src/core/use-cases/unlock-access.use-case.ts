@@ -1,6 +1,5 @@
 import { err, ok } from '@/core/domain';
-import { makeCheckRateLimit } from './shared/check-rate-limit';
-import { makeHitRateLimit } from './shared/hit-rate-limit';
+import { makeHitRateLimit, makeRefundRateLimit } from './shared/hit-rate-limit';
 import type { AllPorts, UseCase, UseCaseConfig } from './types';
 
 export type UnlockAccessInput = { code: string };
@@ -16,7 +15,9 @@ export type UnlockAccessDeps = Pick<
 export const NO_CLIENT_IP_SUBJECT = 'no-client-ip';
 
 /**
- * Only wrong codes count toward the limit, so a right code never uses up an attempt. A request
+ * Every attempt is counted with one atomic hit BEFORE the code is compared, so concurrent
+ * attempts each get a distinct count and at most the limit of them are ever compared. A right
+ * code then refunds its hit, so it never uses up an attempt of the window. A request
  * with a caller IP is counted per IP (`unlock`). Requests without one cannot be told apart, so
  * they share one stricter bucket (`unlock_no_ip`): guessing stays bounded, and callers that do
  * have an IP are never affected when that bucket is full. Each such request is logged so a
@@ -31,8 +32,8 @@ export const makeUnlockAccess: (
   'access.rate_limited' | 'access.code_invalid'
 > = (deps, config) => {
   const { signer, clock, logger } = deps;
-  const checkRateLimit = makeCheckRateLimit(deps, config);
   const hitRateLimit = makeHitRateLimit(deps, config);
+  const refundRateLimit = makeRefundRateLimit(deps);
 
   return async ({ code }, ctx) => {
     const now = clock.now();
@@ -42,18 +43,18 @@ export const makeUnlockAccess: (
       logger.log('warn', 'access.unlock.client_ip_missing', { requestId: ctx.requestId });
     }
 
-    const check = await checkRateLimit(action, subject, now);
+    const check = await hitRateLimit(action, subject, now);
     if (check.limited) {
       logger.log('warn', 'access.unlock.rate_limited', { requestId: ctx.requestId });
       return err('access.rate_limited', undefined, check.retryAfterSeconds);
     }
 
     if (!signer.checkCode(code)) {
-      await hitRateLimit(action, subject, now);
       logger.log('warn', 'access.unlock.failed', { requestId: ctx.requestId });
       return err('access.code_invalid');
     }
 
+    await refundRateLimit(action, subject, now);
     const issued = signer.issue(now);
     logger.log('info', 'access.unlock.succeeded', { requestId: ctx.requestId });
     return ok(issued);

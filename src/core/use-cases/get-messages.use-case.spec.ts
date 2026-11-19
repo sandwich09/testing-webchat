@@ -1,10 +1,11 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   MEDIA_STUCK_AFTER_MS,
   MESSAGE_PAGE_LIMIT,
   POLL_PAGE_LIMIT,
   SEND_STUCK_AFTER_MS,
   type ContactId,
+  type LineMessageId,
   type LineUserId,
   type Message,
   type Seq,
@@ -106,6 +107,65 @@ describe('GetMessages', () => {
     contactId = await newContact();
   });
 
+  describe('quotes', () => {
+    const addQuoting = async (quoted: string): Promise<Message> =>
+      (
+        await messages.insertInboundIfAbsent({
+          id: ids.messageId(),
+          contactId,
+          direction: 'inbound',
+          author: 'customer',
+          type: 'text',
+          text: 'ตอบอันนี้',
+          mediaUrl: null,
+          previewUrl: null,
+          mediaStatus: null,
+          stickerPackageId: null,
+          stickerId: null,
+          otherKind: null,
+          eventCode: null,
+          lineMessageId: `line-${ids.messageId()}` as LineMessageId, // brand: test id
+          quotedLineMessageId: quoted as LineMessageId, // brand: test id
+          deliveryStatus: null,
+          deliveryError: null,
+          retryKey: null,
+          createdAt: clock.now(),
+          sentAt: null,
+        })
+      ).message;
+
+    it('reads the quoted messages of every mode in one query, known ones only', async () => {
+      const reply = await addText(contactId, 'ข้อความที่ถูกอ้าง');
+      await messages.markSent(reply.id, clock.now(), ['L-1' as LineMessageId]); // brand: test id
+      await addQuoting('L-1');
+      await addQuoting('L-unknown');
+      const spy = vi.spyOn(messages, 'findByLineIds');
+
+      const latest = await run({ contactId, mode: { kind: 'latest' } });
+      expect(latest.quoted.map((m) => m.id)).toEqual([reply.id]);
+      const changes = await run({
+        contactId,
+        mode: { kind: 'changes', afterUpdatedSeq: 0n as Seq }, // brand: Seq zero
+      });
+      expect(changes.quoted.map((m) => m.id)).toEqual([reply.id]);
+      const before = await run({
+        contactId,
+        mode: { kind: 'before', beforeSeq: 999n as Seq }, // brand: test seq
+      });
+      expect(before.quoted.map((m) => m.id)).toEqual([reply.id]);
+      expect(spy.mock.calls.map(([, lineIds]) => lineIds)).toEqual([
+        ['L-1', 'L-unknown'],
+        ['L-1', 'L-unknown'],
+        ['L-1', 'L-unknown'],
+      ]);
+    });
+
+    it('asks for nothing when no message of the page quotes', async () => {
+      await addText(contactId, 'a');
+      expect((await run({ contactId, mode: { kind: 'latest' } })).quoted).toEqual([]);
+    });
+  });
+
   it('latest returns the newest page oldest first with hasOlder and highWater', async () => {
     const all: Message[] = [];
     for (let i = 0; i < MESSAGE_PAGE_LIMIT + 3; i += 1)
@@ -133,7 +193,7 @@ describe('GetMessages', () => {
 
   it('latest on an empty chat returns highWater 0', async () => {
     const r = await run({ contactId, mode: { kind: 'latest' } });
-    expect(r).toEqual({ messages: [], hasOlder: false, hasMore: false, highWater: 0n });
+    expect(r).toEqual({ messages: [], quoted: [], hasOlder: false, hasMore: false, highWater: 0n });
   });
 
   it('before excludes beforeSeq, pages older rows and returns highWater 0', async () => {
@@ -154,7 +214,7 @@ describe('GetMessages', () => {
     const a = await addText(contactId, 'a');
     await addText(contactId, 'b');
     const cursor = await messages.maxUpdatedSeq(contactId);
-    await messages.markSent(a.id, clock.now());
+    await messages.markSent(a.id, clock.now(), []);
 
     const r = await run({ contactId, mode: { kind: 'changes', afterUpdatedSeq: cursor } });
 
@@ -171,7 +231,13 @@ describe('GetMessages', () => {
 
     const r = await run({ contactId, mode: { kind: 'changes', afterUpdatedSeq: cursor } });
 
-    expect(r).toEqual({ messages: [], hasOlder: null, hasMore: false, highWater: cursor });
+    expect(r).toEqual({
+      messages: [],
+      quoted: [],
+      hasOlder: null,
+      hasMore: false,
+      highWater: cursor,
+    });
   });
 
   it('changes orders by updatedSeq and limits to POLL_PAGE_LIMIT with hasMore', async () => {

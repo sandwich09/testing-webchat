@@ -60,8 +60,10 @@ export const createLocalFileStorage = (config: LocalFileStorageConfig): FileStor
     return full.startsWith(base + sep) ? full : null;
   };
 
-  const urlFor = (key: string): string =>
-    `${baseUrl}${URL_PREFIX}${key.split('/').map(encodeURIComponent).join('/')}`;
+  /** Path of a key under the app; the upload target uses it as is, public URLs add the origin. */
+  const pathOf = (key: string): string =>
+    `${URL_PREFIX}${key.split('/').map(encodeURIComponent).join('/')}`;
+  const urlFor = (key: string): string => `${baseUrl}${pathOf(key)}`;
 
   const mac = (key: string, contentType: string, maxSizeBytes: number, exp: string): Buffer =>
     createHmac('sha256', config.secret)
@@ -139,6 +141,7 @@ export const createLocalFileStorage = (config: LocalFileStorageConfig): FileStor
     body: ReadableStream<Uint8Array>,
     contentType: string,
     maxSizeBytes: number,
+    exactSize = false,
   ) => {
     const objectPath = pathFor(objectsDir, key);
     const metaPath = pathFor(metaDir, key, '.json');
@@ -147,6 +150,11 @@ export const createLocalFileStorage = (config: LocalFileStorageConfig): FileStor
     try {
       const written = await writeTemp(tmpPath, body, maxSizeBytes);
       if (written.kind === 'too_large') return err('media.too_large');
+      if (exactSize && written.sizeBytes !== maxSizeBytes) {
+        // A body cut on the way (a proxy buffer limit, a dropped connection) is never kept.
+        await unlink(tmpPath).catch(() => undefined);
+        return err('upload.incomplete');
+      }
       await mkdir(dirname(objectPath), { recursive: true });
       await mkdir(dirname(metaPath), { recursive: true });
       await rename(tmpPath, objectPath);
@@ -180,20 +188,26 @@ export const createLocalFileStorage = (config: LocalFileStorageConfig): FileStor
         return Promise.resolve(err('storage.unavailable', 'invalid_key'));
       }
       const exp = String(Math.floor(spec.expiresAt.getTime() / 1000));
-      const sig = makeSig(spec.key, spec.contentType, spec.maxSizeBytes, exp);
+      const sig = makeSig(spec.key, spec.contentType, spec.sizeBytes, exp);
       return Promise.resolve(
         ok({
           strategy: 'http_put' as const,
           key: spec.key,
           contentType: spec.contentType,
-          maxSizeBytes: spec.maxSizeBytes,
-          url: `${urlFor(spec.key)}?exp=${exp}&sig=${sig}`,
+          maxSizeBytes: spec.sizeBytes,
+          url: `${pathOf(spec.key)}?exp=${exp}&sig=${sig}`,
           headers: { 'Content-Type': spec.contentType },
         }),
       );
     },
 
-    put: (key, body, opts) => store(key, body, opts.contentType, opts.maxSizeBytes),
+    async put(key, body, opts) {
+      const stored = await store(key, body, opts.contentType, opts.maxSizeBytes);
+      // `upload.incomplete` comes only from a signed PUT, which checks the exact size.
+      return !stored.ok && stored.error.code === 'upload.incomplete'
+        ? err('storage.unavailable')
+        : (stored as Exclude<typeof stored, { error: { code: 'upload.incomplete' } }>); // narrowed above
+    },
 
     async inspect(key) {
       const objectPath = pathFor(objectsDir, key);
@@ -245,7 +259,7 @@ export const createLocalFileStorage = (config: LocalFileStorageConfig): FileStor
       if (mediaType(contentType) !== mediaType(signed.contentType)) {
         return err('upload.content_mismatch');
       }
-      return store(key, body, signed.contentType, signed.maxSizeBytes);
+      return store(key, body, signed.contentType, signed.maxSizeBytes, true);
     },
 
     async delete(key) {

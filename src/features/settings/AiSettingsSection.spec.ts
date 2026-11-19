@@ -10,10 +10,10 @@ import {
   instructionsCounterText,
   instructionsDirty,
   instructionsErrorText,
-  nextRadioIndex,
   particleLabel,
-  saveFailureText,
 } from './AiSettingsSection';
+import { aiNameDirty, aiNameErrorText, answerModeLabel } from './AiPersonaRows';
+import { nextRadioIndex, saveFailureText } from './SettingsFormParts';
 
 describe('saveFailureText', () => {
   it('uses the catalog text of an API error code', () => {
@@ -92,5 +92,21 @@ describe('particleLabel', () => {
   it('maps the stored particle to its label', () => {
     expect(particleLabel('ค่ะ')).toBe('ค่ะ');
     expect(particleLabel('ครับ')).toBe('ครับ');
+  });
+});
+
+describe('AI name and answer scope', () => {
+  it('compares the typed name with the saved one, trimmed, null as empty', () => {
+    expect(aiNameDirty(null, 'มินนี่')).toBe(false);
+    expect(aiNameDirty(' มินนี่ ', 'มินนี่')).toBe(false);
+    expect(aiNameDirty('', null)).toBe(false);
+    expect(aiNameDirty('มิน', null)).toBe(true);
+    expect(aiNameDirty('', 'มินนี่')).toBe(true);
+  });
+
+  it('names the limit in the error and labels both scopes', () => {
+    expect(aiNameErrorText()).toBe('ชื่อ AI ยาวเกิน 40 ตัวอักษร');
+    expect(answerModeLabel('general')).toBe('คุยทั่วไปได้');
+    expect(answerModeLabel('knowledge_only')).toBe('ตอบจากคลังความรู้เท่านั้น');
   });
 });

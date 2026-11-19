@@ -4,6 +4,9 @@ export interface RateLimitRepository {
    * count = 1 and the new windowStart. Otherwise count + 1. Returns the count after the increment.
    */
   hit(key: string, windowStart: Date): Promise<{ count: number }>;
-  /** Read only: the count of this window. No row, or a row of an older window, gives 0. */
-  peek(key: string, windowStart: Date): Promise<{ count: number }>;
+  /**
+   * Atomic: takes back one hit of this window (count - 1, never below 0). No row, or a row of
+   * another window, is left as it is.
+   */
+  refund(key: string, windowStart: Date): Promise<void>;
 }

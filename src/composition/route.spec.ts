@@ -3,7 +3,15 @@ import { z } from 'zod';
 import { err, ok, PRICE_TABLE, type Result } from '@/core/domain';
 import { makeVerifyAccess, type UseCaseConfig } from '@/core/use-cases';
 import { FakeAccessTokenSigner, FakeClock, FakeIdGenerator, FakeLogger } from '@/adapters/fakes';
-import { errorResponseSchema } from '@/contracts';
+import {
+  contactNoteParamsSchema,
+  contactParamsSchema,
+  contactUsageParamsSchema,
+  documentParamsSchema,
+  errorResponseSchema,
+  messagesParamsSchema,
+  retryMessageParamsSchema,
+} from '@/contracts';
 import { makeRunJob, makeWithRoute, type RouteDeps } from './route';
 import { fail, json } from './http-response';
 import type { HttpErrorCode } from './http-errors';
@@ -49,9 +57,12 @@ const request = (
     cookie?: string | null;
     body?: string;
     type?: string;
+    /** The Host header the browser sent; absent unless given. */
+    host?: string;
   } = {},
 ): Request => {
   const headers = new Headers();
+  if (init.host !== undefined) headers.set('host', init.host);
   if (init.origin !== null) headers.set('origin', init.origin ?? ORIGIN);
   if (init.cookie !== null) headers.set('cookie', init.cookie ?? `twa_access=${token}`);
   if (init.type !== undefined) headers.set('content-type', init.type);
@@ -120,6 +131,15 @@ describe('withRoute: access and origin', () => {
     expect(
       (await handler(request(method, { origin: 'https://evil.example' }), noParams)).status,
     ).toBe(403);
+  });
+
+  it('runs the handler for a same-origin POST when APP_BASE_URL is another origin', async () => {
+    deps = { ...deps, appOrigin: 'https://configured.example' };
+    const handler = withRoute({ route: '/api/x', access: 'cookie' }, ok200);
+    const sameOrigin = request('POST', { host: 'localhost:3000' });
+    expect((await handler(sameOrigin, noParams)).status).toBe(200);
+    const crossSite = request('POST', { host: 'localhost:3000', origin: 'https://evil.example' });
+    expect((await handler(crossSite, noParams)).status).toBe(403);
   });
 
   it('does not check the origin of GET', async () => {
@@ -201,6 +221,38 @@ describe('withRoute: schemas', () => {
     expect((await errorOf(r)).code).toBe('request.invalid');
     expect(called).toBe(false);
   });
+
+  it.each([
+    ['/api/contacts/:id', contactParamsSchema, { id: 'not-a-uuid' }, 'contact.not_found'],
+    ['/api/contacts/:id/messages', messagesParamsSchema, { id: '1' }, 'contact.not_found'],
+    [
+      '/api/contacts/:id/notes/:noteId',
+      contactNoteParamsSchema,
+      { id: '0193a0b1-0000-7000-8000-000000000001', noteId: 'x' },
+      'note.not_found',
+    ],
+    [
+      '/api/contacts/:id/messages/:messageId/retry',
+      retryMessageParamsSchema,
+      { id: '0193a0b1-0000-7000-8000-000000000001', messageId: "1' OR 1=1" },
+      'message.not_found',
+    ],
+    ['/api/knowledge/documents/:id', documentParamsSchema, { id: 'abc' }, 'knowledge.not_found'],
+    ['/api/usage/contacts/:id', contactUsageParamsSchema, { id: 'abc' }, 'contact.not_found'],
+  ] as const)(
+    '%s answers 404 with its not-found code for an id that is not a UUID',
+    async (route, schema, p, code) => {
+      let called = false;
+      const handler = withRoute({ route, access: 'cookie', params: schema }, () => {
+        called = true;
+        return json({});
+      });
+      const r = await handler(request('GET'), { params: Promise.resolve(p) });
+      expect(r.status).toBe(404);
+      expect((await errorOf(r)).code).toBe(code);
+      expect(called).toBe(false);
+    },
+  );
 
   it('answers 413 request.too_large for a big JSON body', async () => {
     const handler = withRoute({ route: '/api/x', access: 'cookie', body }, () => json({}));

@@ -1,5 +1,5 @@
-import type { AiModelId, NanoUsd, PoliteParticle, Settings } from '@/core/domain';
-import { err, normalizeGuardTopics, ok } from '@/core/domain';
+import type { AiAnswerMode, AiModelId, NanoUsd, PoliteParticle, Settings } from '@/core/domain';
+import { err, normalizeAiName, normalizeGuardTopics, ok } from '@/core/domain';
 import type { AllPorts, UseCase, UseCaseConfig } from './types';
 
 export type UpdateSettingsInput = Partial<{
@@ -8,8 +8,16 @@ export type UpdateSettingsInput = Partial<{
   aiDailyBudget: NanoUsd;
   aiPoliteParticle: PoliteParticle;
   aiInstructions: string;
+  /** '' or only spaces clears the name (stored as null). */
+  aiName: string | null;
+  aiAnswerMode: AiAnswerMode;
   guardEnabled: boolean;
   guardTopics: string[];
+  /** Trimmed; '' means the default text (howToTextOf). */
+  howToText: string;
+  welcomeEnabled: boolean;
+  /** Trimmed; '' means the default text (welcomeTextOf). */
+  welcomeText: string;
 }>;
 
 export type UpdateSettingsOutput = Settings;
@@ -27,6 +35,9 @@ export const makeUpdateSettings: (
   ({ settings, logger }) =>
   async (input, ctx) => {
     const patch: UpdateSettingsInput = { ...input };
+    if (patch.aiName !== undefined) patch.aiName = normalizeAiName(patch.aiName);
+    if (patch.howToText !== undefined) patch.howToText = patch.howToText.trim();
+    if (patch.welcomeText !== undefined) patch.welcomeText = patch.welcomeText.trim();
 
     if (patch.guardTopics !== undefined) {
       const normalized = normalizeGuardTopics(patch.guardTopics);

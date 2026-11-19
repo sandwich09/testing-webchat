@@ -10,7 +10,7 @@ describe('handleUnauthorized', () => {
     const client = new QueryClient();
     client.setQueryData(qk.settings(), { any: 1 });
     const controller = createPollController();
-    controller.recordFailure();
+    controller.recordFailure('k');
     const refresh = vi.fn();
     handleUnauthorized(client, controller, refresh);
     expect(client.getQueryData(qk.settings())).toBeUndefined();

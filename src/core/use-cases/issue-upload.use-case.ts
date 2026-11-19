@@ -72,14 +72,14 @@ export const makeIssueUpload: (
     const original = await storage.issueUpload({
       key: keys.original,
       contentType: input.contentType,
-      maxSizeBytes: rule.maxBytes,
+      sizeBytes: input.sizeBytes,
       expiresAt,
     });
     if (!original.ok) return err('storage.unavailable');
     const preview = await storage.issueUpload({
       key: keys.preview,
       contentType: 'image/jpeg',
-      maxSizeBytes: PREVIEW_MAX_BYTES,
+      sizeBytes: input.preview.sizeBytes,
       expiresAt,
     });
     if (!preview.ok) return err('storage.unavailable');

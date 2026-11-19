@@ -2,16 +2,20 @@
 // with its schema from src/contracts through `apiFetch`.
 import { apiFetch, apiFetchNoContent, ApiError } from '@/common/common.api';
 import {
+  addContactNoteResponseSchema,
+  deleteContactNoteResponseSchema,
   errorResponseSchema,
   getContactResponseSchema,
   getMessagesResponseSchema,
   issueUploadResponseSchema,
+  listContactNotesResponseSchema,
   markContactReadResponseSchema,
   retryMessageResponseSchema,
   sendMessageResponseSchema,
   setContactAiResponseSchema,
   typingResponseSchema,
   type ContactDetailDto,
+  type ContactNoteDto,
   type ContactDto,
   type GetMessagesResponse,
   type IssueUploadBody,
@@ -40,6 +44,31 @@ export function setContactAi(id: string, aiEnabled: boolean): Promise<ContactDto
     method: 'PATCH',
     body: { aiEnabled },
     schema: setContactAiResponseSchema,
+  });
+}
+
+/** GET /api/contacts/:id/notes: newest first. */
+export function listContactNotes(id: string, signal?: AbortSignal): Promise<ContactNoteDto[]> {
+  return apiFetch(`${contactPath(id)}/notes`, {
+    schema: listContactNotesResponseSchema,
+    signal,
+  }).then((r) => r.notes);
+}
+
+/** POST /api/contacts/:id/notes */
+export function addContactNote(id: string, text: string): Promise<ContactNoteDto> {
+  return apiFetch(`${contactPath(id)}/notes`, {
+    method: 'POST',
+    body: { text },
+    schema: addContactNoteResponseSchema,
+  });
+}
+
+/** DELETE /api/contacts/:id/notes/:noteId */
+export function deleteContactNote(id: string, noteId: string): Promise<{ deleted: true }> {
+  return apiFetch(`${contactPath(id)}/notes/${encodeURIComponent(noteId)}`, {
+    method: 'DELETE',
+    schema: deleteContactNoteResponseSchema,
   });
 }
 

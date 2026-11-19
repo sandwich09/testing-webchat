@@ -3,6 +3,7 @@ import { AiSettingsSection } from '@/features/settings/AiSettingsSection';
 import { GuardSection } from '@/features/settings/GuardSection';
 import { KnowledgeSection } from '@/features/settings/KnowledgeSection';
 import { LineSettingsSection } from '@/features/settings/LineSettingsSection';
+import { RichMenuSection } from '@/features/settings/RichMenuSection';
 import { copy } from '@/features/settings/settings.constants';
 import { SystemStatusSection } from '@/features/settings/SystemStatusSection';
 import { UsageSection } from '@/features/settings/UsageSection';
@@ -19,6 +20,7 @@ export function SettingsPage() {
         <AiSettingsSection />
         <GuardSection />
         <LineSettingsSection />
+        <RichMenuSection />
         <KnowledgeSection />
         <UsageSection />
         <SystemStatusSection />

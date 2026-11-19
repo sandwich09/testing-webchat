@@ -53,13 +53,13 @@ export const describeFileStorageSuite = (
   kind: FileStorageKind,
 ): void => {
   describe('FileStorage.issueUpload', () => {
-    it('returns a target for the exact key, type and size limit', async () => {
+    it('returns a target for the exact key, type and size', async () => {
       const storage = await makeSubject();
       const key = newKey('photo.png');
       const result = await storage.issueUpload({
         key,
         contentType: 'image/png',
-        maxSizeBytes: 1024,
+        sizeBytes: 1024,
         expiresAt: EXPIRES_AT,
       });
       expect(result.ok).toBe(true);
@@ -72,7 +72,9 @@ export const describeFileStorageSuite = (
         expect(target.strategy).toBe('http_put');
         if (target.strategy !== 'http_put') return;
         expect(target.headers['Content-Type']).toBe('image/png');
-        const url = new URL(target.url);
+        // A path without an origin: the browser PUTs to the origin it is on.
+        expect(target.url.startsWith('/api/local-storage/')).toBe(true);
+        const url = new URL(target.url, 'http://any.origin');
         expect(url.searchParams.get('exp')).toBeTruthy();
         expect(url.searchParams.get('sig')).toBeTruthy();
         expect(decodeURIComponent(url.pathname)).toContain(key);
@@ -221,16 +223,16 @@ export const describeFileStorageSuite = (
   });
 
   describe('FileStorage.acceptSignedPut', () => {
-    const issue = async (storage: FileStorage, key: StorageKey, maxSizeBytes = 100) => {
+    const issue = async (storage: FileStorage, key: StorageKey, sizeBytes = 40) => {
       const issued = await storage.issueUpload({
         key,
         contentType: 'image/png',
-        maxSizeBytes,
+        sizeBytes,
         expiresAt: EXPIRES_AT,
       });
       if (!issued.ok || issued.value.strategy !== 'http_put')
         throw new Error('expected an http_put target');
-      const url = new URL(issued.value.url);
+      const url = new URL(issued.value.url, 'http://any.origin');
       return { exp: url.searchParams.get('exp') ?? '', sig: url.searchParams.get('sig') ?? '' };
     };
 
@@ -327,6 +329,24 @@ export const describeFileStorageSuite = (
         );
         expect(result.ok).toBe(false);
         if (!result.ok) expect(result.error.code).toBe('media.too_large');
+      });
+    }
+
+    if (kind === 'local_disk') {
+      it('returns upload.incomplete and keeps nothing when the body is shorter than the signed size', async () => {
+        const storage = await makeSubject();
+        const key = newKey();
+        const query = await issue(storage, key, 10);
+        const result = await storage.acceptSignedPut(
+          key,
+          query,
+          'image/png',
+          toStream(bytesOf(9)),
+          BEFORE_EXPIRY,
+        );
+        expect(result.ok).toBe(false);
+        if (!result.ok) expect(result.error.code).toBe('upload.incomplete');
+        expect((await storage.inspect(key)).ok).toBe(false);
       });
     }
 

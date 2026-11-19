@@ -109,7 +109,7 @@ describe('vercel blob storage SDK calls', () => {
     const result = await storage.issueUpload({
       key: key('outbound/abc/original.jpg'),
       contentType: 'image/jpeg',
-      maxSizeBytes: 5000,
+      sizeBytes: 5000,
       expiresAt,
     });
     expect(result).toEqual({
@@ -242,7 +242,7 @@ describe('vercel blob storage errors', () => {
       await storage.issueUpload({
         key: key('a/b'),
         contentType: 'a/b',
-        maxSizeBytes: 1,
+        sizeBytes: 1,
         expiresAt: new Date(),
       }),
     ];
@@ -281,7 +281,7 @@ describe('vercel blob storage errors', () => {
         await storage.issueUpload({
           key: bad,
           contentType: 'a/b',
-          maxSizeBytes: 5,
+          sizeBytes: 5,
           expiresAt: new Date(),
         })
       ).ok,

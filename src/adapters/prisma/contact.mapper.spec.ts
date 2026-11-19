@@ -9,6 +9,7 @@ const row: ContactRow = {
   pictureUrl: null,
   followStatus: 'following',
   followedAt: null,
+  followStatusAt: null,
   aiEnabled: false,
   needsAdmin: false,
   needsAdminReason: null,
@@ -27,7 +28,10 @@ const row: ContactRow = {
 
 describe('toContact', () => {
   it('maps a row to the entity', () => {
-    expect(toContact(row)).toEqual(row);
+    // followStatusAt is a column only: setFollowStatus compares it; the entity does not carry it.
+    const entity: Partial<typeof row> = { ...row };
+    delete entity.followStatusAt;
+    expect(toContact(row)).toEqual(entity);
   });
 
   it('rejects last-message values the entity cannot hold', () => {

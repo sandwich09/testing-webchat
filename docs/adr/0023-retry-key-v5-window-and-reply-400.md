@@ -1,6 +1,6 @@
 # 0023: Retry key แบบ UUID version 5, หน้าต่าง 24 ชั่วโมง, การแยก 400 ของ reply และการตรวจ Channel secret
 
-> สถานะ: อนุมัติ · วันที่: 2026-11-19
+> สถานะ: อนุมัติ การตรวจว่า credential เป็น channel เดียวกันระบุเพิ่มใน [0028](0028-review-fixes-concurrency-polling-and-ci.md) · วันที่: 2026-11-19
 
 ## บริบท
 

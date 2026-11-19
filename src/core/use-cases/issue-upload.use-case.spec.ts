@@ -59,14 +59,14 @@ describe('IssueUpload', () => {
     );
   });
 
-  it('issues two targets under one uploadId for a JPEG', async () => {
+  it('issues two targets under one uploadId for a JPEG, each signed for the exact declared size', async () => {
     const r = await run(jpeg, ctx);
     if (!r.ok) throw new Error('expected ok');
     const id = r.value.uploadId;
     expect(r.value.original.key).toBe(`outbound/${id}/original.jpg`);
     expect(r.value.preview.key).toBe(`outbound/${id}/preview.jpg`);
-    expect(r.value.original.maxSizeBytes).toBe(IMAGE_MAX_BYTES);
-    expect(r.value.preview.maxSizeBytes).toBe(PREVIEW_MAX_BYTES);
+    expect(r.value.original.maxSizeBytes).toBe(jpeg.sizeBytes);
+    expect(r.value.preview.maxSizeBytes).toBe(jpeg.preview.sizeBytes);
     expect(logger.eventsOf()).toEqual(['upload.ticket.issued']);
   });
 
@@ -76,8 +76,11 @@ describe('IssueUpload', () => {
     expect(r.value.original.key.endsWith('/original.png')).toBe(true);
   });
 
-  it('issues an MP4 key with .mp4 and the video limit', async () => {
-    const r = await run({ ...jpeg, kind: 'video', contentType: 'video/mp4' }, ctx);
+  it('issues an MP4 key with .mp4 within the video limit', async () => {
+    const r = await run(
+      { ...jpeg, kind: 'video', contentType: 'video/mp4', sizeBytes: VIDEO_MAX_BYTES },
+      ctx,
+    );
     if (!r.ok) throw new Error('expected ok');
     expect(r.value.original.key.endsWith('/original.mp4')).toBe(true);
     expect(r.value.original.maxSizeBytes).toBe(VIDEO_MAX_BYTES);

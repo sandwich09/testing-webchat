@@ -5,6 +5,7 @@ import {
   FakeAccessTokenSigner,
   FakeChatModel,
   FakeClock,
+  FakeContactNoteRepository,
   FakeContactRepository,
   FakeContentHasher,
   FakeDocumentExtractor,
@@ -71,6 +72,7 @@ const fakeFactories = (): Factories => {
     storage: () => new FakeFileStorage(),
     contacts: () => contacts,
     messages: () => new FakeMessageRepository({ contacts }),
+    notes: () => new FakeContactNoteRepository({ contacts }),
     settings: () => new FakeSettingsRepository(),
     knowledge: () => new FakeKnowledgeRepository(),
     usage: () => new FakeUsageRepository({ contacts }),
@@ -143,6 +145,13 @@ describe('assembleUseCases', () => {
     'showTypingToCustomer',
     'setContactAi',
     'markContactRead',
+    'listContactNotes',
+    'addContactNote',
+    'deleteContactNote',
+    'handleRichMenuAction',
+    'sendWelcome',
+    'publishRichMenu',
+    'removeRichMenu',
     'listContacts',
     'getContact',
     'getMessages',
@@ -250,14 +259,12 @@ describe('realPortFactories', () => {
     const target = await ports.storage.issueUpload({
       key: 'out/abc/original.jpg' as StorageKey,
       contentType: 'image/jpeg',
-      maxSizeBytes: 100,
+      sizeBytes: 100,
       expiresAt: new Date(Date.now() + 60_000),
     });
     expect(target.ok && target.value.strategy).toBe('http_put');
     if (!target.ok || target.value.strategy !== 'http_put') return;
-    expect(
-      target.value.url.startsWith('http://localhost:3000/api/local-storage/out/abc/original.jpg?'),
-    ).toBe(true);
+    expect(target.value.url.startsWith('/api/local-storage/out/abc/original.jpg?')).toBe(true);
     expect(target.value.url).not.toContain(encodeURIComponent(e.sessionSecret));
   });
 

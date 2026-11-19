@@ -2,7 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import type { ContactId } from '@/core/domain';
 import { JSON_MAX_BODY_BYTES, PDF_MAX_BYTES, WEBHOOK_MAX_BODY_BYTES } from '@/core/domain';
-import { getMessagesQuerySchema, listContactsQuerySchema, unlockBodySchema } from '@/contracts';
+import {
+  SEQ_MAX,
+  addContactNoteBodySchema,
+  getMessagesQuerySchema,
+  listContactsQuerySchema,
+  sendMessageBodySchema,
+  testTopicGuardBodySchema,
+  unlockBodySchema,
+  updateSettingsBodySchema,
+} from '@/contracts';
 import {
   PDF_UPLOAD_MAX_BODY_BYTES,
   bodyStream,
@@ -131,6 +140,44 @@ describe('parseJsonBody', () => {
     const big = JSON.stringify({ code: 'x'.repeat(JSON_MAX_BODY_BYTES) });
     const r = await parseJsonBody(unlockBodySchema, jsonRequest(big));
     expect(r).toMatchObject({ ok: false, error: { code: 'request.too_large' } });
+  });
+});
+
+describe('U+0000 in a request string', () => {
+  const NUL = '\u0000';
+  it.each([
+    ['a note', addContactNoteBodySchema, { text: `a${NUL}b` }],
+    ['a text message', sendMessageBodySchema, { id: crypto.randomUUID(), kind: 'text', text: NUL }],
+    ['the AI instructions', updateSettingsBodySchema, { aiInstructions: `x${NUL}` }],
+    ['the AI name', updateSettingsBodySchema, { aiName: `x${NUL}` }],
+    ['a topic', updateSettingsBodySchema, { guardTopics: [`ราคา${NUL}`] }],
+    ['the how-to text', updateSettingsBodySchema, { howToText: NUL }],
+    ['the guard test text', testTopicGuardBodySchema, { text: `t${NUL}` }],
+    ['the access code', unlockBodySchema, { code: `c${NUL}` }],
+  ] as const)('answers request.invalid for %s in a JSON body', async (_label, schema, body) => {
+    const any: z.ZodType = schema;
+    expect(await parseJsonBody(any, jsonRequest(JSON.stringify(body)))).toEqual({
+      ok: false,
+      error: { code: 'request.invalid' },
+    });
+  });
+
+  it('answers request.invalid for the search query and a path param', () => {
+    const r = parseQuery(listContactsQuerySchema, new Request(`${URL_BASE}/api/contacts?q=a%00b`));
+    expect(r).toMatchObject({ ok: false, error: { code: 'request.invalid' } });
+    expect(parseParams(z.strictObject({ id: z.string() }), { id: NUL })).toMatchObject({
+      ok: false,
+      error: { code: 'request.invalid' },
+    });
+  });
+});
+
+describe('sequence strings', () => {
+  it('accept the Postgres bigint maximum and refuse anything above it', () => {
+    const at = (seq: string) => new Request(`${URL_BASE}/api/contacts?afterUpdatedSeq=${seq}`);
+    expect(parseQuery(listContactsQuerySchema, at(SEQ_MAX.toString())).ok).toBe(true);
+    expect(parseQuery(listContactsQuerySchema, at((SEQ_MAX + 1n).toString())).ok).toBe(false);
+    expect(parseQuery(listContactsQuerySchema, at('9999999999999999999')).ok).toBe(false);
   });
 });
 

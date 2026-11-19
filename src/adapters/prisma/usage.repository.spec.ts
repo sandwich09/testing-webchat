@@ -11,6 +11,6 @@ afterAll(() => client.$disconnect());
 
 describeUsageRepositorySuite(async () => {
   // AiUsage references Contact and Message, so all three start empty.
-  await client.$executeRaw`TRUNCATE TABLE "AiUsage", "Message", "Contact"`;
+  await client.$executeRaw`TRUNCATE TABLE "AiUsage", "Message", "ContactNote", "Contact"`;
   return { usage: createUsageRepository(client), contacts: createContactRepository(client) };
 });

@@ -8,7 +8,7 @@ import type { ErrorMessageCode } from '@/common/error-messages';
 import type { MessageDto, SendMessageBody } from '@/contracts';
 
 import type { MessagesPage } from './inbox.api';
-import { mergeThread, sortMessages, type ThreadMessage } from './inbox.logic';
+import { mergeThread, oldestSeq, sortMessages, type ThreadMessage } from './inbox.logic';
 
 // ---------------------------------------------------------------------------
 // Thread cache (ui-screens 7.3)
@@ -21,20 +21,52 @@ function isLocalRow(row: ThreadMessage): boolean {
   return row.seq === null || row.localState !== undefined;
 }
 
+/** Highest `seq` of the rows the server has sent, or undefined. */
+function newestSeq(items: readonly ThreadMessage[]): bigint | undefined {
+  let newest: bigint | undefined;
+  for (const item of items) {
+    if (item.seq !== null && (newest === undefined || BigInt(item.seq) > newest)) {
+      newest = BigInt(item.seq);
+    }
+  }
+  return newest;
+}
+
 /**
- * State after loading the latest page. On a reload the server rows are replaced, while rows that
- * have no `seq` yet (being sent) are kept and merged back. The cursor never moves back.
+ * State after loading the latest page. On a reload (tab shown again, connection back) the page is
+ * merged into what is loaded, so older pages, `hasOlder` and the reader's place stay. When the
+ * page does not reach the newest loaded row, rows in between are unknown: the loaded server rows
+ * are then dropped (rows being sent stay) rather than shown with a gap. The cursor never moves back.
  */
 export function threadFromFirstPage(
   page: MessagesPage,
   previous: ThreadState | undefined,
 ): ThreadState {
-  const kept = previous === undefined ? [] : previous.items.filter(isLocalRow);
+  if (previous === undefined) {
+    return {
+      items: mergeThread([], page.messages),
+      hasOlder: page.hasOlder ?? false,
+      cursor: page.highWater,
+    };
+  }
+  const loadedNewest = newestSeq(previous.items);
+  const pageOldest = page.messages.reduce<bigint | undefined>((low, m) => {
+    const seq = BigInt(m.seq);
+    return low === undefined || seq < low ? seq : low;
+  }, undefined);
+  const overlaps =
+    loadedNewest === undefined ||
+    !(page.hasOlder ?? false) ||
+    (pageOldest !== undefined && pageOldest <= loadedNewest);
+  const kept = overlaps ? previous.items : previous.items.filter(isLocalRow);
+  // Older pages were loaded: their `hasOlder` still holds; otherwise the fresh page's does.
+  const loadedOldest = oldestSeq(previous.items);
+  const reachesOlder =
+    loadedOldest !== undefined && pageOldest !== undefined && BigInt(loadedOldest) < pageOldest;
   return {
     items: mergeThread(kept, page.messages),
-    hasOlder: page.hasOlder ?? false,
-    cursor:
-      previous === undefined ? page.highWater : advanceCursor(previous.cursor, page.highWater),
+    hasOlder: overlaps && reachesOlder ? previous.hasOlder : (page.hasOlder ?? false),
+    cursor: advanceCursor(previous.cursor, page.highWater),
   };
 }
 
@@ -134,6 +166,7 @@ export function optimisticMessage(
     sticker: null,
     otherKind: null,
     eventCode: null,
+    quote: null,
     delivery: { status: 'pending', errorCode: null, retryExpiresAt: null },
     createdAt,
     sentAt: null,

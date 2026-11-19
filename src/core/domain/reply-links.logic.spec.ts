@@ -80,7 +80,7 @@ describe('disallowedLinks', () => {
     ['แผนที่ https://maps.example.com/shop?id=43', ['https://maps.example.com/shop?id=43']],
     ['ร้านปลอม https://notshop-example.co.th/order', ['https://notshop-example.co.th/order']],
     ['อันนี้ได้ https://shop-example.co.th/menu แต่อันนี้ไม่ได้ www.evil.example', ['www.evil.example']],
-  ])('blocks a link the shop never wrote: %j', (reply, expected) => {
+  ])('blocks a link the admin never wrote: %j', (reply, expected) => {
     expect(blocked(reply)).toEqual(expected);
   });
 

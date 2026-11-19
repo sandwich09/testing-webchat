@@ -31,13 +31,16 @@ const isNotFound = (error: unknown): boolean => error instanceof ApiError && err
 
 /** GET /api/contacts/:id, polled while the chat is open. Stops polling on 404 (`thread-not-found`). */
 export function useContactDetail(contactId: string) {
-  const { intervalMs } = usePollingInterval();
+  const { intervalFor } = usePollingInterval();
+  const key = qk.contact(contactId);
   return useQuery({
-    queryKey: qk.contact(contactId),
-    queryFn: ({ signal }) => trackPoll(pollController, () => getContact(contactId, signal), signal),
+    queryKey: key,
+    queryFn: ({ signal }) =>
+      trackPoll(pollController, key, () => getContact(contactId, signal), signal),
     staleTime: 0,
     retry: 0,
-    refetchInterval: (query) => (isNotFound(query.state.error) ? false : intervalMs),
+    refetchInterval: (query) =>
+      isNotFound(query.state.error) ? false : intervalFor(query.queryKey),
     refetchIntervalInBackground: false,
   });
 }
@@ -116,7 +119,7 @@ function useMarkRead(contactId: string): () => void {
  */
 export function useThread(contactId: string) {
   const client = useQueryClient();
-  const { intervalMs } = usePollingInterval();
+  const { intervalFor } = usePollingInterval();
   const key = qk.messages(contactId);
   const query = useQuery({
     queryKey: key,
@@ -130,7 +133,7 @@ export function useThread(contactId: string) {
     ),
     staleTime: 0,
     retry: 0,
-    refetchInterval: (q) => (isNotFound(q.state.error) ? false : intervalMs),
+    refetchInterval: (q) => (isNotFound(q.state.error) ? false : intervalFor(q.queryKey)),
     refetchIntervalInBackground: false,
   });
 
@@ -142,8 +145,19 @@ export function useThread(contactId: string) {
 
   const [isFetchingOlder, setFetchingOlder] = useState(false);
   const loadingOlder = useRef(false);
+  /**
+   * The cache gets an older page at once, but the rows reach React a render later. The request
+   * counts as running until they do, so MessageList keeps the reader's line until the rows it
+   * anchors on are on screen.
+   */
+  const waitForCache = useRef<ThreadState | null>(null);
   const items = query.data?.items;
   const hasOlder = query.data?.hasOlder ?? false;
+  const endOlder = useCallback(() => {
+    waitForCache.current = null;
+    loadingOlder.current = false;
+    setFetchingOlder(false);
+  }, []);
   const fetchOlder = useCallback(() => {
     const beforeSeq = items === undefined ? undefined : oldestSeq(items);
     if (loadingOlder.current || !hasOlder || beforeSeq === undefined) return;
@@ -151,16 +165,21 @@ export function useThread(contactId: string) {
     setFetchingOlder(true);
     getMessages(contactId, { beforeSeq })
       .then((page) => {
-        client.setQueryData<ThreadState>(qk.messages(contactId), (state) =>
+        const before = client.getQueryData<ThreadState>(qk.messages(contactId));
+        const after = client.setQueryData<ThreadState>(qk.messages(contactId), (state) =>
           state === undefined ? state : applyOlderPage(state, page),
         );
+        if (after === undefined || after === before) endOlder();
+        else waitForCache.current = after;
       })
-      .catch(() => undefined) // the next scroll to the top asks again
-      .finally(() => {
-        loadingOlder.current = false;
-        setFetchingOlder(false);
-      });
-  }, [client, contactId, items, hasOlder]);
+      .catch(endOlder); // the next scroll to the top asks again
+  }, [client, contactId, items, hasOlder, endOlder]);
+  useEffect(() => {
+    // The older page is in the rows React renders now (or a later state that contains it).
+    if (waitForCache.current !== null && query.data !== undefined) {
+      if (query.data.items.length >= waitForCache.current.items.length) endOlder();
+    }
+  }, [query.data, endOlder]);
 
   return {
     items: items ?? [],
