@@ -1,0 +1,99 @@
+name: ai-eval
+
+# The AI quality question set (docs/specs/ai-prompt.md section 8). It calls the real Claude API
+# and costs money, so it never runs on its own: someone with write access starts it by hand and
+# ticks "confirm". Left unticked, the run ends without calling anything.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Call the real Claude API for every selectable model (costs money)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-eval
+  cancel-in-progress: false
+
+env:
+  TZ: UTC
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - name: Check the confirmation and the API key
+        id: check
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_EVAL }}
+        # The key check lists one model, which is not billed. A key that has expired or was
+        # revoked answers 401, so the run stops here with a clear message before any paid call.
+        run: |
+          if [ "$CONFIRM" != "true" ]; then
+            echo "::notice::confirm is not ticked, so nothing was called. Run again with confirm ticked to start the question set."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::The secret ANTHROPIC_API_KEY_EVAL is not set. Add a Claude API key under Settings, Secrets and variables, Actions."
+            exit 1
+          fi
+          STATUS=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 30 \
+            -H "x-api-key: $ANTHROPIC_API_KEY" -H "anthropic-version: 2023-06-01" \
+            "https://api.anthropic.com/v1/models?limit=1" || true)
+          case "$STATUS" in
+            200)
+              echo "::notice::The API key works. Starting the question set."
+              echo "run=true" >> "$GITHUB_OUTPUT"
+              ;;
+            401)
+              echo "::error::The API key in ANTHROPIC_API_KEY_EVAL has expired or is not valid (HTTP 401). Create a new key, update the secret and run again. Nothing was billed."
+              exit 1
+              ;;
+            403)
+              echo "::error::The API key in ANTHROPIC_API_KEY_EVAL is not allowed to use the API (HTTP 403). Check the key's workspace and permissions. Nothing was billed."
+              exit 1
+              ;;
+            *)
+              echo "::error::Could not check the API key (HTTP $STATUS). Nothing was billed. Try again later."
+              exit 1
+              ;;
+          esac
+
+  eval:
+    needs: preflight
+    if: needs.preflight.outputs.run == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      # One model at a time, and a failure of one model does not stop the others.
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        # Every model the settings page offers (AI_MODEL_IDS); e2e/workflows.unit.ts keeps them equal.
+        model: [claude-opus-5-5, claude-sonnet-5-5, claude-haiku-5-5]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Run the question set
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_EVAL }}
+          MODEL: ${{ matrix.model }}
+        run: pnpm ai:eval -- --confirm --model "$MODEL"
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ai-quality-${{ matrix.model }}
+          path: docs/qa/ai-quality-*.md
+          if-no-files-found: warn
+          retention-days: 30
