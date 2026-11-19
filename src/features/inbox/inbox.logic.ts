@@ -441,7 +441,11 @@ export function sniffMediaType(head: Uint8Array): MediaKind {
     const brand = ascii(head, 8, 12);
     if (['heic', 'heix', 'mif1', 'msf1'].includes(brand)) return 'heic';
     if (brand === 'qt  ') return 'mov';
-    if (['isom', 'iso2', 'mp41', 'mp42', 'avc1', 'M4V '].includes(brand)) return 'mp4';
+    // Audio-only MPEG-4 and AVIF share the box layout but are neither a video nor an accepted image.
+    if (['M4A ', 'M4B ', 'avif', 'avis'].includes(brand)) return 'unknown';
+    // Every other brand is an MPEG-4 video, as the server reads it (sniffContentType). A list of
+    // known brands turned away valid files: phones and encoders write iso4, iso5, iso6, mp4v...
+    return 'mp4';
   }
   return 'unknown';
 }

@@ -10,8 +10,11 @@ export type SleepFn = (ms: number) => Promise<void>;
 export const defaultSleep: SleepFn = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export type LineOutcome =
-  /** 2xx; the body is not read yet. */
-  | { kind: 'ok'; response: Response }
+  /**
+   * 2xx; the body is not read yet. `signal` is the attempt's timeout: it fires `timeoutMs` after
+   * the attempt started, so a caller that reads a long body can bound that read with it too.
+   */
+  | { kind: 'ok'; response: Response; signal: AbortSignal }
   /** Any other status; the (small) error body has been read and released. */
   | { kind: 'error'; status: number; headers: Headers; message: string | null }
   | { kind: 'timeout' }
@@ -103,15 +106,18 @@ const errorMessage = async (response: Response): Promise<string | null> => {
 };
 
 const attemptOnce = async (fetchFn: FetchFn, req: LineRequest): Promise<LineOutcome> => {
+  const signal = AbortSignal.timeout(req.timeoutMs);
   try {
     const response = await fetchFn(req.url, {
       ...req.init,
       // A redirect could leave the fixed LINE host; never follow one. The 3xx comes back as an
       // ordinary error answer, which is not retried.
       redirect: 'manual',
-      signal: AbortSignal.timeout(req.timeoutMs),
+      signal,
     });
-    if (response.status >= 200 && response.status < 300) return { kind: 'ok', response };
+    if (response.status >= 200 && response.status < 300) {
+      return { kind: 'ok', response, signal };
+    }
     return {
       kind: 'error',
       status: response.status,

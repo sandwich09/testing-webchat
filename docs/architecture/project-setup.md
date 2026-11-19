@@ -1140,10 +1140,13 @@ Environment variable ตั้งเฉพาะ Production ตาม [deploy](.
 | `AI_STUCK_AFTER_MS` | 300000 ms | `constants.ts` | `aiState = replying` ที่เก่ากว่านี้ถือว่าค้าง ต้องมากกว่าเวลาแย่ที่สุดของงาน `GenerateAiReply` ทั้งงาน (หัวข้อ 10.4 "เวลาแย่ที่สุด") เพื่อให้จริงทั้งบน Vercel และใน Docker ที่ไม่มีเพดานเวลาของ function และไม่น้อยกว่า `WEBHOOK_MAX_DURATION_S` |
 | `KNOWLEDGE_STUCK_AFTER_MS` | 360000 ms | `constants.ts` | `KbDocument` ที่ `processing` และ `updatedAt` เก่ากว่านี้เป็น `failed` ด้วย `knowledge.extract_interrupted` ทุกครั้งที่ `ListDocuments` ทำงาน ([knowledge-base](../specs/knowledge-base.md#ไฟล์ที่ค้าง-กำลังอ่านไฟล์)) ต้องมากกว่า `KNOWLEDGE_MAX_DURATION_S` และเวลาแย่ที่สุดของการแปลง |
 | `MEDIA_STUCK_AFTER_MS` | 360000 ms | `constants.ts` | สื่อขาเข้าที่ `mediaStatus = pending` และ `createdAt` เก่ากว่านี้เป็น `failed` ทุกครั้งที่ `GetMessages` ทำงาน ([line-messaging](../specs/line-messaging.md#สื่อขาเข้า)) ต้องมากกว่า `WEBHOOK_MAX_DURATION_S` และเวลาแย่ที่สุดของการดาวน์โหลด |
-| `MEDIA_JOB_BUDGET_MS` | 255000 ms | `constants.ts` | เวลาสูงสุดของงาน `StoreInboundMedia` นับจากการดาวน์โหลดครั้งแรก งานเริ่มขั้นถัดไปเฉพาะเมื่อเวลาที่ใช้ไปแล้วรวมเวลาแย่ที่สุดของทุกขั้นที่เหลือไม่เกินค่านี้ ([use-cases StoreInboundMedia](use-cases.md#storeinboundmedia)) ต้องไม่น้อยกว่าวิดีโอที่พร้อมทันที (original และภาพตัวอย่าง) และอยู่ในงบของ webhook (หัวข้อ 10.4 "เวลาแย่ที่สุด") |
+| `MEDIA_JOB_BUDGET_MS` | 255000 ms | `constants.ts` | เวลาสูงสุดของงาน `StoreInboundMedia` นับจากเริ่มงาน งานเริ่มขั้นถัดไปเฉพาะเมื่อเวลาที่ใช้ไปแล้วรวมเวลาแย่ที่สุดของทุกขั้นที่เหลือไม่เกินค่านี้ และงานที่ยังไม่จบเมื่อถึงค่านี้ถูกตัดเป็น `failed` (`interrupted`) ทันที ([use-cases StoreInboundMedia](use-cases.md#storeinboundmedia), [ADR 0033](../adr/0033-buffer-inbound-media-and-stage-deadlines.md)) ต้องไม่น้อยกว่าไฟล์ที่พร้อมทันทีพร้อมการเก็บ (`MEDIA_CONTENT_CALL_WORST_MS` + `MEDIA_STORE_CALL_WORST_MS`) และอยู่ในงบของ webhook (หัวข้อ 10.4 "เวลาแย่ที่สุด") |
 | `MEDIA_CONTENT_CALL_WORST_MS` | 100000 ms | `constants.ts` | ค่าสำรองของการดาวน์โหลดไฟล์จาก LINE หนึ่งครั้งที่แกนกลางใช้คิดงบ ต้องไม่น้อยกว่าเวลาแย่ที่สุดของ adapter (`LINE_CONTENT_TIMEOUT_MS` × 3 + `LINE_RETRY_AFTER_MAX_MS` × 2) |
 | `MEDIA_STATUS_CALL_WORST_MS` | 5000 ms | `constants.ts` | ค่าสำรองของการถามสถานะ transcoding หนึ่งครั้ง ต้องไม่น้อยกว่า `LINE_REQUEST_TIMEOUT_MS` (เรียกครั้งเดียว ไม่ retry) |
 | `MEDIA_NOT_READY_POLL_MS` | 5000 ms | `constants.ts` | เวลารอก่อนถามสถานะแต่ละครั้งเมื่อ LINE ตอบ 202 ว่ายังเตรียมไฟล์ไม่เสร็จ |
+| `STORAGE_PUT_TIMEOUT_MS` | 60000 ms | `constants.ts` | `FileStorage.put` ของ Vercel Blob หนึ่งครั้งหลังอ่านไฟล์เข้าหน่วยความจำแล้ว รวมการลองใหม่ของ SDK (ส่ง `abortSignal` และคืน `storage.unavailable` เมื่อครบแม้ SDK ไม่หยุด) การอ่าน stream ต้นทางไม่นับในค่านี้ |
+| `STORAGE_CALL_TIMEOUT_MS` | 10000 ms | `constants.ts` | `inspect` ทั้งการเรียก (`head` และการอ่าน 16 byte แรก) และ `delete` ของ Vercel Blob |
+| `MEDIA_STORE_CALL_WORST_MS` | 70000 ms (`STORAGE_PUT_TIMEOUT_MS` + `STORAGE_CALL_TIMEOUT_MS`) | `constants.ts` | ค่าสำรองของการเก็บและตรวจไฟล์ขาเข้าหนึ่งไฟล์ที่แกนกลางใช้คิดงบ ต้องไม่น้อยกว่าเวลาแย่ที่สุดของ adapter |
 | `SEND_STUCK_AFTER_MS` | 360000 ms | `constants.ts` | ข้อความขาออกที่ `deliveryStatus = pending` และเริ่มส่งรอบนี้ก่อนช่วงนี้เป็น `failed` ด้วย `line.send_interrupted` ทุกครั้งที่ `GetMessages` ทำงาน ([line-messaging](../specs/line-messaging.md#งานส่งที่ค้าง)) ต้องมากกว่า `WEBHOOK_MAX_DURATION_S` และเวลาแย่ที่สุดของการส่ง |
 | `AI_MAX_TOKENS` | 16000 | `constants.ts` | `max_tokens` ของการตอบแชท (คำขอแบบไม่ stream) |
 | `AI_EXTRACT_MAX_TOKENS` | 64000 | `constants.ts` | `max_tokens` ของการแปลง PDF (คำขอแบบ stream) |
@@ -1230,7 +1233,8 @@ Rate limit ทั้งหมดเป็นแบบหน้าต่างค
 | --- | --- | --- | --- |
 | `LINE_REQUEST_TIMEOUT_MS` | 5000 ms | `src/adapters/line/line.constants.ts` | ทุกการเรียก LINE ยกเว้นโปรไฟล์และไฟล์ |
 | `LINE_PROFILE_TIMEOUT_MS` | 3000 ms | `line.constants.ts` | `getProfile` ไม่ retry เพราะเรียกก่อนตอบ webhook |
-| `LINE_CONTENT_TIMEOUT_MS` | 30000 ms | `line.constants.ts` | ดาวน์โหลดสื่อขาเข้า |
+| `LINE_CONTENT_TIMEOUT_MS` | 30000 ms | `line.constants.ts` | ดาวน์โหลดสื่อขาเข้าหนึ่งรอบ ครอบทั้งคำตอบและ body adapter ตัด body เองเมื่อหมดเวลา ไม่พึ่ง fetch |
+| `LINE_CONTENT_IDLE_TIMEOUT_MS` | 10000 ms | `line.constants.ts` | body ของสื่อขาเข้าที่ไม่มี chunk ใหม่นานเท่านี้ขณะผู้อ่านรออยู่ถูกตัด จบรอบก่อน `LINE_CONTENT_TIMEOUT_MS` เท่านั้น จึงไม่เพิ่มเวลาแย่ที่สุด |
 | `LINE_MAX_RETRIES` | 2 | `line.constants.ts` | retry เฉพาะเครือข่ายล่ม, 5xx และ 429 |
 | `LINE_LOADING_MAX_RETRIES` | 0 | `line.constants.ts` | `showLoading` ไม่ retry เพราะความล้มเหลวของมันแค่ถูก log |
 | `LINE_RETRY_BASE_DELAY_MS` | 250 ms | `line.constants.ts` | เวลารอก่อน retry ครั้งที่ n (เริ่มที่ 1) เมื่อ LINE ไม่ส่ง `Retry-After`: ค่านี้ × 2^(n-1) |
@@ -1244,7 +1248,7 @@ Rate limit ทั้งหมดเป็นแบบหน้าต่างค
 | `CLAUDE_RETRY_WAIT_MAX_MS` | 1000 ms | `claude.constants.ts` | เวลาที่เผื่อก่อน retry แต่ละครั้งภายในเวลาสูงสุดของการเรียก `callDeadlineMs` = timeout × (1 + retry) + ค่านี้ × retry ([domain-and-ports](domain-and-ports.md#เวลาสูงสุดของการเรียกหนึ่งครั้ง)) backoff ของ SDK ก่อน retry ครั้งแรกไม่เกิน 500 ms ส่วน `Retry-After` ที่ยาวกว่านั้นทำให้การเรียกจบด้วย `ai.no_response` |
 | `WEBHOOK_MAX_DURATION_S` | 300 (ต้องยืนยันกับ Vercel) | `app/api/line/webhook/route.ts` (`maxDuration`) | หัวข้อ 4 (เดิม 120 ซึ่งสองรอบของ AI ไม่พอดี) ใช้เพดานเดียวกับ route PDF |
 | `KNOWLEDGE_MAX_DURATION_S` | 300 (ต้องยืนยันกับ Vercel) | `app/api/knowledge/documents/**/route.ts` (`maxDuration`) | หัวข้อ 4 |
-| `JOB_BUDGET_SHARE` | 0.9 | `src/composition/timing-budget.ts` | สัดส่วนของ `maxDuration` ที่เวลาแย่ที่สุดของงานใช้ได้ ส่วนที่เหลือเผื่อสิ่งที่ไม่มี timeout ของตัวเอง: ฐานข้อมูล (รวม Neon ตื่นจากการหลับ), ที่เก็บไฟล์ และงานก่อนตอบ |
+| `JOB_BUDGET_SHARE` | 0.9 | `src/composition/timing-budget.ts` | สัดส่วนของ `maxDuration` ที่เวลาแย่ที่สุดของงานใช้ได้ ส่วนที่เหลือเผื่อสิ่งที่ไม่มี timeout ของตัวเอง: ฐานข้อมูล (รวม Neon ตื่นจากการหลับ), ที่เก็บไฟล์แบบดิสก์ในเครื่อง และงานก่อนตอบ (การเรียก Vercel Blob มีเพดานของตัวเองตั้งแต่ [ADR 0033](../adr/0033-buffer-inbound-media-and-stage-deadlines.md)) |
 
 #### เวลาแย่ที่สุด
 
@@ -1255,9 +1259,11 @@ Rate limit ทั้งหมดเป็นแบบหน้าต่างค
 | ส่งข้อความของ AI หนึ่งชิ้น | reply ที่ token ถูกปฏิเสธหลังลองครบ (25 วินาที) แล้ว push (25 วินาที) | 50 วินาที | |
 | หนึ่งรอบของ AI (ขอบเขตหัวข้อเปิด) | loading 5 + คัดกรอง `callDeadlineMs(10000, 1)` 21 + ตอบแชท `callDeadlineMs(25000, 1)` 51 + ส่ง 50 | 127 วินาที | |
 | งาน `GenerateAiReply` ทั้งงาน | `AI_DEBOUNCE_MS` × `AI_MAX_ROUNDS_PER_RUN` + หนึ่งรอบ × `AI_MAX_ROUNDS_PER_RUN` = 2.5 × 2 + 127 × 2 | 259 วินาที | น้อยกว่า `AI_STUCK_AFTER_MS` (300 วินาที) |
-| ดาวน์โหลดไฟล์จาก LINE หนึ่งครั้ง | `LINE_CONTENT_TIMEOUT_MS` × 3 + 5 × 2 | 100 วินาที | ไม่เกิน `MEDIA_CONTENT_CALL_WORST_MS` |
+| ดาวน์โหลดไฟล์จาก LINE หนึ่งครั้ง | `LINE_CONTENT_TIMEOUT_MS` × 3 + 5 × 2 (body อยู่ในเวลาของรอบที่ได้คำตอบ) | 100 วินาที | ไม่เกิน `MEDIA_CONTENT_CALL_WORST_MS` |
+| เก็บและตรวจไฟล์หนึ่งไฟล์ | `STORAGE_PUT_TIMEOUT_MS` + `STORAGE_CALL_TIMEOUT_MS` (`mediaStoreWorstMs`) | 70 วินาที | ไม่เกิน `MEDIA_STORE_CALL_WORST_MS` |
+| ไฟล์ที่ LINE ให้ได้ทันที (รูป เสียง วิดีโอที่ไม่มีภาพตัวอย่าง) | ดาวน์โหลด 100 + เก็บ 70 (`mediaFileJobWorstMs`) | 170 วินาที | ไม่เกิน `MEDIA_JOB_BUDGET_MS` |
 | ถามสถานะ transcoding หนึ่งครั้ง | `LINE_REQUEST_TIMEOUT_MS` ไม่ retry | 5 วินาที | ไม่เกิน `MEDIA_STATUS_CALL_WORST_MS` |
-| งาน `StoreInboundMedia` | วิดีโอที่พร้อมทันที: original + ภาพตัวอย่าง = 200 วินาที เมื่อ LINE ตอบ 202 งานรอ `MEDIA_NOT_READY_POLL_MS` และถามสถานะเฉพาะเมื่อเวลาที่ใช้ไป + 5 + 5 + การดาวน์โหลดที่เหลือไม่เกินงบ | `MEDIA_JOB_BUDGET_MS` 255 วินาที | น้อยกว่า `MEDIA_STUCK_AFTER_MS` |
+| งาน `StoreInboundMedia` | ตัดที่ `MEDIA_JOB_BUDGET_MS` เสมอ (เพดานแข็ง ไม่ใช่ค่าประมาณ) ภาพตัวอย่างของวิดีโอดึงเมื่องบที่เหลือยังพอสำหรับดาวน์โหลดและเก็บอีกชุด (170 วินาที) เมื่อ LINE ตอบ 202 งานรอ `MEDIA_NOT_READY_POLL_MS` และถามสถานะเฉพาะเมื่อเวลาที่ใช้ไป + 5 + 5 + 100 + 70 ไม่เกินงบ | `MEDIA_JOB_BUDGET_MS` 255 วินาที | ไม่เกิน 0.9 × `WEBHOOK_MAX_DURATION_S` และน้อยกว่า `MEDIA_STUCK_AFTER_MS` |
 | งานดึงโปรไฟล์ใหม่ (`RefreshContactProfile`) | `LINE_PROFILE_TIMEOUT_MS` 3 ไม่ retry | 3 วินาที | สั้นกว่างาน AI และงานสื่อ จึงไม่เปลี่ยนเวลาแย่ที่สุดของ webhook (`profileRefreshJobWorstMs`) |
 | Webhook ทั้งคำขอ | โปรไฟล์ `LINE_PROFILE_TIMEOUT_MS` 3 + งานที่นานที่สุด (งานใน `after()` ทำพร้อมกัน: AI, สื่อ หรือดึงโปรไฟล์ใหม่) | 262 วินาที (267 เมื่อ `AI_DEBOUNCE_MS` = 5000) | ไม่เกิน 0.9 × `WEBHOOK_MAX_DURATION_S` = 270 วินาที |
 | แปลง PDF | `callDeadlineMs(120000, 1)` 241 + count_tokens `callDeadlineMs(10000, 1)` 21 | 262 วินาที | ไม่เกิน 0.9 × `KNOWLEDGE_MAX_DURATION_S` = 270 วินาที และน้อยกว่า `KNOWLEDGE_STUCK_AFTER_MS` |

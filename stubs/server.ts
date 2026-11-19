@@ -32,6 +32,8 @@ const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0
 const MIB = 1024 * 1024;
 const BIG_IMAGE_BYTES = 11 * MIB;
 const BIG_VIDEO_BYTES = 51 * MIB;
+/** A phone photo: several 64 KiB chunks with a Content-Length, generated on the fly. */
+const PHOTO_BYTES = 3 * MIB;
 const STREAM_CHUNK_BYTES = 64 * 1024;
 
 const INVALID_LINE_TOKEN = 'stub-invalid-token';
@@ -146,7 +148,13 @@ type Payload =
   | { kind: 'json'; value: unknown }
   | { kind: 'bytes'; contentType: string; data: Buffer; contentLength: boolean }
   | { kind: 'sse'; text: string }
-  | { kind: 'stream'; contentType: string; head: Buffer; totalBytes: number };
+  | {
+      kind: 'stream';
+      contentType: string;
+      head: Buffer;
+      totalBytes: number;
+      contentLength: boolean;
+    };
 
 type Reply = {
   status: number;
@@ -508,14 +516,30 @@ async function fileReply(name: string, contentType: string): Promise<Reply> {
   return bytesReply(contentType, data);
 }
 
-function streamReply(contentType: string, head: Buffer, totalBytes: number): Reply {
-  // No Content-Length on purpose: the app must enforce its size limit while reading.
+function streamReply(
+  contentType: string,
+  head: Buffer,
+  totalBytes: number,
+  contentLength = false,
+): Reply {
+  // No Content-Length by default: the app must enforce its size limit while reading.
   return {
     status: 200,
     headers: {},
-    payload: { kind: 'stream', contentType, head, totalBytes },
+    payload: { kind: 'stream', contentType, head, totalBytes, contentLength },
     delayMs: 0,
   };
+}
+
+/**
+ * A real JPEG padded with zeros after its end marker (decoders ignore trailing bytes), sent in
+ * STREAM_CHUNK_BYTES chunks with a Content-Length: the size of a phone photo, without a large
+ * file in the repository.
+ */
+async function photoReply(): Promise<Reply> {
+  const data = await readAsset('tiny.jpg');
+  if (data === undefined) return MISSING_ASSET();
+  return streamReply('image/jpeg', data, PHOTO_BYTES, true);
 }
 
 /** Uses one "not ready" answer of a message set with POST /__control/line/transcoding. */
@@ -543,6 +567,7 @@ async function contentReply(messageId: string): Promise<Reply> {
   }
   if (messageId.startsWith('bigimg')) return streamReply('image/jpeg', JPEG_HEAD, BIG_IMAGE_BYTES);
   if (messageId.startsWith('bigvid')) return streamReply('video/mp4', MP4_HEAD, BIG_VIDEO_BYTES);
+  if (messageId.startsWith('photo')) return photoReply();
   if (messageId.startsWith('fakeimg')) return bytesReply('image/jpeg', Buffer.from('not an image'));
   if (messageId.startsWith('img')) return fileReply('tiny.jpg', 'image/jpeg');
   if (messageId.startsWith('vid')) return fileReply('tiny.mp4', 'video/mp4');
@@ -1730,7 +1755,11 @@ function send(res: ServerResponse, reply: Reply): void {
     });
     res.end(payload.text);
   } else {
-    res.writeHead(reply.status, { ...reply.headers, 'content-type': payload.contentType });
+    res.writeHead(reply.status, {
+      ...reply.headers,
+      'content-type': payload.contentType,
+      ...(payload.contentLength ? { 'content-length': payload.totalBytes } : {}),
+    });
     pipeline(Readable.from(chunksOf(payload.head, payload.totalBytes)), res, () => undefined);
   }
 }

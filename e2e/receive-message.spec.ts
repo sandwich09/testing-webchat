@@ -103,6 +103,13 @@ test('journey 1: a new customer and their messages show up in the inbox', async 
   await expect(ready).toHaveCount(1);
   await expect(ready.locator('img')).toBeVisible();
 
+  // 1.11b: a photo the size of one from a phone (3 MiB in 64 KiB chunks with a Content-Length)
+  // takes the same path to ready (ADR 0033: buffered before the upload).
+  const photo = await postLineWebhook(request, 'message-image-photo', nextEventVars(v));
+  expect(photo.status()).toBe(200);
+  await expect(ready).toHaveCount(2);
+  await expect(ready.last().locator('img')).toBeVisible();
+
   // 1.12
   const gone = await postLineWebhook(request, 'message-image-gone', nextEventVars(v));
   expect(gone.status()).toBe(200);

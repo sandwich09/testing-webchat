@@ -38,6 +38,8 @@ export interface LogFields {
   cacheWriteTokens?: number;
   costNanoUsd?: string;
   sizeBytes?: number;
+  /** Step of a job: only values from a stage union in the core (MediaStoreStage). */
+  stage?: string;
   pageCount?: number;
   tokenCount?: number;
   count?: number;
@@ -90,6 +92,9 @@ export type LogEvent =
   | 'line.welcome.skipped'
   | 'line.welcome.failed'
   // Media and uploads
+  | 'media.store.started'
+  | 'media.store.downloaded'
+  | 'media.store.uploaded'
   | 'media.store.succeeded'
   | 'media.store.failed'
   | 'media.store.not_ready'

@@ -9,6 +9,7 @@ const client = getPrismaClient(ADAPTER_TEST_DATABASE_URL);
 const clock: Clock = {
   now: () => new Date('2026-11-18T04:00:00.000Z'),
   sleep: () => Promise.resolve(),
+  startTimer: () => ({ fired: new Promise<void>(() => undefined), cancel: () => undefined }),
 };
 
 afterAll(() => client.$disconnect());

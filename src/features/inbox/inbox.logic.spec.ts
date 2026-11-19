@@ -583,7 +583,19 @@ describe('sniffMediaType', () => {
     for (const brand of ['isom', 'iso2', 'mp41', 'mp42', 'avc1', 'M4V ']) {
       expect(sniffMediaType(ftyp(brand)), brand).toBe('mp4');
     }
-    expect(sniffMediaType(ftyp('abcd'))).toBe('unknown');
+  });
+
+  // A 1080p H.264 file with the major brand iso5 was turned away on production.
+  it('reads any other video brand as MPEG-4, as the server does', () => {
+    for (const brand of ['iso4', 'iso5', 'iso6', 'mp4v', 'dash', 'abcd']) {
+      expect(sniffMediaType(ftyp(brand)), brand).toBe('mp4');
+    }
+  });
+
+  it('does not take audio-only MPEG-4 or AVIF for a video', () => {
+    for (const brand of ['M4A ', 'M4B ', 'avif', 'avis']) {
+      expect(sniffMediaType(ftyp(brand)), brand).toBe('unknown');
+    }
   });
 
   it('gives unknown for short or unrelated data', () => {

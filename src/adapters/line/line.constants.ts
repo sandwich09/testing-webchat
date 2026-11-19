@@ -4,8 +4,13 @@
 export const LINE_REQUEST_TIMEOUT_MS = 5000;
 /** `getProfile` runs before the webhook is answered, so it is short and never retried. */
 export const LINE_PROFILE_TIMEOUT_MS = 3000;
-/** Inbound media download, covering the whole body. */
+/**
+ * Inbound media download, one attempt: the answer and the whole body. The adapter cuts the body
+ * itself when this passes, whatever the fetch implementation does with its signal.
+ */
 export const LINE_CONTENT_TIMEOUT_MS = 30_000;
+/** Inbound media body: the read fails when no chunk arrives for this long. */
+export const LINE_CONTENT_IDLE_TIMEOUT_MS = 10_000;
 /** Automatic retries for network failures, 5xx and 429 only. */
 export const LINE_MAX_RETRIES = 2;
 /** `showLoading` is not retried: a failure there is only logged. */

@@ -15,8 +15,9 @@ export const AI_STUCK_AFTER_MS = 300_000;
 export const KNOWLEDGE_STUCK_AFTER_MS = 360_000;
 export const MEDIA_STUCK_AFTER_MS = 360_000;
 /**
- * Longest a StoreInboundMedia job may run, measured from its first download. A step whose worst
- * case would end past it is not started (timing-budget.spec.ts pins it under the webhook budget).
+ * Longest a StoreInboundMedia job may run, measured from its start. A step whose worst case would
+ * end past it is not started, and a job still running when it passes is stopped and marked
+ * `failed` (`interrupted`); timing-budget.spec.ts pins it under the webhook budget.
  */
 export const MEDIA_JOB_BUDGET_MS = 255_000;
 /** Reserve for one content download from LINE; not below the adapter's worst case. */
@@ -25,6 +26,15 @@ export const MEDIA_CONTENT_CALL_WORST_MS = 100_000;
 export const MEDIA_STATUS_CALL_WORST_MS = 5000;
 /** Wait before each transcoding status call while LINE prepares the content. */
 export const MEDIA_NOT_READY_POLL_MS = 5000;
+/**
+ * FileStorage `put` of a file the adapter already holds in memory: the whole upload call, its own
+ * retries included. Reading the source stream is not part of it (that is the download's time).
+ */
+export const STORAGE_PUT_TIMEOUT_MS = 60_000;
+/** Any other remote FileStorage call: a whole `inspect` (metadata and leading bytes) or `delete`. */
+export const STORAGE_CALL_TIMEOUT_MS = 10_000;
+/** Reserve for storing and inspecting one inbound file: a `put` and an `inspect` at their timeouts. */
+export const MEDIA_STORE_CALL_WORST_MS = STORAGE_PUT_TIMEOUT_MS + STORAGE_CALL_TIMEOUT_MS;
 export const SEND_STUCK_AFTER_MS = 360_000;
 export const AI_MAX_TOKENS = 16_000;
 export const AI_EXTRACT_MAX_TOKENS = 64_000;

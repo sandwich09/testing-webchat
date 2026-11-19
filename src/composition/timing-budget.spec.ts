@@ -7,6 +7,7 @@ import {
   MEDIA_JOB_BUDGET_MS,
   MEDIA_NOT_READY_POLL_MS,
   MEDIA_STATUS_CALL_WORST_MS,
+  MEDIA_STORE_CALL_WORST_MS,
   MEDIA_STUCK_AFTER_MS,
   SEND_STUCK_AFTER_MS,
 } from '@/core/domain';
@@ -23,12 +24,15 @@ import {
   aiRoundWorstMs,
   aiRunWorstMs,
   contentDownloadWorstMs,
+  contentIdleWorstMs,
   contentStatusWorstMs,
   deliverWorstMs,
   extractJobWorstMs,
   lineCallWorstMs,
   mediaDownloadsWorstMs,
+  mediaFileJobWorstMs,
   mediaJobWorstMs,
+  mediaStoreWorstMs,
   profileRefreshJobWorstMs,
   webhookWorstMs,
   guardTestWorstMs,
@@ -61,6 +65,9 @@ describe('timing budget (project-setup 10.4, "เวลาแย่ที่ส�
     expect(contentDownloadWorstMs()).toBe(100_000);
     expect(contentStatusWorstMs()).toBe(5000);
     expect(mediaDownloadsWorstMs()).toBe(200_000);
+    expect(mediaStoreWorstMs()).toBe(70_000);
+    expect(mediaFileJobWorstMs()).toBe(170_000);
+    expect(contentIdleWorstMs()).toBe(10_000);
     expect(mediaJobWorstMs()).toBe(255_000);
     expect(profileRefreshJobWorstMs()).toBe(3000);
     expect(extractJobWorstMs()).toBe(262_000);
@@ -71,6 +78,8 @@ describe('timing budget (project-setup 10.4, "เวลาแย่ที่ส�
       WEBHOOK_MS * JOB_BUDGET_SHARE,
     );
     expect(webhookWorstMs(AI_DEBOUNCE_MAX_MS)).toBeLessThanOrEqual(WEBHOOK_MS * JOB_BUDGET_SHARE);
+    // The media job is cut at its budget, so it ends with its row marked before the function is.
+    expect(mediaJobWorstMs()).toBeLessThanOrEqual(WEBHOOK_MS * JOB_BUDGET_SHARE);
   });
 
   it('keeps the media reserves of the core at or above the adapter worst cases', () => {
@@ -78,12 +87,23 @@ describe('timing budget (project-setup 10.4, "เวลาแย่ที่ส�
     // not be lower than what the step can really take.
     expect(MEDIA_CONTENT_CALL_WORST_MS).toBeGreaterThanOrEqual(contentDownloadWorstMs());
     expect(MEDIA_STATUS_CALL_WORST_MS).toBeGreaterThanOrEqual(contentStatusWorstMs());
-    // A video LINE has ready at once (original and preview) always fits.
+    expect(MEDIA_STORE_CALL_WORST_MS).toBeGreaterThanOrEqual(mediaStoreWorstMs());
+    // The idle bound of a LINE body only ever ends an attempt before its deadline.
+    expect(contentIdleWorstMs()).toBeLessThan(contentDownloadWorstMs());
+    // Content LINE has ready at once is downloaded and stored within the budget with every step
+    // at its bound, so the deadline only ever cuts a step that broke its own bound.
+    expect(mediaFileJobWorstMs()).toBeLessThanOrEqual(MEDIA_JOB_BUDGET_MS);
+    expect(MEDIA_CONTENT_CALL_WORST_MS + MEDIA_STORE_CALL_WORST_MS).toBeLessThanOrEqual(
+      MEDIA_JOB_BUDGET_MS,
+    );
+    // Both downloads of a video still fit; its preview is skipped when the store does not.
     expect(mediaDownloadsWorstMs()).toBeLessThanOrEqual(MEDIA_JOB_BUDGET_MS);
-    expect(2 * MEDIA_CONTENT_CALL_WORST_MS).toBeLessThanOrEqual(MEDIA_JOB_BUDGET_MS);
     // At least one wait fits after a quick 202, or the not-ready path would never retry.
     expect(
-      MEDIA_NOT_READY_POLL_MS + MEDIA_STATUS_CALL_WORST_MS + 2 * MEDIA_CONTENT_CALL_WORST_MS,
+      MEDIA_NOT_READY_POLL_MS +
+        MEDIA_STATUS_CALL_WORST_MS +
+        MEDIA_CONTENT_CALL_WORST_MS +
+        MEDIA_STORE_CALL_WORST_MS,
     ).toBeLessThanOrEqual(MEDIA_JOB_BUDGET_MS);
   });
 

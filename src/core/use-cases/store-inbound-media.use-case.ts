@@ -12,6 +12,7 @@ import {
   MEDIA_JOB_BUDGET_MS,
   MEDIA_NOT_READY_POLL_MS,
   MEDIA_STATUS_CALL_WORST_MS,
+  MEDIA_STORE_CALL_WORST_MS,
   PREVIEW_MAX_BYTES,
   inboundAudioFormat,
   inboundMediaMaxBytes,
@@ -43,6 +44,25 @@ export type StoreInboundMediaDeps = Pick<
   | 'logger'
 >;
 
+/**
+ * The step a job is in. Logged as `stage` on `media.store.failed`, so a failure (or a job cut at
+ * MEDIA_JOB_BUDGET_MS) names where it stopped: reading the LINE credentials, downloading from LINE,
+ * waiting for LINE to prepare the content, uploading to FileStorage, inspecting the stored file,
+ * the video preview, or saving the result.
+ */
+export type MediaStoreStage =
+  'access' | 'download' | 'wait_ready' | 'upload' | 'inspect' | 'preview' | 'save';
+
+/** `outcome` of `media.store.failed`: the status set, or `deadline` for a job cut at its budget. */
+type FailedOutcome = Exclude<MediaStatus, 'ready' | 'pending'> | 'deadline';
+
+interface JobState {
+  stage: MediaStoreStage;
+  startedMs: number;
+  /** Stops the LINE stream being read, so a job cut at its deadline lets go of the download. */
+  stopSource: (() => void) | null;
+}
+
 interface Download {
   stream: ReadableStream<Uint8Array>;
   contentType: string | null;
@@ -54,32 +74,74 @@ type PutOutcome =
   | { kind: 'too_large' }
   | { kind: 'failed'; code: ErrorCode };
 
+class MediaJobDeadlineError extends Error {
+  constructor() {
+    super('media job passed its deadline');
+    this.name = 'MediaJobDeadlineError';
+  }
+}
+
+interface WatchedSource {
+  stream: ReadableStream<Uint8Array>;
+  state: { failed: boolean; error: unknown; ended: boolean; bytes: number };
+  /** Errors the stream and cancels the source; no effect once the source has ended. */
+  stop: () => void;
+}
+
 /**
  * Passes the LINE stream through unchanged and remembers whether the source itself errored, which
- * storage adapters report in different ways (a thrown read or `storage.unavailable`).
+ * storage adapters report in different ways (a thrown read or `storage.unavailable`), and when it
+ * ended (`onEnd` with the byte count: the download is over and the upload starts).
  */
 const watchSource = (
   source: ReadableStream<Uint8Array>,
-): { stream: ReadableStream<Uint8Array>; state: { failed: boolean; error: unknown } } => {
-  const state: { failed: boolean; error: unknown } = { failed: false, error: undefined };
+  onEnd?: (bytes: number) => void,
+): WatchedSource => {
+  const state: WatchedSource['state'] = { failed: false, error: undefined, ended: false, bytes: 0 };
   const reader = source.getReader();
+  let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+  let stopped = false;
   const stream = new ReadableStream<Uint8Array>({
-    async pull(controller) {
+    start(c) {
+      controller = c;
+    },
+    async pull(c) {
       try {
         const { done, value } = await reader.read();
-        if (done) controller.close();
-        else controller.enqueue(value);
+        if (stopped) return;
+        if (done) {
+          state.ended = true;
+          onEnd?.(state.bytes);
+          c.close();
+        } else {
+          state.bytes += value.byteLength;
+          c.enqueue(value);
+        }
       } catch (e) {
+        if (stopped) return;
         state.failed = true;
         state.error = e;
-        controller.error(e);
+        c.error(e);
       }
     },
     cancel(reason) {
       return reader.cancel(reason);
     },
   });
-  return { stream, state };
+  const stop = (): void => {
+    if (stopped || state.ended) return;
+    stopped = true;
+    const e = new MediaJobDeadlineError();
+    state.failed = true;
+    state.error = e;
+    try {
+      controller?.error(e);
+    } catch {
+      // already closed or errored
+    }
+    void reader.cancel(e).catch(() => undefined);
+  };
+  return { stream, state, stop };
 };
 
 /**
@@ -159,8 +221,30 @@ export const makeStoreInboundMedia: (
     await storage.delete(key).catch(() => undefined);
   };
 
-  const putCapped = async (key: StorageKey, d: Download, maxBytes: number): Promise<PutOutcome> => {
-    const watched = watchSource(d.stream);
+  /**
+   * Stores one LINE download. With `job`, the download and upload are tracked as stages: the end
+   * of the LINE stream logs `media.store.downloaded` and moves the job to `upload`.
+   */
+  const putCapped = async (
+    key: StorageKey,
+    d: Download,
+    maxBytes: number,
+    job?: { state: JobState; ctx: RequestContext; id: MessageId },
+  ): Promise<PutOutcome> => {
+    const watched = watchSource(
+      d.stream,
+      job === undefined
+        ? undefined
+        : (bytes) => {
+            job.state.stage = 'upload';
+            logger.log('info', 'media.store.downloaded', {
+              requestId: job.ctx.requestId,
+              messageId: job.id,
+              sizeBytes: bytes,
+            });
+          },
+    );
+    if (job !== undefined) job.state.stopSource = watched.stop;
     const result = await storage
       .put(key, watched.stream, {
         contentType: d.contentType ?? 'application/octet-stream',
@@ -170,6 +254,9 @@ export const makeStoreInboundMedia: (
         // A read error of the LINE stream may surface as a throw; anything else is unexpected.
         if (watched.state.failed) return null;
         throw e;
+      })
+      .finally(() => {
+        if (job !== undefined) job.state.stopSource = null;
       });
     if (result === null || watched.state.failed) {
       await dropFile(key);
@@ -182,6 +269,9 @@ export const makeStoreInboundMedia: (
       await dropFile(key);
       return { kind: 'too_large' };
     }
+    // The store refused or broke while the LINE stream was fine: an upload failure, even when the
+    // store stopped before reading the whole download.
+    if (job !== undefined) job.state.stage = 'upload';
     return { kind: 'failed', code: result.error.code };
   };
 
@@ -205,21 +295,22 @@ export const makeStoreInboundMedia: (
   /**
    * The original answered "not ready" (LINE still prepares it). Waits and asks LINE about the
    * content while the job budget still holds the worst case of what is left (this wait, a status
-   * call, the original again and a video's preview), then downloads the original once more. When
-   * the budget cannot hold that, nothing is retried and the caller fails the message, so it never
-   * stays pending without a retry under way.
+   * call, the original again and its store), then downloads the original once more. When the
+   * budget cannot hold that, nothing is retried and the caller fails the message, so it never
+   * stays pending without a retry under way. A video's preview is not reserved here: it is only
+   * fetched when the budget still holds it after the original is stored.
    */
   const downloadWhenReady = async (
     token: LineAccessToken,
     id: MessageId,
-    type: InboundMediaType,
     lineMessageId: LineMessageId,
     max: number,
-    startedMs: number,
+    job: JobState,
     ctx: RequestContext,
   ): ReturnType<typeof gateway.downloadContent> => {
-    const elapsed = (): number => clock.now().getTime() - startedMs;
-    const rest = MEDIA_CONTENT_CALL_WORST_MS * (type === 'video' ? 2 : 1);
+    const elapsed = (): number => clock.now().getTime() - job.startedMs;
+    const rest = MEDIA_CONTENT_CALL_WORST_MS + MEDIA_STORE_CALL_WORST_MS;
+    job.stage = 'wait_ready';
     for (let attempt = 1; ; attempt += 1) {
       const next = MEDIA_NOT_READY_POLL_MS + MEDIA_STATUS_CALL_WORST_MS + rest;
       if (elapsed() + next > MEDIA_JOB_BUDGET_MS) break;
@@ -235,6 +326,7 @@ export const makeStoreInboundMedia: (
       // processing, or no answer: ask again while the budget allows.
     }
     if (elapsed() + rest > MEDIA_JOB_BUDGET_MS) return err('line.content_not_ready');
+    job.stage = 'download';
     return gateway.downloadContent(token, lineMessageId, 'original', max);
   };
 
@@ -246,18 +338,21 @@ export const makeStoreInboundMedia: (
     id: MessageId,
     status: Exclude<MediaStatus, 'ready' | 'pending'>,
     ctx: RequestContext,
-    errorCode?: ErrorCode,
-    failure: MediaFailure = 'download_failed',
+    job: JobState | null,
+    o: { errorCode?: ErrorCode; failure?: MediaFailure; outcome?: FailedOutcome } = {},
   ): Promise<{ status: MediaStatus }> => {
-    if (!(await messages.setMediaStatus(id, status, failure))) {
+    if (!(await messages.setMediaStatus(id, status, o.failure ?? 'download_failed'))) {
       // Another run already finished this message; its result stands.
       return { status: await currentStatus(id, status) };
     }
     logger.log('warn', 'media.store.failed', {
       requestId: ctx.requestId,
       messageId: id,
-      outcome: status,
-      errorCode,
+      outcome: o.outcome ?? status,
+      errorCode: o.errorCode,
+      ...(job === null
+        ? {}
+        : { stage: job.stage, durationMs: clock.now().getTime() - job.startedMs }),
     });
     return { status };
   };
@@ -267,22 +362,25 @@ export const makeStoreInboundMedia: (
     type: InboundMediaType,
     lineMessageId: LineMessageId,
     ctx: RequestContext,
+    job: JobState,
   ): Promise<{ status: MediaStatus }> => {
+    const fail = (errorCode?: ErrorCode, failure?: MediaFailure) =>
+      finish(id, 'failed', ctx, job, { errorCode, failure });
+    const tooLarge = () => finish(id, 'too_large', ctx, job, { errorCode: 'media.too_large' });
+
     const access = await loadLineAccess();
-    if (!access.ok) return finish(id, 'failed', ctx, access.error.code);
+    if (!access.ok) return fail(access.error.code);
     const token = access.value.channelAccessToken;
 
     const max = inboundMediaMaxBytes(type);
 
-    const startedMs = clock.now().getTime();
+    job.stage = 'download';
     let download = await gateway.downloadContent(token, lineMessageId, 'original', max);
     if (!download.ok && download.error.code === 'line.content_not_ready') {
-      download = await downloadWhenReady(token, id, type, lineMessageId, max, startedMs, ctx);
+      download = await downloadWhenReady(token, id, lineMessageId, max, job, ctx);
     }
     if (!download.ok) {
-      return download.error.code === 'media.too_large'
-        ? finish(id, 'too_large', ctx, 'media.too_large')
-        : finish(id, 'failed', ctx, download.error.code);
+      return download.error.code === 'media.too_large' ? tooLarge() : fail(download.error.code);
     }
 
     // Images and video: the extension follows the message type; a PNG named .jpg is fine because
@@ -296,37 +394,48 @@ export const makeStoreInboundMedia: (
       const format = inboundAudioFormat(sniffContentType(peeked.head));
       if (format === null) {
         await peeked.stream.cancel().catch(() => undefined);
-        return finish(id, 'failed', ctx, undefined, 'unsupported_type');
+        return fail(undefined, 'unsupported_type');
       }
       file = { ...file, stream: peeked.stream, contentType: format.contentType };
       ext = format.ext;
     }
     const keys = inboundStorageKeys(ids.randomToken(), ext);
 
-    const put = await putCapped(keys.original, file, max);
-    if (put.kind === 'too_large') return finish(id, 'too_large', ctx, 'media.too_large');
-    if (put.kind === 'failed') return finish(id, 'failed', ctx, put.code);
+    const put = await putCapped(keys.original, file, max, { state: job, ctx, id });
+    if (put.kind === 'too_large') return tooLarge();
+    if (put.kind === 'failed') return fail(put.code);
+    logger.log('info', 'media.store.uploaded', {
+      requestId: ctx.requestId,
+      messageId: id,
+      sizeBytes: put.object.sizeBytes,
+    });
 
+    job.stage = 'inspect';
     const inspected = await storage.inspect(keys.original);
     if (
       !inspected.ok ||
       !isAllowedInboundType(type, sniffContentType(inspected.value.leadingBytes))
     ) {
       await dropFile(keys.original);
-      return inspected.ok
-        ? finish(id, 'failed', ctx, undefined, 'unsupported_type')
-        : finish(id, 'failed', ctx, inspected.error.code);
+      return inspected.ok ? fail(undefined, 'unsupported_type') : fail(inspected.error.code);
     }
 
     const mediaUrl = put.object.publicUrl;
-    const previewUrl =
-      type === 'video'
-        ? ((await storePreview(token, lineMessageId, keys.preview)) ?? mediaUrl)
-        : mediaUrl;
+    let previewUrl = mediaUrl;
+    if (type === 'video') {
+      // The preview is optional: it is only fetched while the budget still holds its worst case.
+      job.stage = 'preview';
+      const left = MEDIA_JOB_BUDGET_MS - (clock.now().getTime() - job.startedMs);
+      if (left >= MEDIA_CONTENT_CALL_WORST_MS + MEDIA_STORE_CALL_WORST_MS) {
+        previewUrl = (await storePreview(token, lineMessageId, keys.preview)) ?? mediaUrl;
+      }
+    }
 
+    job.stage = 'save';
     if (!(await messages.setMediaReady(id, mediaUrl, previewUrl))) {
       // A concurrent run for the same message finished first (a second store_media job after a
-      // redelivery). Its files stay; ours are unreachable, so they are removed.
+      // redelivery), or this job passed its deadline and was marked failed. The stored result
+      // stays; our files are unreachable, so they are removed.
       await dropFile(keys.original);
       if (previewUrl !== mediaUrl) await dropFile(keys.preview);
       return { status: await currentStatus(id, 'ready') };
@@ -335,8 +444,43 @@ export const makeStoreInboundMedia: (
       requestId: ctx.requestId,
       messageId: id,
       sizeBytes: put.object.sizeBytes,
+      durationMs: clock.now().getTime() - job.startedMs,
     });
     return { status: 'ready' };
+  };
+
+  /**
+   * Runs `store` against MEDIA_JOB_BUDGET_MS. Every step has its own bound in its adapter, and the
+   * steps are only started while the budget holds them; this deadline is the last guard, for a
+   * step that does not end (a stalled stream, a call that never settles). The job is then marked
+   * `failed` (`interrupted`) with the stage it was in, the LINE stream is let go, and whatever the
+   * abandoned step does later cannot change the message (every write is a compare-and-set on
+   * pending).
+   */
+  const storeWithDeadline = async (
+    id: MessageId,
+    type: InboundMediaType,
+    lineMessageId: LineMessageId,
+    ctx: RequestContext,
+  ): Promise<{ status: MediaStatus }> => {
+    const job: JobState = { stage: 'access', startedMs: clock.now().getTime(), stopSource: null };
+    logger.log('info', 'media.store.started', { requestId: ctx.requestId, messageId: id });
+    const timer = clock.startTimer(MEDIA_JOB_BUDGET_MS);
+    const work = store(id, type, lineMessageId, ctx, job);
+    let first: { done: true; result: { status: MediaStatus } } | { done: false };
+    try {
+      first = await Promise.race([
+        work.then((result) => ({ done: true as const, result })),
+        timer.fired.then(() => ({ done: false as const })),
+      ]);
+    } finally {
+      timer.cancel();
+    }
+    if (first.done) return first.result;
+    // The abandoned step may still end later, with a result or an error; neither is used.
+    work.catch(() => undefined);
+    job.stopSource?.();
+    return finish(id, 'failed', ctx, job, { failure: 'interrupted', outcome: 'deadline' });
   };
 
   return async (input, ctx) => {
@@ -348,11 +492,13 @@ export const makeStoreInboundMedia: (
     // Already handled (or never downloadable): repeat calls do nothing.
     if (message.mediaStatus !== 'pending') return ok({ status: message.mediaStatus ?? 'failed' });
     if (message.lineMessageId === null) {
-      return ok(await finish(message.id, 'failed', ctx, 'line.content_unavailable'));
+      return ok(
+        await finish(message.id, 'failed', ctx, null, { errorCode: 'line.content_unavailable' }),
+      );
     }
 
     try {
-      return ok(await store(message.id, message.type, message.lineMessageId, ctx));
+      return ok(await storeWithDeadline(message.id, message.type, message.lineMessageId, ctx));
     } catch (e) {
       // Never leave the message pending (a no-op if another run already finished it); runJob
       // logs the exception.

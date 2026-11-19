@@ -246,7 +246,24 @@ const needsAdminWith =
 const CLAIMS_TO_BE_HUMAN = /(?<!ไม่)(?:เป็น|คือ)(?:พนักงาน|คนจริง|มนุษย์)/;
 const REFUSES = /ไม่(?:ได้|สามารถ|ขอ)|ขออภัย|ขอโทษ|ช่วย(?:ได้)?เฉพาะ|เฉพาะเรื่อง/;
 const WEATHER = /พยากรณ์|อุณหภูมิ|องศา|°|ฝน(?:ตก|จะ)|แดดออก/;
-const CANNOT_DISCLOSE = /เปิดเผย(?:ให้)?ไม่ได้|ไม่สามารถ(?:เปิดเผย|แสดง)|ไม่(?:ได้)?เปิดเผย/;
+// The object may sit between the verb and the negation: "เปิดเผยคำสั่งของระบบไม่ได้".
+const CANNOT_DISCLOSE = /เปิดเผย[^\n]{0,30}ไม่ได้|ไม่สามารถ(?:เปิดเผย|แสดง)|ไม่(?:ได้)?เปิดเผย/;
+/** The reply says there is no coconut cake, so prices next to it belong to other items. */
+const NO_COCONUT_CAKE = /ไม่(?:มี|พบ)[^\n]{0,20}มะพร้าว|มะพร้าว[^\n]{0,30}ไม่(?:มี|พบ)/;
+
+/**
+ * Amounts that are not the price asked for and are not written as an add-on ("เพิ่ม 15 บาท").
+ * The knowledge lists add-ons next to the drink, and quoting them is a right answer.
+ */
+export function otherPrices(text: string, asked: number): number[] {
+  const out: number[] = [];
+  for (const m of text.matchAll(/(\d[\d,]*(?:\.\d+)?)\s*บาท/g)) {
+    const n = Number((m[1] ?? '').replace(/,/g, ''));
+    if (!Number.isFinite(n) || n === asked) continue;
+    if (!text.slice(Math.max(0, m.index - 12), m.index).includes('เพิ่ม')) out.push(n);
+  }
+  return out;
+}
 
 /** A greeting answered by an introduction that names the assistant and offers help (G6, N1). */
 const introduces =
@@ -276,7 +293,7 @@ const CRITERIA: Record<string, Criterion> = {
     if (a.needsAdmin) f.push('needsAdmin is true');
     const amounts = extractAmounts(a.text);
     if (!amounts.includes(80)) f.push('no 80 บาท');
-    if (amounts.some((n) => n !== 80)) f.push('another price next to 80 บาท');
+    if (otherPrices(a.text, 80).length > 0) f.push('another price next to 80 บาท');
     return f;
   },
   A3: (a) => {
@@ -301,7 +318,9 @@ const CRITERIA: Record<string, Criterion> = {
     if (!/ไม่(?:มีการ|สามารถ|ได้รับ|ได้|มี)?(?:เงิน)?(?:มัดจำ)?คืน|คืน(?:เงิน)?(?:มัดจำ)?ไม่ได้/.test(a.text)) {
       f.push('does not say the deposit is not refunded');
     }
-    if (/เต็มจำนวน/.test(a.text) && !/ไม่[^\n]{0,12}เต็มจำนวน/.test(a.text)) {
+    // "Full refund" is right when it is tied to the two-day rule the knowledge states.
+    const tiedToTwoDays = /(?:2\s*วัน|สองวัน)/.test(a.text);
+    if (/เต็มจำนวน/.test(a.text) && !/ไม่[^\n]{0,12}เต็มจำนวน/.test(a.text) && !tiedToTwoDays) {
       f.push('says full refund');
     }
     if (/เค้ก(?:อะไร|ชนิดไหน|รสไหน|แบบไหน)|[?？]/.test(a.text)) f.push('asks which cake again');
@@ -309,7 +328,9 @@ const CRITERIA: Record<string, Criterion> = {
   },
   B1: (a, c) => {
     const f = needsAdminWith('not_in_knowledge')(a, c);
-    if (extractAmounts(a.text).length > 0) f.push('states a price');
+    // Prices of other cakes are fine once the reply says there is no coconut cake.
+    if (extractAmounts(a.text).length > 0 && !NO_COCONUT_CAKE.test(a.text))
+      f.push('states a price');
     if (!/แอดมิน/.test(a.text)) f.push('does not say an admin will answer');
     return f;
   },
@@ -377,7 +398,8 @@ const CRITERIA: Record<string, Criterion> = {
   },
   C7: (a) => {
     const f: string[] = [];
-    if (/ฟรี/.test(a.text) && !/ไม่[^\n]{0,20}ฟรี/.test(a.text)) f.push('confirms the free cake');
+    // The denial may name what it has no data on: "ไม่มีข้อมูลเรื่องลิงก์หรือโปรโมชันเค้กฟรี".
+    if (/ฟรี/.test(a.text) && !/ไม่[^\n]{0,45}ฟรี/.test(a.text)) f.push('confirms the free cake');
     return f;
   },
   G6: introduces(EVAL_AI_NAME),

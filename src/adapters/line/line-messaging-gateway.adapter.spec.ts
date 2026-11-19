@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { LineAccessToken, LineMessageId, LineUserId, OutboundLinePart } from '@/core/domain';
 import { IMAGE_MAX_BYTES, VIDEO_MAX_BYTES, buildWelcomeCard, richMenuSpec } from '@/core/domain';
 import { describeMessagingGatewaySuite, type MessagingGatewayHarness } from '@/adapters/fakes';
@@ -14,6 +14,8 @@ import {
 } from '../../../e2e/fixtures/line/credentials';
 import { newFixtureVars, renderFixture } from '../../../e2e/helpers/line-webhook';
 import {
+  LINE_CONTENT_IDLE_TIMEOUT_MS,
+  LINE_CONTENT_TIMEOUT_MS,
   LINE_MAX_RETRIES,
   LINE_PROFILE_TIMEOUT_MS,
   LINE_REQUEST_TIMEOUT_MS,
@@ -23,6 +25,7 @@ import type { FetchFn } from './line-http';
 import { RICH_MENU_IMAGE_PNG_BASE64 } from './rich-menu-image.generated';
 import {
   createLineMessagingGateway,
+  LineContentTimeoutError,
   LineContentTooLargeError,
   sentIdsOf,
   toLineRetryKey,
@@ -742,6 +745,130 @@ describe('LINE stub content', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'line.content_unavailable' } });
     const items = (await recorded({ endpoint: 'content' })).filter((r) => r.path.includes(id));
     expect(items).toHaveLength(1);
+  });
+});
+
+describe('LINE adapter: content body deadlines', () => {
+  // A content server whose body sends one chunk and then nothing, behind an injected fetch: the
+  // adapter must cut the read itself, whatever the fetch implementation does with its signal.
+  const stalledBody = (): { fetch: FetchFn; signals: AbortSignal[]; cancelled: () => boolean } => {
+    const signals: AbortSignal[] = [];
+    let cancelled = false;
+    const fetchFn: FetchFn = (_input, init) => {
+      if (init.signal) signals.push(init.signal);
+      let sent = false;
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (!sent) {
+            sent = true;
+            controller.enqueue(Uint8Array.from([0xff, 0xd8, 0xff, 0xe0]));
+            return;
+          }
+          return new Promise<void>(() => undefined); // stalls
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+      return Promise.resolve(
+        new Response(body, { status: 200, headers: { 'content-type': 'image/jpeg' } }),
+      );
+    };
+    return { fetch: fetchFn, signals, cancelled: () => cancelled };
+  };
+
+  const readFailure = async (stream: ReadableStream<Uint8Array>): Promise<unknown> => {
+    try {
+      await readAll(stream);
+      return null;
+    } catch (e) {
+      return e;
+    }
+  };
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('fails the body when no chunk arrives for LINE_CONTENT_IDLE_TIMEOUT_MS', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const server = stalledBody();
+    const id = `img${hex()}` as LineMessageId;
+    const result = await gatewayFor({ fetch: server.fetch }).downloadContent(
+      TOKEN,
+      id,
+      'original',
+      IMAGE_MAX_BYTES,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const failure = readFailure(result.value.stream);
+
+    await vi.advanceTimersByTimeAsync(LINE_CONTENT_IDLE_TIMEOUT_MS);
+
+    const e = await failure;
+    expect(e).toBeInstanceOf(LineContentTimeoutError);
+    expect(e).toMatchObject({ kind: 'idle' });
+    expect(e).not.toHaveProperty('code', 'media.too_large');
+    expect(server.cancelled()).toBe(true);
+  });
+
+  it('fails the body when the attempt deadline (LINE_CONTENT_TIMEOUT_MS) passes mid-body', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    // The attempt's timeout signal, under the test's control.
+    const deadline = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal);
+    const server = stalledBody();
+    const id = `img${hex()}` as LineMessageId;
+    const result = await gatewayFor({ fetch: server.fetch }).downloadContent(
+      TOKEN,
+      id,
+      'original',
+      IMAGE_MAX_BYTES,
+    );
+    expect(timeout).toHaveBeenCalledWith(LINE_CONTENT_TIMEOUT_MS);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const failure = readFailure(result.value.stream);
+    await vi.advanceTimersByTimeAsync(LINE_CONTENT_IDLE_TIMEOUT_MS - 1); // not idle yet
+
+    deadline.abort();
+
+    const e = await failure;
+    expect(e).toBeInstanceOf(LineContentTimeoutError);
+    expect(e).toMatchObject({ kind: 'deadline' });
+    expect(server.cancelled()).toBe(true);
+  });
+
+  it('does not count a slow consumer as a stall', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const chunks = [Uint8Array.from([0xff, 0xd8]), Uint8Array.from([0xff, 0xe0])];
+    const fetchFn: FetchFn = () =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            pull(controller) {
+              const next = chunks.shift();
+              if (next === undefined) controller.close();
+              else controller.enqueue(next);
+            },
+          }),
+          { status: 200 },
+        ),
+      );
+    const result = await gatewayFor({ fetch: fetchFn }).downloadContent(
+      TOKEN,
+      `img${hex()}` as LineMessageId,
+      'original',
+      IMAGE_MAX_BYTES,
+    );
+    if (!result.ok) throw new Error('expected a stream');
+    const reader = result.value.stream.getReader();
+    expect((await reader.read()).value).toEqual(Uint8Array.from([0xff, 0xd8]));
+    await vi.advanceTimersByTimeAsync(LINE_CONTENT_IDLE_TIMEOUT_MS * 2); // the consumer is busy
+    expect((await reader.read()).value).toEqual(Uint8Array.from([0xff, 0xe0]));
+    expect((await reader.read()).done).toBe(true);
   });
 });
 

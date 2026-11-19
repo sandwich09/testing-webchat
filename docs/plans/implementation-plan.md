@@ -150,6 +150,18 @@
 - [x] ดึงโปรไฟล์ของผู้ใช้ที่มีอยู่แล้วใหม่อย่างมากวันละครั้ง หลังตอบ webhook (`Contact.profileFetchedAt`, migration ที่สิบสอง) ([line-messaging](../specs/line-messaging.md#โปรไฟล์ของผู้ใช้))
 - [ ] เจ้าของงานรันชุดคำถามวัดคุณภาพกับ prompt ใหม่ และตัดสินว่าจะเพิ่มข้อของคำถาม "ตอบเรื่องอะไรได้บ้าง" และข้อความปฏิเสธที่บอกหัวข้อหรือไม่ ([ai-prompt ข้อ 8](../specs/ai-prompt.md#8-ชุดคำถามวัดคุณภาพ-ai))
 
+## รูปขาเข้าค้าง "กำลังโหลดรูป" บน production
+
+ขอบเขตและเหตุผลอยู่ใน [ADR 0033](../adr/0033-buffer-inbound-media-and-stage-deadlines.md)
+
+- [x] Adapter ของ Vercel Blob อ่านทั้งไฟล์เข้าหน่วยความจำ (ตรวจเพดานระหว่างอ่าน) แล้วอัปโหลดครั้งเดียวด้วย Buffer ที่รู้ความยาว ([domain-and-ports FileStorage](../architecture/domain-and-ports.md#filestorage))
+- [x] Body ของ LINE ถูก adapter ตัดเองเมื่อหยุดส่ง (`LINE_CONTENT_IDLE_TIMEOUT_MS`) หรือเมื่อเวลาของรอบหมด (`LINE_CONTENT_TIMEOUT_MS`)
+- [x] การเรียก Blob ทุกครั้งมี `abortSignal` และเพดาน (`STORAGE_PUT_TIMEOUT_MS`, `STORAGE_CALL_TIMEOUT_MS`)
+- [x] `StoreInboundMedia` ถูกตัดที่ `MEDIA_JOB_BUDGET_MS` เป็น `failed` (`interrupted`) ผ่าน `Clock.startTimer` ภาพตัวอย่างของวิดีโอดึงเมื่องบยังพอ และ `timing-budget.spec.ts` ตรึงอสมการใหม่ ([use-cases StoreInboundMedia](../architecture/use-cases.md#storeinboundmedia))
+- [x] Log `media.store.started`, `media.store.downloaded`, `media.store.uploaded` และ `stage` กับ `durationMs` ใน `media.store.failed` ([pitfalls U4](../guidelines/pitfalls-and-prevention.md#u4-stream-ที่ผ่านกับไฟล์เล็กค้างกับไฟล์จริง-และงานที่ไม่มีเพดานเวลาทิ้งแถวไว้-pending-โดยไม่มี-log))
+- [x] Stub ตอบรูปขนาด 3 MiB หลาย chunk (`photo…`) และ E2E เส้นที่ 1 รับรูปนั้นจนพร้อม ([stubs-and-fixtures](../qa/stubs-and-fixtures.md#เส้นที่-1-รับข้อความ))
+- [ ] เจ้าของงานส่งรูปจากมือถือหลังขึ้น production แล้วดูว่ารูปขึ้นในแชท และ log มี `media.store.started`, `media.store.downloaded`, `media.store.uploaded`, `media.store.succeeded` ของข้อความนั้น ([line-oa-setup](../runbooks/line-oa-setup.md#ทดสอบด้วยมือเมื่อมี-line-oa-จริง))
+
 ## สิ่งที่ต้องยืนยันก่อนหรือระหว่างสร้าง
 
 ข้อเหล่านี้มาจากความเข้าใจตอนออกแบบและยังไม่ได้ตรวจกับเอกสารปัจจุบัน เมื่อยืนยันแล้วให้แก้เอกสารที่เกี่ยวข้องและขีดออก ค่าของ constant ที่กระทบอยู่ใน [project-setup](../architecture/project-setup.md#10-ค่าคงที่ของระบบ)
@@ -192,6 +204,7 @@
 | Endpoint นับ token ของ Claude ไม่คิดเงิน | `DocumentExtractor.countTokens` |
 | Vercel Blob: client token จำกัด pathname ชนิด ขนาด และเวลาได้, ตั้ง `addRandomSuffix: false` ได้, URL รู้ได้เมื่อไร | Adapter ของ `FileStorage` |
 | Vercel Blob: ชื่อฟังก์ชันอัปโหลดฝั่ง client การรายงานความคืบหน้า และการยกเลิก | `uploadToTarget` ใน [ui-screens](../specs/ui-screens.md#76-ขั้นตอนแนบไฟล์) |
+| Vercel Blob: `put()` ฝั่ง server ด้วย Buffer ขนาดรูปจากมือถือถึงวิดีโอ 50 MB สำเร็จภายใน `STORAGE_PUT_TIMEOUT_MS` และหน่วยความจำของ function (ค่าเริ่มต้นของ Vercel ที่สมมติ 2 GB) พอสำหรับไฟล์ที่อ่านเข้าหน่วยความจำ ([ADR 0033](../adr/0033-buffer-inbound-media-and-stage-deadlines.md)) | `STORAGE_PUT_TIMEOUT_MS`, adapter ของ `FileStorage` |
 | CSP ที่ `heic-to/csp` ต้องใช้ใน Firefox (Chromium ยืนยันแล้ว ดูหัวข้อถัดไป) | CSP ใน [project-setup](../architecture/project-setup.md#62-nextconfigts), [ADR 0019](../adr/0019-heic-conversion-with-heic-to.md) |
 | `git.deploymentEnabled: false` ใน `vercel.json` ยังให้ Deploy Hook ทำงาน | [project-setup](../architecture/project-setup.md#611-ไฟล์อื่น), [deploy](../runbooks/deploy.md) |
 | รูปแบบ JSON ของ rich menu (`size`, `selected`, `areas[].bounds`, postback `displayText`), endpoint อัปโหลดรูปที่ host ของ content และการลบหรือล้างเมนูที่ไม่มี (404) เอกสารของ LINE เปิดจากเครื่องที่สร้างไม่ได้ จึงเขียนตามที่รู้ ทดสอบตามข้อ 12 ของ [line-oa-setup](../runbooks/line-oa-setup.md#ทดสอบด้วยมือเมื่อมี-line-oa-จริง) | `toLineRichMenu`, adapter ของ LINE, stub |
@@ -213,6 +226,7 @@
 | SDK ของ Claude: option `timeout` ต่อคำขอ | option `timeout` ของคำขอแต่ละครั้ง (`RequestOptions` ใน SDK 1.10.0) ใช้แทนค่าของ client สำหรับคำขอนั้น adapter ของ `TopicGuard` จึงส่ง `TopicGuardRequest.timeoutMs` ทุกครั้ง | 2026-11-18 |
 | CSP ของ `heic-to/csp` ใน Chromium | CSP ของ [project-setup ข้อ 6.2](../architecture/project-setup.md#62-nextconfigts) พอ ไม่ต้องมี `'unsafe-eval'`, `'wasm-unsafe-eval'` หรือ `worker-src`: E2E เส้นที่ 5 แปลง `tiny.heic` เป็น JPEG ใน Chromium ใต้ CSP นี้และไม่มี CSP violation export `heicTo` ของ `heic-to/csp` 1.6.7 ใช้ได้ตามที่ `inbox.media.ts` เรียก ยังไม่ได้ยืนยันใน Firefox | 2026-11-18 |
 | เครื่องมือตอน scaffold | ยืนยันจาก build และชุดตรวจครั้งสุดท้าย รายการอยู่ใน [project-setup ข้อ 11](../architecture/project-setup.md#11-สิ่งที่ต้องยืนยันตอน-scaffold) | 2026-11-18 |
+| `sentMessages[].id` ของ reply และ push เป็น id ที่ `quotedMessageId` อ้าง | ยืนยันบน production: ผู้ใช้ตอบกลับข้อความของ AI แล้ว webchat แสดงกล่องอ้างอิงข้อความต้นทาง ([test report](../qa/test-report.md), [line-messaging](../specs/line-messaging.md#ข้อความที่ตอบกลับ)) | 2026-11-19 |
 | สิ่งที่ยังไม่ได้ยืนยันกับของจริง | LINE จริง (reply token, retry key, loading, โปรไฟล์ สติกเกอร์ และสื่อ), Claude จริง (คุณภาพ ต้นทุน caching การสลับโมเดลสำรอง structured output และการคัดกรองหัวข้อ), Vercel Blob และการ deploy บน Vercel ยังไม่ได้ทดสอบ ทุกข้อใน [work-breakdown ข้อ 5.2](work-breakdown.md#52-ตรวจไม่ได้หากไม่มี-credential-จริง-เจ้าของงานทำ) ยังเปิดอยู่ | 2026-11-18 |
 
 ## สิ่งที่เจ้าของงานต้องทำเอง
