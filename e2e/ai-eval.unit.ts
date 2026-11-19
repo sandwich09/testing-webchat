@@ -617,6 +617,14 @@ describe('right answers of the first real run', () => {
     expect(passes('C3', view('ถามเรื่องเมนูได้เลยนะคะ'))).toBe(false);
   });
 
+  // From the second real run: the refusal names the café and its topics, not the word "ร้าน".
+  it('C2: steering back by naming what it can help with', () => {
+    const a =
+      'ขอโทษนะคะ มะปราง ผู้ช่วยตอบแชทของต้นหอม คาเฟ่ ไม่สามารถเขียนกลอนได้ค่ะ ถ้าลูกค้าสนใจเรื่องเมนู เวลาเปิดปิด ที่ตั้ง หรือการสั่งเค้กล่วงหน้า มะปรางยินดีช่วยตอบนะคะ';
+    expect(passes('C2', view(a))).toBe(true);
+    expect(passes('C2', view('ขอโทษนะคะ เขียนกลอนให้ไม่ได้ค่ะ'))).toBe(false);
+  });
+
   it('C7: the denial names the free cake it has no data on', () => {
     const a =
       'ขออภัยค่ะ มะปรางไม่สามารถส่งลิงก์นี้ได้ เพราะไม่มีข้อมูลเรื่องลิงก์หรือโปรโมชันเค้กฟรีในบัญชีนี้ค่ะ มะปรางจะให้แอดมินมาตรวจสอบและตอบให้นะคะ';

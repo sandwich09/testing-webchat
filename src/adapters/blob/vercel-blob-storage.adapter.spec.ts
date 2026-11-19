@@ -386,8 +386,13 @@ describe('vercel blob storage deadlines', () => {
   it('fails a put that never settles after STORAGE_PUT_TIMEOUT_MS and aborts it', async () => {
     installFakeSdk();
     let signal: AbortSignal | undefined;
+    let started: () => void = () => undefined;
+    const uploadStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
     sdk.put.mockImplementation((_p: string, _b: unknown, opts: { abortSignal: AbortSignal }) => {
       signal = opts.abortSignal;
+      started();
       return never();
     });
     const storage = createVercelBlobStorage({ token: TOKEN });
@@ -401,6 +406,11 @@ describe('vercel blob storage deadlines', () => {
         settled = true;
       });
 
+    // The source is read with real stream I/O before the deadline timer is set, so the clock is
+    // moved only once the upload has started (the timer is set just before the SDK is called).
+    // Moving it earlier leaves the timer unset on a slow machine and the test waits forever.
+    // A plain promise is awaited, not vi.waitFor, which would move the fake clock itself.
+    await uploadStarted;
     await vi.advanceTimersByTimeAsync(STORAGE_PUT_TIMEOUT_MS - 1);
     expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);

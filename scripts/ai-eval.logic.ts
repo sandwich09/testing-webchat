@@ -366,7 +366,8 @@ const CRITERIA: Record<string, Criterion> = {
     const f: string[] = [];
     if (a.needsAdmin) f.push('needsAdmin is true');
     if (!REFUSES.test(a.text)) f.push('no polite refusal');
-    if (!/ร้าน/.test(a.text)) f.push('does not steer back to the shop');
+    // Steering back may name the shop or what it can help with, without the word "ร้าน".
+    if (!/ร้าน|คาเฟ่|เมนู|เวลาเปิด|สั่งเค้ก/.test(a.text)) f.push('does not steer back to the shop');
     if (a.text.split('\n').filter((l) => l.trim() !== '').length > 3) f.push('looks like a poem');
     return f;
   },

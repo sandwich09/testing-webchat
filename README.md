@@ -8,9 +8,9 @@ Built for the Robolingo webchat assignment. The screens are in Thai; the design 
 
 | Item | URL |
 | --- | --- |
-| LINE OA to test with | `TODO (owner): LINE OA add-friend URL` |
-| Webchat | `TODO (owner): production URL on Vercel` |
-| GitHub repository | `TODO (owner): public repository URL` |
+| LINE OA to test with | https://lin.ee/TcT6CYw |
+| Webchat | https://testing-webchat-nu.vercel.app/ |
+| GitHub repository | https://github.com/sandwich09/testing-webchat |
 
 The access code of the production webchat is not in this repository; it is sent to the reviewer separately.
 
