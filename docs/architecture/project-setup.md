@@ -998,6 +998,9 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test:coverage
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with: { name: coverage-report, path: coverage, retention-days: 30 }
       - run: pnpm build
 
   adapters:
@@ -1037,9 +1040,10 @@ jobs:
             npx playwright test
       - if: failure()
         run: docker compose logs app stub
-      - if: failure()
+      # Kept for every run, not only failures, so the report of a green run can be read too.
+      - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with: { name: playwright-report, path: playwright-report, retention-days: 7 }
+        with: { name: playwright-report, path: playwright-report, retention-days: 30 }
 
   security:
     runs-on: ubuntu-24.04
