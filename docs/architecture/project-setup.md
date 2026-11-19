@@ -87,7 +87,7 @@ Component เขียนเองใน repo ตามแบบของ shadcn
 | skeleton | `skeleton.tsx` | ไม่มี |
 | tooltip | `tooltip.tsx` | `@radix-ui/react-tooltip` |
 
-- avatar และ dropdown-menu ไม่มีหน้าจอใดใช้ (`ContactAvatar` เป็น `<img>` เอง และไม่มีเมนูแบบ dropdown) จึงไม่มีไฟล์ใน `src/common/ui/` แต่ `@radix-ui/react-avatar` และ `@radix-ui/react-dropdown-menu` ยังอยู่ใน `package.json` จนกว่าเจ้าของงานจะอนุญาตให้ลบ dependency ตาม `AGENTS.md`
+- avatar และ dropdown-menu ไม่มีหน้าจอใดใช้ (`ContactAvatar` เป็น `<img>` เอง และไม่มีเมนูแบบ dropdown) จึงไม่มีไฟล์ใน `src/common/ui/` และไม่มี package ของสองตัวนี้ใน `package.json`
 - ทุก package ของ Radix ใช้รุ่นล่าสุดตอน scaffold และเป็น `@radix-ui/react-*` แยกตัว ไม่ใช้ package รวม `radix-ui`
 - `sonner.tsx` ไม่ import `next-themes` และตั้ง `theme="light"` ตายตัว เพราะระบบมีธีมสว่างอย่างเดียว ([ADR 0014](../adr/0014-ui-stack-and-theme.md)) และไม่ติดตั้ง `next-themes`
 - ชื่อไฟล์ใน `src/common/ui/` เป็นตัวพิมพ์เล็กตามแบบของ shadcn ถือเป็นข้อยกเว้นของ code-style ข้อ 7
