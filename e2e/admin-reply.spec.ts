@@ -1,4 +1,4 @@
-import { createContactWithMessage } from './helpers/contact';
+import { createContactWithMessage, nextEventVars } from './helpers/contact';
 import { uiCopy } from './helpers/copy';
 import {
   backToList,
@@ -105,4 +105,54 @@ test('journey 2: the admin reply reaches LINE and shows as sent', async ({
   await expect(input).toBeDisabled();
   await backToList(page, isMobile);
   await expect(row(page, name)).toHaveAttribute('data-follow', 'unfollowed');
+});
+
+test('journey 2: the list follows the customer messages, not the replies of the shop', async ({
+  page,
+  request,
+  isMobile,
+}) => {
+  const suffix = uniqueSuffix();
+  const nameA = `ลูกค้าลำดับ A ${suffix}`;
+  const nameB = `ลูกค้าลำดับ B ${suffix}`;
+  // Other journeys add contacts at the same time, so only the order of these two is checked.
+  const isAbove = async (upper: string, lower: string): Promise<boolean> => {
+    const ids = await page
+      .getByTestId(testIds.contactRow)
+      .evaluateAll((nodes) => nodes.map((n) => n.getAttribute('data-contact-id')));
+    const upperId = await row(page, upper).getAttribute('data-contact-id');
+    const lowerId = await row(page, lower).getAttribute('data-contact-id');
+    return ids.indexOf(upperId) < ids.indexOf(lowerId);
+  };
+
+  // 2.11: B wrote last, so B is above A.
+  const vA = await createContactWithMessage(request, {
+    displayName: nameA,
+    text: `ถาม A ${suffix}`,
+  });
+  await createContactWithMessage(request, { displayName: nameB, text: `ถาม B ${suffix}` });
+  await openChat(page, nameA);
+
+  // 2.12: an admin reply to A changes A's preview but not its place.
+  const reply = `ตอบ A ${suffix}`;
+  await sendText(page, reply);
+  await expect(bubbles(page, { author: 'admin', text: reply })).toHaveAttribute(
+    'data-status',
+    'sent',
+  );
+  await backToList(page, isMobile);
+  await expect(row(page, nameA)).toContainText(reply);
+  await expect(row(page, nameB)).toBeVisible();
+  expect(await isAbove(nameB, nameA)).toBe(true);
+
+  // 2.13: a new message from A moves A above B without a reload.
+  const again = `ถามอีก A ${suffix}`;
+  const response = await postLineWebhook(
+    request,
+    'message-text',
+    nextEventVars(vA, { text: again }),
+  );
+  expect(response.status()).toBe(200);
+  await expect(row(page, nameA)).toContainText(again);
+  await expect.poll(() => isAbove(nameA, nameB)).toBe(true);
 });

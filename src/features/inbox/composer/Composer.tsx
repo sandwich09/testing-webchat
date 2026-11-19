@@ -1,16 +1,15 @@
 'use client';
 
-// The reply box of a chat (ui-screens 5.7 to 5.10): text, one attachment, canned replies and the
-// typing ping. Sending goes through the optimistic `useSendMessage`; the composer clears as soon
+// The reply box of a chat (ui-screens 5.7, 5.8 and 5.10): text, one attachment and the typing
+// ping. Sending goes through the optimistic `useSendMessage`; the composer clears as soon
 // as the message is handed off, and a failure shows on the bubble with its text kept there.
-import { ImagePlus, Info, MessageSquareText } from 'lucide-react';
+import { ImagePlus, Info } from 'lucide-react';
 import {
   useCallback,
   useEffect,
   useId,
   useLayoutEffect,
   useRef,
-  useState,
   type ClipboardEvent,
   type JSX,
   type KeyboardEvent,
@@ -22,9 +21,8 @@ import { Button } from '@/common/ui/button';
 
 import { copy } from '../inbox.constants';
 import { useSendMessage } from '../inbox.hooks';
-import { canSend, insertAtCaret, isSubmitKey } from '../inbox.logic';
+import { canSend, isSubmitKey } from '../inbox.logic';
 import { AttachmentTray } from './AttachmentTray';
-import { CannedReplyPicker } from './CannedReplyPicker';
 import { isAttachmentPending, trayView } from './inbox.attachment.logic';
 import {
   rememberSentPreview,
@@ -55,14 +53,8 @@ export function Composer({ contactId, disabled, disabledReason }: ComposerProps)
   const ping = useTypingPing(contactId, !disabled);
   useReleaseSentPreviews();
 
-  // The picker belongs to one chat: switching chats closes it.
-  const [pickerFor, setPickerFor] = useState<string | null>(null);
-  const pickerOpen = pickerFor === contactId && !disabled;
-
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const cannedRef = useRef<HTMLButtonElement>(null);
-  const pendingCaret = useRef<number | null>(null);
   const hintId = useId();
   const reasonId = useId();
 
@@ -85,11 +77,6 @@ export function Composer({ contactId, disabled, disabledReason }: ComposerProps)
     if (input === null) return;
     input.style.height = 'auto';
     input.style.height = `${String(input.scrollHeight)}px`;
-    if (pendingCaret.current !== null) {
-      input.focus();
-      input.setSelectionRange(pendingCaret.current, pendingCaret.current);
-      pendingCaret.current = null;
-    }
   }, [draft]);
 
   const submit = useCallback(() => {
@@ -127,35 +114,10 @@ export function Composer({ contactId, disabled, disabledReason }: ComposerProps)
     pick(file);
   };
 
-  const closePicker = useCallback(() => {
-    setPickerFor(null);
-  }, []);
-
-  const insertCanned = useCallback(
-    (text: string) => {
-      const input = inputRef.current;
-      const selection =
-        input === null
-          ? { start: draft.length, end: draft.length }
-          : { start: input.selectionStart, end: input.selectionEnd };
-      const next = insertAtCaret(draft, selection, text);
-      pendingCaret.current = next.caret;
-      setPickerFor(null);
-      setDraft(next.value);
-      if (next.value === draft) {
-        // No change, so the layout effect will not run: focus here.
-        input?.focus();
-        input?.setSelectionRange(next.caret, next.caret);
-        pendingCaret.current = null;
-      }
-    },
-    [draft, setDraft],
-  );
-
   return (
     <div
       data-testid={testIds.composer}
-      className="relative shrink-0 border-t border-line bg-surface px-4 pt-2.5 pb-3"
+      className="shrink-0 border-t border-line bg-surface px-4 pt-2.5 pb-3"
     >
       {tray !== null && <AttachmentTray view={tray} onCancel={cancel} />}
 
@@ -198,21 +160,6 @@ export function Composer({ contactId, disabled, disabledReason }: ComposerProps)
           >
             <ImagePlus aria-hidden="true" className="size-5" />
           </button>
-          <button
-            ref={cannedRef}
-            type="button"
-            data-testid={testIds.composerCanned}
-            aria-label={copy.composer.canned}
-            aria-haspopup="dialog"
-            aria-expanded={pickerOpen}
-            disabled={disabled}
-            onClick={() => {
-              setPickerFor(pickerOpen ? null : contactId);
-            }}
-            className={iconButton}
-          >
-            <MessageSquareText aria-hidden="true" className="size-5" />
-          </button>
           <span
             id={hintId}
             data-testid={testIds.composerHint}
@@ -237,13 +184,6 @@ export function Composer({ contactId, disabled, disabledReason }: ComposerProps)
           </Button>
         </div>
       )}
-
-      <CannedReplyPicker
-        open={pickerOpen}
-        onClose={closePicker}
-        onPick={insertCanned}
-        anchorRef={cannedRef}
-      />
 
       <input
         ref={fileRef}

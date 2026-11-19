@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { FakeLogger, FakeSettingsRepository } from '@/adapters/fakes';
-import { DEFAULT_GUARD_REFUSAL_TEXT, PRICE_TABLE } from '@/core/domain';
+import { PRICE_TABLE } from '@/core/domain';
 import { makeUpdateSettings } from './update-settings.use-case';
 import type { UseCaseConfig } from './types';
 
@@ -111,21 +111,6 @@ describe('UpdateSettings', () => {
     const result = await update({ guardTopics: ['  มุกตลก ', 'ดูดวง\n'] }, ctx);
 
     expect(result.ok ? result.value.guardTopics : null).toEqual(['มุกตลก', 'ดูดวง']);
-  });
-
-  it('trims the refusal text', async () => {
-    const result = await update({ guardRefusalText: '  ขออภัยค่ะ  ' }, ctx);
-
-    expect(result.ok ? result.value.guardRefusalText : null).toBe('ขออภัยค่ะ');
-  });
-
-  it('changing only the refusal text leaves the topics alone', async () => {
-    await update({ guardEnabled: true, guardTopics: ['มุกตลก'] }, ctx);
-
-    const result = await update({ guardRefusalText: 'อื่น' }, ctx);
-
-    expect(result.ok ? result.value.guardTopics : null).toEqual(['มุกตลก']);
-    expect(result.ok ? result.value.guardRefusalText : null).not.toBe(DEFAULT_GUARD_REFUSAL_TEXT);
   });
 
   it('throws when the route let an invalid topic list through', async () => {

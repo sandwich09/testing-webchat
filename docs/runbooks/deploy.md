@@ -34,7 +34,7 @@
 1. เปิด PR เข้า `main` พร้อมผลของ lint, typecheck และ test ที่รันเอง
 2. เจ้าของงาน review และ merge แบบ squash
 3. CI รัน 4 งาน เมื่อผ่านทั้งหมดจึงเรียก Deploy Hook
-4. Build ของ production รัน migration ก่อน แล้วจึง build แอป
+4. Build ของ production (`pnpm vercel-build` ใน `vercel.json`) รัน `prisma migrate deploy` ก่อน แล้วจึง build แอป ไม่รัน seed: production เริ่มจากฐานข้อมูลว่าง (ไม่มีลูกค้า ไม่มีคลังความรู้ ไม่มี credential ของ LINE ค่าใช้จ่ายเป็นศูนย์) seed (`pnpm db:seed`) เป็นข้อมูลตัวอย่างสำหรับ Docker ในเครื่องเท่านั้น ([data-model](../architecture/data-model.md#ข้อมูลตัวอย่าง-seed))
 5. ตรวจหลัง deploy ตามหัวข้อถัดไป
 
 ## ตรวจหลัง deploy
@@ -51,7 +51,7 @@ Deploy Hook ไม่ถูกเรียก production จึงยังเ�
 ## ย้อนกลับ
 
 1. ใน Vercel เลือก deployment ก่อนหน้าแล้วเลื่อนขึ้นเป็น production
-2. ถ้า deployment ที่มีปัญหามี migration ให้ตรวจก่อนว่าโค้ดรุ่นก่อนทำงานกับโครงตารางใหม่ได้ migration ของระบบนี้จึงต้องเป็นแบบเพิ่มเท่านั้น การลบหรือเปลี่ยนชนิดคอลัมน์ต้องทำเป็นสองขั้นและต้องถามเจ้าของงานก่อน
+2. ถ้า deployment ที่มีปัญหามี migration ให้ตรวจก่อนว่าโค้ดรุ่นก่อนทำงานกับโครงตารางใหม่ได้ migration ของระบบนี้จึงต้องเป็นแบบเพิ่มเท่านั้น การลบหรือเปลี่ยนชนิดคอลัมน์ต้องทำเป็นสองขั้นและต้องถามเจ้าของงานก่อน ข้อยกเว้นที่อนุมัติแล้วคือ migration ที่ห้า ([data-model](../architecture/data-model.md#migration-ที่ห้า-ลบตารางและคอลัมน์ที่ไม่ใช้แล้ว)) โค้ดก่อน migration นั้นทำงานกับตารางหลัง migration ไม่ได้
 3. เปิด PR ที่ revert การเปลี่ยนแปลง เพื่อให้ `main` ตรงกับ production
 
 ## รันในเครื่อง

@@ -1,10 +1,8 @@
 // Pure logic of the settings screens (docs/specs/ui-screens.md section 8.5).
-import { thaiShortMonth, bangkokParts } from '@/common/common.logic';
+import { bangkokParts, formatMonthYear } from '@/common/common.logic';
 import {
   AI_DAILY_BUDGET_MAX_USD,
   AI_INSTRUCTIONS_MAX_CHARS,
-  CANNED_TEXT_MAX_CHARS,
-  CANNED_TITLE_MAX_CHARS,
   LINE_CHANNEL_ID_PATTERN,
   PDF_MAX_BYTES,
   type UsageReportResponse,
@@ -65,20 +63,6 @@ export function validateInstructions(
     : { ok: true };
 }
 
-/** Title and text of a canned reply are required (after trim) and limited in length. */
-export function validateCannedReply(input: {
-  title: string;
-  text: string;
-}): { ok: true } | { ok: false; field: 'title' | 'text'; code: 'required' | 'too_long' } {
-  const title = input.title.trim();
-  if (title === '') return { ok: false, field: 'title', code: 'required' };
-  if (title.length > CANNED_TITLE_MAX_CHARS) return { ok: false, field: 'title', code: 'too_long' };
-  const text = input.text.trim();
-  if (text === '') return { ok: false, field: 'text', code: 'required' };
-  if (text.length > CANNED_TEXT_MAX_CHARS) return { ok: false, field: 'text', code: 'too_long' };
-  return { ok: true };
-}
-
 /** Field of the LINE credentials form that a check refers to. */
 export type LineCredentialField = 'channelId' | 'channelSecret' | 'channelAccessToken';
 
@@ -115,7 +99,7 @@ export function monthOptions(now: Date, count = 12): { value: string; label: str
     const m = (index % 12) + 1;
     out.push({
       value: `${String(y)}-${String(m).padStart(2, '0')}`,
-      label: `${thaiShortMonth(m)} ${String(y + 543)}`,
+      label: formatMonthYear(y, m),
     });
   }
   return out;

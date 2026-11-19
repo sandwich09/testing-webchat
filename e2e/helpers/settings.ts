@@ -9,7 +9,7 @@ import type { APIRequestContext } from '@playwright/test';
 
 export type SettingsSnapshot = {
   ai: { enabled: boolean; politeParticle: string };
-  guard: { enabled: boolean; topics: string[]; refusalText: string; blockedToday: number };
+  guard: { enabled: boolean; topics: string[]; blockedToday: number };
 };
 
 export type KbDocument = { id: string; fileName: string; status: string };

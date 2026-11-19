@@ -78,8 +78,6 @@ const CATALOG_CODES = [
   'knowledge.extract_empty',
   'knowledge.extract_refused',
   'knowledge.extract_interrupted',
-  'canned_reply.not_found',
-  'canned_reply.limit_reached',
   'client.network',
 ];
 
@@ -192,10 +190,7 @@ describe('errorMessage', () => {
     expect(errorMessage('upload.too_large', { imageMaxMb: 10, videoMaxMb: 50, size: 61 })).toBe(
       'ไฟล์ใหญ่เกินไป รูปต้องไม่เกิน 10 MB และวิดีโอไม่เกิน 50 MB ไฟล์นี้ 61 MB',
     );
-    expect(errorMessage('canned_reply.limit_reached', { max: 100 })).toBe(
-      'ข้อความสำเร็จรูปครบ 100 รายการแล้ว ลบรายการที่ไม่ใช้ก่อน',
-    );
-    expect(errorMessage('canned_reply.limit_reached')).toContain('{max}');
+    expect(errorMessage('upload.too_large')).toContain('{imageMaxMb}');
   });
 });
 

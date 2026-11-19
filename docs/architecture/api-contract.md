@@ -81,8 +81,8 @@ interface ContactDto {
   needsAdminReason: HandoffReason | null;
   aiReplying: boolean;                // aiState = replying
   unreadCount: number;
-  lastMessage: {
-    at: IsoDate;
+  lastMessage: {                      // ข้อความล่าสุดของใครก็ได้ ยกเว้น at
+    at: IsoDate;                      // เวลาข้อความล่าสุดของลูกค้า (ไม่มีใช้ createdAt) คือค่าที่รายชื่อใช้เรียง
     by: "customer" | "admin" | "ai";
     type: "text" | "image" | "video" | "sticker" | "other";
     text: string | null;              // ตัดแล้วไม่เกิน PREVIEW_TEXT_MAX_CHARS
@@ -130,7 +130,6 @@ interface SettingsDto {
   guard: {
     enabled: boolean;                 // ขอบเขตหัวข้อ
     topics: string[];                 // ตามลำดับที่บันทึก
-    refusalText: string;
     blockedToday: number;             // AiUsage kind guard outcome blocked ของวันนี้ตามเวลาไทย
   };
   line: {
@@ -208,14 +207,6 @@ interface UsageRecordDto {
   cacheWriteTokens: number;
   costUsd: UsdString;
   outcome: "ok" | "handoff" | "refused" | "failed" | "cancelled" | "blocked";
-}
-
-interface CannedReplyDto {
-  id: string;
-  title: string;
-  text: string;
-  sortOrder: number;
-  updatedAt: IsoDate;
 }
 
 type UploadTargetDto =
@@ -395,7 +386,7 @@ Response 200:
 }
 ```
 
-`before` เป็น base64url ของ `{ sortAt, id }` หน้าเว็บไม่แกะค่า
+เรียงตาม `sortAt` = เวลาข้อความขาเข้าล่าสุดของลูกค้า (`Contact.lastMessageAt`) หรือ `createdAt` เมื่อยังไม่มี ใหม่ไปเก่า แล้ว `id` ใหม่ไปเก่า ข้อความของแอดมินหรือ AI, บรรทัดเหตุการณ์, การอ่าน และสวิตช์ไม่เปลี่ยนลำดับ `before` เป็น base64url ของ `{ sortAt, id }` หน้าเว็บไม่แกะค่า
 
 ### GET /api/contacts/:id
 
@@ -571,7 +562,8 @@ Body ต้องมีอย่างน้อยหนึ่ง field:
 | `aiInstructions` | string | 0 ถึง `AI_INSTRUCTIONS_MAX_CHARS` ตัว |
 | `guardEnabled` | boolean | เปิดได้เมื่อมีหัวข้ออย่างน้อยหนึ่งหัวข้อ (ที่ส่งมาพร้อมกันหรือที่บันทึกไว้) |
 | `guardTopics` | string[] | 0 ถึง `GUARD_MAX_TOPICS` รายการ แต่ละรายการ 1 ถึง `GUARD_TOPIC_MAX_CHARS` ตัวหลังตัดช่องว่างหัวท้าย ห้ามซ้ำกัน ตรวจด้วย `normalizeGuardTopics` (`issue` ไม่เป็น null หรือมีรายการว่างไม่ผ่าน) |
-| `guardRefusalText` | string | 1 ถึง `GUARD_REFUSAL_MAX_CHARS` ตัวหลังตัดช่องว่างหัวท้าย |
+
+field อื่น รวม `guardRefusalText` ที่เคยมี ไม่ผ่าน: ข้อความปฏิเสธคงที่ใน `guardRefusalText(particle)` ([topic-guard](../specs/topic-guard.md))
 
 Response 200 `SettingsDto` ที่อ่านใหม่หลังบันทึก: `UpdateSettings` คืน `Settings` ซึ่งไม่มี `webhookUrl`, ค่าใช้จ่ายวันนี้, `guard.blockedToday` และ `client.pollIntervalMs` route จึงเรียก `GetSettings` อีกครั้งแล้วตอบผลนั้น ซึ่งเป็นรูปเดียวกับ `GET /api/settings`
 
@@ -674,45 +666,6 @@ Request แบบเดียวกับการอัปโหลด Response
 
 Error: เหมือนการอัปโหลด และ 404 `knowledge.not_found`, 409 `knowledge.not_retryable`
 
-### GET /api/canned-replies
-
-| | |
-| --- | --- |
-| Use case | `ListCannedReplies` |
-
-Response 200 `{ cannedReplies: CannedReplyDto[] }` เรียงตาม `sortOrder`
-
-### POST /api/canned-replies
-
-| | |
-| --- | --- |
-| Use case | `SaveCannedReply` (สร้างใหม่) |
-
-| Body field | ชนิด | บังคับ | ข้อกำหนด |
-| --- | --- | --- | --- |
-| `title` | string | ใช่ | 1 ถึง `CANNED_TITLE_MAX_CHARS` ตัวหลังตัดช่องว่าง |
-| `text` | string | ใช่ | 1 ถึง `CANNED_TEXT_MAX_CHARS` ตัวหลังตัดช่องว่าง |
-
-Response 201 `CannedReplyDto` Error: 409 `canned_reply.limit_reached`
-
-### PATCH /api/canned-replies/:id
-
-| | |
-| --- | --- |
-| Use case | `SaveCannedReply` (แก้) |
-
-Body มีอย่างน้อยหนึ่ง field: `title`, `text` (ข้อกำหนดเดียวกับ POST), `sortOrder` (integer 0 ถึง 10000)
-
-Response 200 `CannedReplyDto` Error: 404 `canned_reply.not_found`
-
-### DELETE /api/canned-replies/:id
-
-| | |
-| --- | --- |
-| Use case | `DeleteCannedReply` |
-
-Response 204 Error: 404 `canned_reply.not_found`
-
 ### GET /api/usage
 
 | | |
@@ -762,7 +715,7 @@ Response 200 `SystemStatusDto`
 | --- | --- |
 | Use case | `GetGuardrailStats` |
 
-Response 200 `GuardrailStatsDto` หน้าตั้งค่า polling ทุก `SYSTEM_STATUS_POLL_MS` เหมือนสถานะระบบ
+Response 200 `GuardrailStatsDto` ตัวเลขของวันนี้ตามเวลาไทย ไม่มีหน้าจอใดแสดง ใช้ตรวจผ่าน API ([ADR 0024](../adr/0024-scope-reductions.md))
 
 ## ตารางไล่ endpoint กับ use case
 
@@ -795,9 +748,6 @@ Response 200 `GuardrailStatsDto` หน้าตั้งค่า polling ท�
 | `GET /api/knowledge/documents/:id` | `GetDocument` |
 | `DELETE /api/knowledge/documents/:id` | `DeleteDocument` |
 | `POST /api/knowledge/documents/:id/retry` | `IngestDocument` |
-| `GET /api/canned-replies` | `ListCannedReplies` |
-| `POST /api/canned-replies`, `PATCH /api/canned-replies/:id` | `SaveCannedReply` |
-| `DELETE /api/canned-replies/:id` | `DeleteCannedReply` |
 | `GET /api/usage` | `GetUsageReport` |
 | `GET /api/usage/contacts/:id` | `GetContactUsage` |
 | `GET /api/system/status` | `GetSystemStatus` |

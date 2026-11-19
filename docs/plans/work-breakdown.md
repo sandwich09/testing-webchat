@@ -961,7 +961,7 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 
 เกณฑ์รับ:
 
-- [x] มี route ครบ 34 endpoint และไม่มี endpoint อื่น รวม `POST /api/settings/guard/test` และ `GET /api/system/guardrails`
+- [x] มี route ครบ 34 endpoint และไม่มี endpoint อื่น (ภายหลังเหลือ 30 เมื่อตัดข้อความสำเร็จรูป [ADR 0024](../adr/0024-scope-reductions.md)) รวม `POST /api/settings/guard/test` และ `GET /api/system/guardrails`
 - [x] Webhook อ่าน raw body ก่อน parse และงานหลังตอบผ่าน `runJob`
 - [x] `PUT` และ `GET /api/local-storage/*key` ตอบ 404 เมื่อ `FILE_STORAGE` ไม่ใช่ `local`
 - [x] Route ไม่ import อะไรนอกจาก `src/composition` และ `src/contracts`

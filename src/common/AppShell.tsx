@@ -8,7 +8,6 @@ import { AppProviders } from '@/common/AppProviders';
 import { AppRail } from '@/common/AppRail';
 import { ApiError, errorCodeOf, lock } from '@/common/common.api';
 import { copy } from '@/common/common.constants';
-import { useSettings } from '@/common/common.hooks';
 import { ConnectionBanner } from '@/common/ConnectionBanner';
 import { errorMessage } from '@/common/error-messages';
 import {
@@ -70,13 +69,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   // On the chat page the list it shows is current, and the rail reads its counts.
   useContactListQuery(ALL_CONTACTS, { enabled: !chatPageOpen });
   const unreadCount = useUnreadCount();
-  const settings = useSettings();
   const { showBanner } = usePollingInterval();
   const logout = useLogout();
 
   return (
     <AppProviders>
-      <div className="flex h-dvh flex-col bg-page medium:flex-row">
+      {/* The shell is the viewport: it is the containing block of every absolutely placed
+          element inside (such as `sr-only` text in a scrolling list) and clips it, so only the
+          inner containers scroll and the document never does. */}
+      <div className="relative flex h-screen flex-col overflow-hidden bg-page supports-[height:100dvh]:h-dvh medium:flex-row">
         <a
           href="#main"
           className="sr-only bg-surface text-fg focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-full focus:px-4 focus:py-2"
@@ -85,7 +86,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         </a>
         <SectionErrorBoundary>
           <AppRail
-            shopName={settings.data?.line.botName ?? ''}
             unreadCount={unreadCount}
             collapsed={collapsed}
             onToggleCollapsed={() => {

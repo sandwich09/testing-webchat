@@ -1,5 +1,4 @@
 import type {
-  CannedReplyId,
   ContactId,
   DocumentId,
   ErrorCode,
@@ -16,7 +15,6 @@ export interface LogFields {
   messageId?: MessageId;
   documentId?: DocumentId;
   usageId?: UsageId;
-  cannedReplyId?: CannedReplyId;
   /** Route template such as "/api/contacts/:id/messages", not the real path. */
   route?: string;
   method?: string;
@@ -107,10 +105,8 @@ export type LogEvent =
   | 'knowledge.ingest.failed'
   | 'knowledge.ingest.stuck_recovered'
   | 'knowledge.document.deleted'
-  // Settings and canned replies
-  | 'settings.values.updated'
-  | 'canned_reply.item.saved'
-  | 'canned_reply.item.deleted';
+  // Settings
+  | 'settings.values.updated';
 
 export interface Logger {
   log(level: LogLevel, event: LogEvent, fields?: LogFields): void;

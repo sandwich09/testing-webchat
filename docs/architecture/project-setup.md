@@ -86,8 +86,9 @@ Component เขียนเองใน repo ตามแบบของ shadcn
 | table | `table.tsx` | ไม่มี |
 | skeleton | `skeleton.tsx` | ไม่มี |
 | tooltip | `tooltip.tsx` | `@radix-ui/react-tooltip` |
+| select | `select.tsx` และ `select.logic.ts` (ฟังก์ชันล้วน มี `select.logic.spec.ts`) | ไม่มี เขียนด้วย React และ `createPortal` ของ `react-dom` ไม่ใช้ `@radix-ui/react-select` ([ui-screens ข้อ 1.8](../specs/ui-screens.md#18-select)) |
 
-- avatar และ dropdown-menu ไม่มีหน้าจอใดใช้ (`ContactAvatar` เป็น `<img>` เอง และไม่มีเมนูแบบ dropdown) จึงไม่มีไฟล์ใน `src/common/ui/` และไม่มี package ของสองตัวนี้ใน `package.json`
+- avatar และ dropdown-menu ไม่มีหน้าจอใดใช้ (`ContactAvatar` เป็น `<img>` เอง และไม่มีเมนูแบบ dropdown ตัวเลือกค่าใช้ `select.tsx`) จึงไม่มีไฟล์ใน `src/common/ui/` และไม่มี package ของสองตัวนี้ใน `package.json`
 - ทุก package ของ Radix ใช้รุ่นล่าสุดตอน scaffold และเป็น `@radix-ui/react-*` แยกตัว ไม่ใช้ package รวม `radix-ui`
 - `sonner.tsx` ไม่ import `next-themes` และตั้ง `theme="light"` ตายตัว เพราะระบบมีธีมสว่างอย่างเดียว ([ADR 0014](../adr/0014-ui-stack-and-theme.md)) และไม่ติดตั้ง `next-themes`
 - ชื่อไฟล์ใน `src/common/ui/` เป็นตัวพิมพ์เล็กตามแบบของ shadcn ถือเป็นข้อยกเว้นของ code-style ข้อ 7
@@ -136,8 +137,6 @@ pnpm 10 ไม่รัน install script ของ dependency โดยค่�
 │       ├── knowledge/documents/route.ts                  GET, POST
 │       ├── knowledge/documents/[id]/route.ts             GET, DELETE
 │       ├── knowledge/documents/[id]/retry/route.ts       POST
-│       ├── canned-replies/route.ts                       GET, POST
-│       ├── canned-replies/[id]/route.ts                  PATCH, DELETE
 │       ├── usage/route.ts                                GET
 │       ├── usage/contacts/[id]/route.ts                  GET
 │       ├── system/status/route.ts                        GET
@@ -1134,9 +1133,6 @@ Environment variable ตั้งเฉพาะ Production ตาม [deploy](.
 | `MESSAGE_PAGE_LIMIT` | 50 | `constants.ts` | `GetMessages` และหน้าแชท |
 | `CONTACT_PAGE_LIMIT` | 50 | `constants.ts` | `ListContacts` หน้าละกี่คน |
 | `CONTACT_SEARCH_MAX_CHARS` | 50 ตัวอักษร | `constants.ts` | query `q` ของ `GET /api/contacts` |
-| `CANNED_REPLY_MAX_COUNT` | 100 รายการ | `constants.ts` | `SaveCannedReply` |
-| `CANNED_TITLE_MAX_CHARS` | 50 ตัวอักษร | `constants.ts` | ชื่อของข้อความสำเร็จรูป ทั้ง API และฟอร์ม |
-| `CANNED_TEXT_MAX_CHARS` | 2000 ตัวอักษร | `constants.ts` | เนื้อหาของข้อความสำเร็จรูป ทั้ง API และฟอร์ม |
 | `AI_INSTRUCTIONS_MAX_CHARS` | 2000 ตัวอักษร | `constants.ts` | คำแนะนำสำหรับ AI ทั้ง API และฟอร์ม |
 | `AI_DAILY_BUDGET_MAX_USD` | "10.00" | `constants.ts` | งบต่อวันสูงสุดที่กรอกได้ ทั้ง API และฟอร์ม |
 | `ACCESS_COOKIE_TTL_MS` | 604800000 ms (7 วัน) | `constants.ts` | `UnlockAccess`, `AccessTokenSigner`, `Max-Age` ของ cookie |
@@ -1147,13 +1143,11 @@ Environment variable ตั้งเฉพาะ Production ตาม [deploy](.
 | `DEFAULT_POLITE_PARTICLE` | "ค่ะ" | `constants.ts` และ `prisma/schema.prisma` (`kha`) | ค่าเริ่มต้นของคำลงท้าย |
 | `GUARD_MAX_TOPICS` | 20 หัวข้อ | `constants.ts` | จำนวนหัวข้อสูงสุดของขอบเขตหัวข้อ ทั้ง API และฟอร์ม ([topic-guard](../specs/topic-guard.md)) |
 | `GUARD_TOPIC_MAX_CHARS` | 80 ตัวอักษร | `constants.ts` | ความยาวของหนึ่งหัวข้อหลังตัดช่องว่าง |
-| `GUARD_REFUSAL_MAX_CHARS` | 300 ตัวอักษร | `constants.ts` | ข้อความปฏิเสธ |
 | `GUARD_TEST_MAX_CHARS` | 1000 ตัวอักษร | `constants.ts` | ข้อความในกล่องทดลองของ `POST /api/settings/guard/test` |
 | `GUARD_MODEL` | `claude-haiku-5-5` | `constants.ts` | โมเดลของการคัดกรอง ใช้เสมอไม่ขึ้นกับ `Settings.aiModel` |
 | `GUARD_MAX_TOKENS` | 2000 | `constants.ts` | `max_tokens` ของการคัดกรอง |
 | `GUARD_TIMEOUT_MS` | 10000 ms | `constants.ts` | timeout ของการคัดกรองหนึ่งครั้ง ส่งใน `TopicGuardRequest.timeoutMs` |
 | `GUARD_CONTEXT_TURNS` | 4 turn | `constants.ts` | บริบทก่อนข้อความล่าสุดที่ส่งให้การคัดกรอง |
-| `DEFAULT_GUARD_REFUSAL_TEXT` | "คุยได้เฉพาะหัวข้อที่กำหนดไว้นะคะ" | `constants.ts` และ `prisma/schema.prisma` | ค่าเริ่มต้นของ `Settings.guardRefusalText` |
 
 ค่าเริ่มต้นของระบบที่ติดตั้งใหม่: kill switch ปิด, ขอบเขตหัวข้อปิดและไม่มีหัวข้อ, งบต่อวันตาม `DEFAULT_AI_DAILY_BUDGET_USD`, โมเดลตาม `DEFAULT_AI_MODEL`, คำลงท้ายตาม `DEFAULT_POLITE_PARTICLE`, ลูกค้าใหม่มี AI ตอบแทนปิด ส่วน seed เปิด kill switch และคงงบไว้ที่ค่าเริ่มต้น ([data-model](data-model.md#ข้อมูลตัวอย่าง-seed))
 
@@ -1236,7 +1230,7 @@ Rate limit ทั้งหมดเป็นแบบหน้าต่างค
 | `CLIENT_REQUEST_TIMEOUT_MS` | 15000 ms | `src/common/common.constants.ts` | `apiFetch` ไม่ได้คำตอบภายในเวลานี้ได้ `client.network` |
 | `POLL_BACKOFF_MAX_MS` | 30000 ms | `common.constants.ts` | ช่วง polling สูงสุดเมื่อล้มเหลวติดกัน |
 | `POLL_FAILURES_BEFORE_BANNER` | 2 | `common.constants.ts` | แถบการเชื่อมต่อแสดงเมื่อล้มเหลวติดกันถึงค่านี้ |
-| `SYSTEM_STATUS_POLL_MS` | 30000 ms | `src/features/settings/settings.constants.ts` | ส่วนสถานะระบบ และส่วน Guardrails |
+| `SYSTEM_STATUS_POLL_MS` | 30000 ms | `src/features/settings/settings.constants.ts` | ส่วนสถานะระบบ |
 | `RAIL_WIDTH_EXPANDED` | 184px | `src/common/layout.constants.ts` | เมนูซ้าย |
 | `RAIL_WIDTH_COLLAPSED` | 56px | `layout.constants.ts` | เมนูซ้ายเมื่อพับ |
 | `RAIL_STRIP_HEIGHT` | 56px | `layout.constants.ts` | แถบเมนูบนเมื่อจอแคบ |

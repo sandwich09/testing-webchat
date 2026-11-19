@@ -166,7 +166,7 @@ export const makeSendAdminMessage: (
     // A concurrent request with the same id inserted first: it owns the side effects and the send.
     if (!inserted) return replay(message, input);
 
-    await contacts.recordOutbound(contactId, { at: now, preview: previewOf(message), by: 'admin' });
+    await contacts.recordOutbound(contactId, { preview: previewOf(message), by: 'admin' });
 
     // docs/specs/ai-reply.md#เมื่อแอดมินตอบเอง: an admin reply turns the contact's AI off for good.
     if (contact.aiEnabled) {

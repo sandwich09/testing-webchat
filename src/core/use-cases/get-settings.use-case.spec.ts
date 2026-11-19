@@ -6,7 +6,7 @@ import {
   FakeUsageRepository,
 } from '@/adapters/fakes';
 import type { AiUsageRecord, NanoUsd } from '@/core/domain';
-import { DEFAULT_GUARD_REFUSAL_TEXT, PRICE_TABLE } from '@/core/domain';
+import { PRICE_TABLE } from '@/core/domain';
 import { makeGetSettings } from './get-settings.use-case';
 import type { UseCaseConfig } from './types';
 
@@ -62,7 +62,6 @@ describe('GetSettings', () => {
     expect(s.aiEnabled).toBe(false);
     expect(s.guardEnabled).toBe(false);
     expect(s.guardTopics).toEqual([]);
-    expect(s.guardRefusalText).toBe(DEFAULT_GUARD_REFUSAL_TEXT);
     expect(result.value.todayCost).toBe(0n);
     expect(result.value.guardBlockedToday).toBe(0);
   });

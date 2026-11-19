@@ -1,5 +1,6 @@
 import type { ChatTurn } from './chat.model';
 import { GUARD_CONTEXT_TURNS, GUARD_MAX_TOPICS, GUARD_TOPIC_MAX_CHARS } from './constants';
+import type { PoliteParticle } from './enums.model';
 import type { ErrorCode } from './result';
 import type { TopicGuardResponse } from './topic-guard.model';
 
@@ -48,6 +49,15 @@ const topicLines = (topics: readonly string[]): string =>
  * Trims each topic, drops empty ones and keeps the order, then reports the first issue in the
  * order too_many, too_long, duplicate. It never drops a topic on its own.
  */
+/**
+ * What the customer gets when the topic guard blocks a message (specs/topic-guard.md). The text
+ * is fixed; only the polite ending follows the particle of the settings, as in `handoffText`.
+ */
+export function guardRefusalText(particle: PoliteParticle): string {
+  const p = particle === 'ค่ะ' ? 'คะ' : 'ครับ';
+  return `คุยได้เฉพาะหัวข้อที่กำหนดไว้นะ${p}`;
+}
+
 export function normalizeGuardTopics(raw: readonly string[]): {
   topics: string[];
   issue: GuardTopicsIssue | null;

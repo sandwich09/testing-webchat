@@ -7,9 +7,7 @@ import type { ErrorMessageCode } from '@/common/error-messages';
 import {
   errorResponseSchema,
   getSettingsResponseSchema,
-  listCannedRepliesResponseSchema,
   listContactsResponseSchema,
-  type CannedReplyDto,
   type ContactFilter,
   type ListContactsResponse,
   type SettingsDto,
@@ -203,15 +201,6 @@ export async function apiFetchNoContent(
 /** GET /api/settings */
 export function getSettings(signal?: AbortSignal): Promise<SettingsDto> {
   return apiFetch('/api/settings', { schema: getSettingsResponseSchema, signal });
-}
-
-/** GET /api/canned-replies */
-export async function listCannedReplies(signal?: AbortSignal): Promise<CannedReplyDto[]> {
-  const page = await apiFetch('/api/canned-replies', {
-    schema: listCannedRepliesResponseSchema,
-    signal,
-  });
-  return page.cannedReplies;
 }
 
 export type ContactsPage = ListContactsResponse;

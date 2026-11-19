@@ -107,9 +107,6 @@ export const ERROR_HTTP = {
     status: null,
     message: 'The PDF conversion stopped before it finished',
   },
-  // Canned replies
-  'canned_reply.not_found': { status: 404, message: 'The canned reply does not exist' },
-  'canned_reply.limit_reached': { status: 409, message: 'The canned reply limit is reached' },
 } as const satisfies Record<ErrorCode, { status: number | null; message: string }>;
 
 type ErrorHttpTable = typeof ERROR_HTTP;

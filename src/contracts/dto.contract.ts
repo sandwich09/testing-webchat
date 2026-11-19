@@ -186,7 +186,6 @@ export const settingsDtoSchema = z.strictObject({
     enabled: z.boolean(),
     /** In the saved order. */
     topics: z.array(z.string()),
-    refusalText: z.string(),
     /** AiUsage kind guard outcome blocked, today in Bangkok time. */
     blockedToday: z.number().int().nonnegative(),
   }),
@@ -291,19 +290,6 @@ export const usageRecordDtoSchema = z.strictObject({
   outcome: z.enum(USAGE_OUTCOMES),
 });
 export type UsageRecordDto = z.infer<typeof usageRecordDtoSchema>;
-
-// ---------------------------------------------------------------------------
-// Canned replies
-// ---------------------------------------------------------------------------
-
-export const cannedReplyDtoSchema = z.strictObject({
-  id: idSchema,
-  title: z.string(),
-  text: z.string(),
-  sortOrder: z.number().int(),
-  updatedAt: isoDateSchema,
-});
-export type CannedReplyDto = z.infer<typeof cannedReplyDtoSchema>;
 
 // ---------------------------------------------------------------------------
 // Uploads

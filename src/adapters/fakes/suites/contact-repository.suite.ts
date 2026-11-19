@@ -201,7 +201,7 @@ export const describeContactRepositorySuite = (
       });
     });
 
-    it('recordOutbound sets the last message and its author without touching unread', async () => {
+    it('recordOutbound sets the preview and its author, not the sort time or unread', async () => {
       await create(1);
       await repo.recordInbound(contactId(1), {
         at: at('2026-11-18T05:00:00.000Z'),
@@ -209,20 +209,15 @@ export const describeContactRepositorySuite = (
         replyToken: null,
         replyTokenExpiresAt: null,
       });
-      await repo.recordOutbound(contactId(1), {
-        at: at('2026-11-18T05:00:10.000Z'),
-        preview: text('ตอบแล้วค่ะ'),
-        by: 'ai',
-      });
+      await repo.recordOutbound(contactId(1), { preview: text('ตอบแล้วค่ะ'), by: 'ai' });
       expect(await get(contactId(1))).toMatchObject({
         unreadCount: 1,
-        lastMessageAt: at('2026-11-18T05:00:10.000Z'),
+        lastMessageAt: at('2026-11-18T05:00:00.000Z'),
         lastMessagePreview: 'ตอบแล้วค่ะ',
         lastMessageType: 'text',
         lastMessageBy: 'ai',
       });
       await repo.recordOutbound(contactId(1), {
-        at: at('2026-11-18T05:00:20.000Z'),
         preview: { type: 'video', text: null },
         by: 'admin',
       });
@@ -376,7 +371,8 @@ export const describeContactRepositorySuite = (
 
     describe('list', () => {
       const seedForList = async () => {
-        // createdAt only: 1 at 01:00, 2 at 02:00. 3 has a message at 03:00. 4 and 5 tie at 02:30.
+        // createdAt only: 1 at 01:00, 2 at 02:00. 3 has a customer message at 03:00. 4 and 5 tie
+        // with customer messages at 02:30. 1 and 2 got a reply later, which does not move them.
         await create(1, '2026-11-18T01:00:00.000Z');
         await create(2, '2026-11-18T02:00:00.000Z');
         await create(3, '2026-11-18T00:00:00.000Z');
@@ -389,15 +385,19 @@ export const describeContactRepositorySuite = (
           replyTokenExpiresAt: null,
         });
         for (const n of [4, 5]) {
-          await repo.recordOutbound(contactId(n), {
+          await repo.recordInbound(contactId(n), {
             at: at('2026-11-18T02:30:00.000Z'),
             preview: text('a'),
-            by: 'admin',
+            replyToken: null,
+            replyTokenExpiresAt: null,
           });
+        }
+        for (const n of [1, 2]) {
+          await repo.recordOutbound(contactId(n), { preview: text('ตอบ'), by: 'admin' });
         }
       };
 
-      it('orders by coalesce(lastMessageAt, createdAt) newest first, then id newest first', async () => {
+      it('orders by the latest inbound time (else createdAt) newest first, then id newest first', async () => {
         await seedForList();
         const r = await repo.list({ filter: 'all', search: null, before: null, limit: 50 });
         expect(r.contacts.map((c) => c.id)).toEqual([3, 5, 4, 2, 1].map(contactId));
@@ -422,7 +422,7 @@ export const describeContactRepositorySuite = (
         await seedForList();
         await repo.setNeedsAdmin(contactId(1), 'ai_failed');
         const unread = await repo.list({ filter: 'unread', search: null, before: null, limit: 50 });
-        expect(unread.contacts.map((c) => c.id)).toEqual([contactId(3)]);
+        expect(unread.contacts.map((c) => c.id)).toEqual([3, 5, 4].map(contactId));
         const needs = await repo.list({
           filter: 'needs_admin',
           search: null,
@@ -463,7 +463,7 @@ export const describeContactRepositorySuite = (
               replyToken: 'rt',
               replyTokenExpiresAt: at('2026-11-18T03:00:50.000Z'),
             }),
-          () => repo.recordOutbound(id, { at: at(T0), preview: text('a'), by: 'admin' }),
+          () => repo.recordOutbound(id, { preview: text('a'), by: 'admin' }),
           () => repo.consumeReplyToken(id, 'rt'),
           () => repo.setAiEnabled(id, true),
           () => repo.setNeedsAdmin(id, 'ai_other'),
@@ -536,7 +536,7 @@ export const describeContactRepositorySuite = (
         replyToken: 'rt',
         replyTokenExpiresAt: at(T0),
       });
-      await repo.recordOutbound(id, { at: at(T0), preview: text('a'), by: 'ai' });
+      await repo.recordOutbound(id, { preview: text('a'), by: 'ai' });
       await repo.setAiEnabled(id, true);
       await repo.setNeedsAdmin(id, 'ai_failed');
       await repo.clearNeedsAdmin(id);

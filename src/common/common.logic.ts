@@ -110,6 +110,28 @@ export function formatShortDate(
   return withYear ? `${base} ${String(year + 543)}` : base;
 }
 
+/** "พ.ย. 2569" of a Gregorian year and month: the form of a month on screen. */
+export function formatMonthYear(year: number, month: number): string {
+  return `${thaiShortMonth(month)} ${String(year + 543)}`;
+}
+
+/** "2026-11" as "พ.ย. 2569"; a value of another shape is shown as it came. */
+export function formatMonthKey(monthKey: string): string {
+  const match = /^(\d{4})-(\d{2})$/.exec(monthKey);
+  if (!match) return monthKey;
+  return formatMonthYear(Number(match[1]), Number(match[2]));
+}
+
+/**
+ * "2026-11-03" as "3 พ.ย. 2569", always with the Buddhist-era year: a calendar date that is not
+ * measured from today (such as the date of the price table). Another shape is shown as it came.
+ */
+export function formatDateKey(dateKey: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey);
+  if (!match) return dateKey;
+  return formatShortDate(Number(match[1]), Number(match[2]), Number(match[3]), true);
+}
+
 /** "14:32" in Thai time, 24 hours. */
 export function formatMessageTime(iso: string): string {
   const p = bangkokParts(new Date(iso));

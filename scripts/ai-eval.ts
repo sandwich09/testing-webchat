@@ -11,12 +11,12 @@ import {
   buildGuardRulesBlock,
   buildSystemInstructions,
   computeCost,
-  DEFAULT_GUARD_REFUSAL_TEXT,
   formatKnowledgeBase,
   GUARD_MAX_TOKENS,
   GUARD_MODEL,
   GUARD_TIMEOUT_MS,
   guardContextTurns,
+  guardRefusalText,
   guardVerdictOf,
   PRICE_TABLE,
   sanitizeAiReply,
@@ -122,6 +122,7 @@ async function main(): Promise<number> {
     aiInstructions: '',
   });
   const guardedSystem = `${baseSystem}\n\n${buildGuardRulesBlock(topics)}`;
+  const refusal = guardRefusalText(EVAL_PARTICLE);
   const knowledgeText = formatKnowledgeBase([{ fileName: KB_FILE_NAME, text: kbText }]);
 
   const askChat = async (
@@ -212,7 +213,7 @@ async function main(): Promise<number> {
       const j = judgeRun(
         run,
         { systemInstructions: baseSystem, previousReply: before?.reply ?? null },
-        DEFAULT_GUARD_REFUSAL_TEXT,
+        refusal,
       );
       judged.push(j);
       // Ids, verdicts, time and cost only. Customer text and model output stay out of the console.
@@ -247,13 +248,13 @@ async function main(): Promise<number> {
       return {
         ...base,
         chat: null,
-        visibleText: DEFAULT_GUARD_REFUSAL_TEXT,
+        visibleText: refusal,
         blockedBy: 'classifier',
       };
     }
     const { run: chat, blockedOffTopic } = await askChat(guardedSystem, history);
     if (blockedOffTopic) {
-      return { ...base, chat, visibleText: DEFAULT_GUARD_REFUSAL_TEXT, blockedBy: 'chat_model' };
+      return { ...base, chat, visibleText: refusal, blockedBy: 'chat_model' };
     }
     const reply = chat.output?.reply ?? null;
     return {

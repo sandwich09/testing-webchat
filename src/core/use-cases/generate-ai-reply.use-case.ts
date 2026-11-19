@@ -29,6 +29,7 @@ import {
   disallowedLinks,
   guardContextTurns,
   guardVerdictOf,
+  guardRefusalText,
   handoffText,
   isNoResponse,
   noResponseUsage,
@@ -225,7 +226,7 @@ export const makeGenerateAiReply: (
       createdAt: now,
       sentAt: null,
     });
-    await contacts.recordOutbound(contactId, { at: now, preview: previewOf(message), by: 'ai' });
+    await contacts.recordOutbound(contactId, { preview: previewOf(message), by: 'ai' });
     trace.replyIds.push(message.id);
     return message;
   };
@@ -240,7 +241,7 @@ export const makeGenerateAiReply: (
     const fresh = await recheckBeforeSend(c.id, d);
     if (fresh === null) return { kind: 'cancelled' };
     const { s2, c2 } = fresh;
-    const message = await insertAiText(c.id, s2.guardRefusalText, trace);
+    const message = await insertAiText(c.id, guardRefusalText(s2.aiPoliteParticle), trace);
     await messages.insertEvent({
       id: ids.messageId(),
       contactId: c.id,

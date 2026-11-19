@@ -31,7 +31,6 @@
 | aiInstructions | คำแนะนำสำหรับ AI ที่ร้านเขียนเอง |
 | guardEnabled | ขอบเขตหัวข้อ ค่าเริ่มต้นปิด ([topic-guard](../specs/topic-guard.md)) |
 | guardTopics | รายการหัวข้อ (array ของข้อความ) ค่าเริ่มต้นว่าง ไม่เกิน `GUARD_MAX_TOPICS` รายการ |
-| guardRefusalText | ข้อความที่ส่งให้ลูกค้าเมื่อถูกกัน ค่าเริ่มต้น `DEFAULT_GUARD_REFUSAL_TEXT` |
 | lastWebhookAt, lastLineError, lastLineErrorAt, lastAiError, lastAiErrorAt | ใช้ในส่วนสถานะระบบ error เก็บเป็นรหัสจาก [error-catalog](error-catalog.md) ไม่เก็บข้อความจากบริการภายนอก |
 | updatedAt | |
 
@@ -47,7 +46,8 @@
 | aiEnabled | สวิตช์ AI ตอบแทนรายลูกค้า ลูกค้าใหม่เป็น false จำค่าไว้แม้ kill switch ปิด และกลายเป็น false เมื่อแอดมินส่งข้อความ ([ai-reply](../specs/ai-reply.md#เมื่อแอดมินตอบเอง)) |
 | needsAdmin, needsAdminReason | สถานะรอแอดมิน และเหตุผลเป็นค่าของ `HandoffReason`: `customer_sent_image`, `customer_sent_video`, `customer_sent_non_text`, `budget_reached`, `ai_not_in_knowledge`, `ai_needs_human_action`, `ai_unsafe_or_offtopic`, `ai_other`, `ai_failed`, `ai_timeout` ข้อความไทยอยู่ใน [error-catalog](error-catalog.md#เหตุผลของสถานะรอแอดมิน) |
 | aiState, aiStateAt | `idle` หรือ `replying` ใช้ตรวจงานที่ค้าง และเป็น lock ต่อลูกค้า |
-| unreadCount, lastMessageAt, lastMessagePreview, lastMessageBy, lastMessageType | ใช้ในรายชื่อ `lastMessagePreview` มีค่าเฉพาะข้อความตัวอักษร ชนิดอื่นหน้าเว็บแสดงคำตาม `lastMessageType` |
+| lastMessageAt | เวลาข้อความขาเข้าล่าสุดของลูกค้า เป็นค่าที่รายชื่อใช้เรียง (`coalesce(lastMessageAt, createdAt)` ใหม่ไปเก่า แล้ว id) และเวลาที่แถวของรายชื่อแสดง ตั้งจาก `recordInbound` เท่านั้น ข้อความของแอดมินหรือ AI, บรรทัดเหตุการณ์, การอ่าน และสวิตช์ไม่แก้ค่านี้ null ก่อนข้อความแรกของลูกค้า |
+| unreadCount, lastMessagePreview, lastMessageBy, lastMessageType | ใช้ในรายชื่อ ข้อความล่าสุดของใครก็ได้ `lastMessagePreview` มีค่าเฉพาะข้อความตัวอักษร ชนิดอื่นหน้าเว็บแสดงคำตาม `lastMessageType` |
 | replyToken, replyTokenExpiresAt | token ล่าสุดที่ยังไม่ได้ใช้ |
 | createdAt | |
 | updatedSeq | ค่าใหม่จาก sequence ของ `Message.seq` ทุกครั้งที่แถวถูกสร้างหรือแก้ ใช้เป็น cursor ของ polling รายชื่อ |
@@ -78,7 +78,7 @@ Index: `lastMessageAt`, และ `needsAdmin` กับ `unreadCount` สำห
 
 id ของข้อความขาออกสร้างที่หน้าเว็บ จึงกันการส่งซ้ำได้ด้วย primary key
 
-Index: `(contactId, seq)` และ `(contactId, updatedSeq)` (`countEventsByCode` ของส่วน Guardrails กรองด้วย `type` และ `createdAt` ไม่มี index เพิ่ม เพราะข้อมูลของร้านเดียวมีไม่มาก)
+Index: `(contactId, seq)` และ `(contactId, updatedSeq)` (`countEventsByCode` ของ `GetGuardrailStats` กรองด้วย `type` และ `createdAt` ไม่มี index เพิ่ม เพราะข้อมูลของร้านเดียวมีไม่มาก)
 
 ### WebhookEvent
 
@@ -111,14 +111,6 @@ Index: `(contactId, seq)` และ `(contactId, updatedSeq)` (`countEventsByCod
 | costUsd | คำนวณจากตารางราคาใน [usage-cost](../specs/usage-cost.md#การคำนวณราคา) เก็บเป็น `Decimal(18, 9)` |
 | outcome, error | `ok`, `handoff`, `refused`, `failed`, `cancelled` (AI ถูกปิดหลังเรียกโมเดล จึงไม่ได้ส่ง), `blocked` (นอกขอบเขตหัวข้อ ส่งข้อความปฏิเสธแทน) และ `error` เป็นรหัสจาก [error-catalog](error-catalog.md) |
 | createdAt | |
-
-### CannedReply
-
-| Field | หมายเหตุ |
-| --- | --- |
-| title, text | ข้อความสำเร็จรูปของร้าน |
-| sortOrder | ลำดับในรายการ |
-| createdAt, updatedAt | |
 
 ### RateLimitBucket
 
@@ -187,6 +179,15 @@ Migration แรก (`init`) ถูก apply แล้ว ห้ามแก้�
 ### Migration ที่สี่: Channel ID และ push ครั้งแรก
 
 `line_channel_id_and_first_push` เพิ่มสามคอลัมน์ที่ว่างได้และไม่มีค่าเริ่มต้นอย่างเดียว: `Message.firstPushAt` (`timestamptz(3)`), `Settings.lineChannelId` (`text`) และ `Settings.lineSecretVerifiedAt` (`timestamptz(3)`) โค้ดรุ่นก่อนจึงยังทำงานกับตารางใหม่ได้ สร้างด้วย `--create-only` ตามวิธีของ migration ที่สอง และลบคำสั่งของ `"Message"."seq"` กับ `DROP SEQUENCE "change_seq"` ที่ Prisma สร้างเกินมาด้วยมือ ไฟล์จึงมีเฉพาะ `ALTER TABLE "Message" ADD COLUMN "firstPushAt"` และ `ALTER TABLE "Settings" ADD COLUMN "lineChannelId", ADD COLUMN "lineSecretVerifiedAt"` ไม่ย้ายข้อมูล: ข้อความเดิมไม่มีหน้าต่างของ retry key (ส่งอีกครั้งได้เหมือนก่อน migration) และ credential เดิมแสดงว่ายังไม่ได้ตรวจ Channel secret จนกว่าจะบันทึกใหม่พร้อม Channel ID เหตุผล: `deliveryAttemptAt` เลื่อนทุกครั้งที่ส่งอีกครั้ง และ `createdAt` มาก่อน push ครั้งแรกของข้อความที่ reply ล้มเหลว ทั้งสองจึงไม่ใช่เวลาที่ LINE เริ่มนับอายุของ key ([ADR 0023](../adr/0023-retry-key-v5-window-and-reply-400.md))
+
+### Migration ที่ห้า: ลบตารางและคอลัมน์ที่ไม่ใช้แล้ว
+
+`drop_canned_reply_and_guard_refusal` เป็น migration แบบทำลายที่เจ้าของงานอนุมัติ (บรรทัด `-- approved-destructive:` ในไฟล์ ตาม [pitfalls D2](../guidelines/pitfalls-and-prevention.md#d2-migration-ที่ทำให้ย้อนกลับไม่ได้)) เพราะทั้งสองฟีเจอร์ถูกตัดออกจากขอบเขตและไม่เคยมีข้อมูลจริง ([ADR 0024](../adr/0024-scope-reductions.md)) มีสองคำสั่งเท่านั้น:
+
+- `DROP TABLE "CannedReply"` (index `CannedReply_sortOrder_idx` หายไปพร้อมตาราง ไม่มี enum หรือ sequence ของตารางนี้)
+- `ALTER TABLE "Settings" DROP COLUMN "guardRefusalText"`
+
+ไม่มีคำสั่งของ `"Message"."seq"` หรือ `change_seq` ตามกฎของ migration ที่สอง โค้ดก่อน migration นี้อ่านคอลัมน์และตารางที่ถูกลบ จึงย้อนกลับด้วยการ deploy รุ่นเก่าอย่างเดียวไม่ได้ ต้องเพิ่ม migration ที่สร้างคืนก่อน
 
 ## Prisma schema
 
@@ -328,7 +329,6 @@ model Settings {
   aiInstructions       String         @default("")
   guardEnabled         Boolean        @default(false)
   guardTopics          String[]       @default([])
-  guardRefusalText     String         @default("คุยได้เฉพาะหัวข้อที่กำหนดไว้นะคะ")
   lastWebhookAt        DateTime?      @db.Timestamptz(3)
   lastLineError        String?
   lastLineErrorAt      DateTime?      @db.Timestamptz(3)
@@ -452,17 +452,6 @@ model AiUsage {
   @@index([contactId, createdAt])
 }
 
-model CannedReply {
-  id        String   @id @db.Uuid
-  title     String
-  text      String
-  sortOrder Int
-  createdAt DateTime @db.Timestamptz(3)
-  updatedAt DateTime @db.Timestamptz(3)
-
-  @@index([sortOrder])
-}
-
 model RateLimitBucket {
   key         String   @id
   windowStart DateTime @db.Timestamptz(3)
@@ -559,7 +548,7 @@ model RateLimitBucket {
 | aiEnabled | เปิด เพื่อให้ผู้ตรวจลอง AI ตอบแทนกับ stub ได้ทันที (ต่างจากค่าเริ่มต้นของระบบที่ติดตั้งใหม่ซึ่งปิด) |
 | aiModel, aiDailyBudgetUsd, aiPoliteParticle | ค่าเริ่มต้นของ schema (`DEFAULT_AI_MODEL`, `DEFAULT_AI_DAILY_BUDGET_USD`, `DEFAULT_POLITE_PARTICLE`) |
 | aiInstructions | `ตอบสุภาพ เป็นกันเอง ถ้าลูกค้าถามเรื่องจัดเลี้ยงหรือสั่งจำนวนมาก ให้แอดมินตอบ` |
-| guardEnabled, guardTopics, guardRefusalText | ปิด, `มุกตลกไทย`, `มีมจากละครและซีรีส์`, `มุกจากภาพยนตร์` (ตัวอย่างสำหรับเดโม เปิดเองที่หน้าตั้งค่า), ค่าเริ่มต้นของ schema |
+| guardEnabled, guardTopics | ปิด, `มุกตลกไทย`, `มีมจากละครและซีรีส์`, `มุกจากภาพยนตร์` (ตัวอย่างสำหรับเดโม เปิดเองที่หน้าตั้งค่า) |
 | lastWebhookAt | 1 นาทีก่อนรัน |
 
 ### ลูกค้า 7 คน
@@ -578,16 +567,7 @@ model RateLimitBucket {
 
 - สติกเกอร์ของป้าแดงใช้ `stickerPackageId` `446` และ `stickerId` `1988` ซึ่งเป็นตัวอย่างที่พบในเอกสารของ LINE (ต้องยืนยันว่าแสดงได้ ถ้าไม่ได้หน้าเว็บแสดงป้ายแทน)
 - ข้อความของลูกค้าทุกข้อความมี `lineMessageId` ปลอมที่ไม่ซ้ำ ข้อความขาออกมี `retryKey` เท่ากับ id บรรทัดเหตุการณ์มี `direction` `internal`, `author` `system`, `type` `event` และ `eventCode` ตามตาราง
-- `lastMessage*` และ `unreadCount` ของแต่ละคนตรงกับข้อความสุดท้ายในตาราง
-
-### ข้อความสำเร็จรูป
-
-| sortOrder | title | text |
-| --- | --- | --- |
-| 1 | เวลาเปิดร้าน | ร้านเปิดทุกวัน 08:00–18:00 ค่ะ |
-| 2 | ที่จอดรถ | มีที่จอดรถหน้าร้าน 4 คัน และจอดริมถนนได้ค่ะ |
-| 3 | ช่องทางชำระเงิน | รับเงินสด โอนผ่านพร้อมเพย์ และบัตรเครดิตค่ะ |
-| 4 | ขอบคุณ | ขอบคุณที่อุดหนุนต้นหอม คาเฟ่ ค่ะ |
+- `lastMessagePreview`, `lastMessageBy`, `lastMessageType` และ `unreadCount` ของแต่ละคนตรงกับข้อความสุดท้ายในตาราง ส่วน `lastMessageAt` คือเวลาของข้อความสุดท้ายของลูกค้า รายชื่อจึงเรียงตามข้อความของลูกค้า
 
 ### คลังความรู้
 

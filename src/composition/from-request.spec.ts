@@ -2,13 +2,11 @@ import { describe, expect, it } from 'vitest';
 import type { ContactId } from '@/core/domain';
 import { encodeContactCursor } from './http-request';
 import {
-  toCreateCannedReplyInput,
   toGetMessagesInput,
   toListContactsInput,
   toLocalStorageKey,
   toSendAdminMessageInput,
   toSetLineCredentialsInput,
-  toUpdateCannedReplyInput,
   toUpdateSettingsInput,
   toUsageMonth,
 } from './from-request';
@@ -91,7 +89,6 @@ describe('toUpdateSettingsInput', () => {
         aiInstructions: '',
         guardEnabled: true,
         guardTopics: ['a'],
-        guardRefusalText: 'no',
       }),
     ).toEqual({
       ok: true,
@@ -103,7 +100,6 @@ describe('toUpdateSettingsInput', () => {
         aiInstructions: '',
         guardEnabled: true,
         guardTopics: ['a'],
-        guardRefusalText: 'no',
       },
     });
   });
@@ -121,15 +117,6 @@ describe('toUpdateSettingsInput', () => {
 });
 
 describe('other mappers', () => {
-  it('maps canned reply bodies', () => {
-    expect(toCreateCannedReplyInput({ title: 't', text: 'x' })).toEqual({
-      id: null,
-      title: 't',
-      text: 'x',
-    });
-    expect(toUpdateCannedReplyInput('r1', { sortOrder: 3 })).toEqual({ id: 'r1', sortOrder: 3 });
-  });
-
   it('maps LINE credentials, local storage keys and the usage month', () => {
     expect(
       toSetLineCredentialsInput({

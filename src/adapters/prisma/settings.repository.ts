@@ -45,7 +45,6 @@ export function createSettingsRepository(
         aiInstructions: patch.aiInstructions,
         guardEnabled: patch.guardEnabled,
         guardTopics: patch.guardTopics === undefined ? undefined : { set: [...patch.guardTopics] },
-        guardRefusalText: patch.guardRefusalText,
       });
       return toSettings(row);
     },

@@ -23,8 +23,6 @@ import { testIds } from '@/common/test-ids';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/common/ui/tooltip';
 
 type AppRailProps = {
-  /** Shop name from the LINE settings; empty means `common.appName`. */
-  shopName: string;
   /** Unread chats, from the contact list cache. 0 hides the badge. */
   unreadCount: number;
   /** Collapsed rail (wide screens only; the narrow top strip ignores it). */
@@ -37,15 +35,8 @@ const itemBase =
   'relative flex h-11 medium:h-10 shrink-0 items-center rounded-full text-body transition-colors';
 
 /** Left menu, and the top strip when the screen is narrower than 720px (ui-screens 3.2 and 3.3). */
-export function AppRail({
-  shopName,
-  unreadCount,
-  collapsed,
-  onToggleCollapsed,
-  onLogout,
-}: AppRailProps) {
+export function AppRail({ unreadCount, collapsed, onToggleCollapsed, onLogout }: AppRailProps) {
   const pathname = usePathname();
-  const brandName = shopName.trim() === '' ? copy.appName : shopName.trim();
   const inboxActive = pathname.startsWith('/chats');
   const settingsActive = pathname.startsWith('/settings');
   const unreadText = unreadCount > 99 ? '99+' : String(unreadCount);
@@ -138,15 +129,15 @@ export function AppRail({
           className="flex size-8 shrink-0 items-center justify-center rounded-[9px] text-[16px] leading-none font-bold text-white"
           style={{ backgroundImage: 'var(--brand-gradient)' }}
         >
-          {initialOf(brandName)}
+          {initialOf(copy.appName)}
         </span>
         <span
           className={cn(
-            'hidden min-w-0 truncate py-0.5 text-name font-bold',
+            'hidden py-0.5 text-name font-bold whitespace-nowrap',
             collapsed ? '' : 'medium:block',
           )}
         >
-          {brandName}
+          {copy.appName}
         </span>
       </div>
 

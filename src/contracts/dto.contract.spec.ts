@@ -3,15 +3,14 @@ import {
   contactDetailDtoSchema,
   contactDtoSchema,
   documentDetailDtoSchema,
+  guardrailStatsDtoSchema,
   messageDtoSchema,
   settingsDtoSchema,
   systemStatusDtoSchema,
   uploadTicketDtoSchema,
   usageRecordDtoSchema,
   usageRowDtoSchema,
-  cannedReplyDtoSchema,
   documentDtoSchema,
-  guardrailStatsDtoSchema,
 } from './dto.contract';
 import { errorResponseSchema } from './error.contract';
 
@@ -114,15 +113,6 @@ describe('DTO schemas', () => {
       }).success,
     ).toBe(true);
     expect(
-      cannedReplyDtoSchema.safeParse({
-        id: 'c',
-        title: 't',
-        text: 'x',
-        sortOrder: 0,
-        updatedAt: NOW,
-      }).success,
-    ).toBe(true);
-    expect(
       systemStatusDtoSchema.safeParse({
         lastWebhookAt: null,
         lastLineError: { code: 'line.push_failed', at: NOW },
@@ -147,7 +137,6 @@ describe('DTO schemas', () => {
         guard: {
           enabled: true,
           topics: ['มุกตลกไทย', 'มุกจากภาพยนตร์'],
-          refusalText: 'คุยได้เฉพาะหัวข้อที่กำหนดไว้นะคะ',
           blockedToday: 3,
         },
         line: {
@@ -236,7 +225,7 @@ describe('topic guard DTOs', () => {
       politeParticle: 'ค่ะ',
       instructions: '',
     },
-    guard: { enabled: false, topics: [], refusalText: 'x', blockedToday: 0 },
+    guard: { enabled: false, topics: [], blockedToday: 0 },
     line: {
       configured: false,
       status: 'not_configured',
@@ -260,7 +249,8 @@ describe('topic guard DTOs', () => {
       { ...settings.guard, blockedToday: -1 },
       { ...settings.guard, blockedToday: 1.5 },
       { ...settings.guard, topics: [1] },
-      { enabled: false, topics: [], refusalText: 'x' },
+      { enabled: false, topics: [] },
+      { ...settings.guard, refusalText: 'x' },
     ]) {
       expect(
         settingsDtoSchema.safeParse({ ...settings, guard }).success,

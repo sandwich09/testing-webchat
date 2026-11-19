@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_AI_MODEL,
-  DEFAULT_GUARD_REFUSAL_TEXT,
   DEFAULT_POLITE_PARTICLE,
   type NanoUsd,
   type Settings,
@@ -21,7 +20,6 @@ const DEFAULTS: Settings = {
   aiInstructions: '',
   guardEnabled: false,
   guardTopics: [],
-  guardRefusalText: DEFAULT_GUARD_REFUSAL_TEXT,
   lineConfigured: false,
   lineBotName: null,
   lineBasicId: null,
@@ -78,13 +76,8 @@ export const describeSettingsRepositorySuite = (
       const topics = ['มุกตลกไทย', 'มีมจากละครและซีรีส์', 'มุกจากภาพยนตร์'];
       const updated = await repo.update({ guardTopics: topics });
       expect(updated).toEqual({ ...DEFAULTS, guardTopics: topics });
-      const enabled = await repo.update({ guardEnabled: true, guardRefusalText: 'คุยได้แค่มุกนะคะ' });
-      expect(enabled).toEqual({
-        ...DEFAULTS,
-        guardEnabled: true,
-        guardTopics: topics,
-        guardRefusalText: 'คุยได้แค่มุกนะคะ',
-      });
+      const enabled = await repo.update({ guardEnabled: true });
+      expect(enabled).toEqual({ ...DEFAULTS, guardEnabled: true, guardTopics: topics });
       expect(await repo.get()).toEqual(enabled);
     });
 

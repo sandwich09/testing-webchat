@@ -8,7 +8,6 @@ export const LOG_FIELD_KEYS = [
   'messageId',
   'documentId',
   'usageId',
-  'cannedReplyId',
   'route',
   'method',
   'httpStatus',

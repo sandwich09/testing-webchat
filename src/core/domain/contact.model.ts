@@ -15,6 +15,7 @@ export interface Contact {
   aiState: AiState;
   aiStateAt: Date | null;
   unreadCount: number;
+  /** Time of the latest inbound message: the sort key of the contact list. null before the first. */
   lastMessageAt: Date | null;
   /** At most PREVIEW_TEXT_MAX_CHARS characters, or null when the last message is media. */
   lastMessagePreview: string | null;

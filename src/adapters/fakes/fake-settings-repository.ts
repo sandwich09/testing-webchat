@@ -1,7 +1,6 @@
 import {
   DEFAULT_AI_DAILY_BUDGET_USD,
   DEFAULT_AI_MODEL,
-  DEFAULT_GUARD_REFUSAL_TEXT,
   DEFAULT_POLITE_PARTICLE,
   parseUsd,
   type EncryptedLineCredentials,
@@ -28,7 +27,6 @@ const defaults = (): Row => ({
     aiInstructions: '',
     guardEnabled: false,
     guardTopics: [],
-    guardRefusalText: DEFAULT_GUARD_REFUSAL_TEXT,
     lineConfigured: false,
     lineBotName: null,
     lineBasicId: null,
@@ -72,7 +70,6 @@ export class FakeSettingsRepository implements SettingsRepository {
     s.aiInstructions = patch.aiInstructions ?? s.aiInstructions;
     s.guardEnabled = patch.guardEnabled ?? s.guardEnabled;
     s.guardTopics = patch.guardTopics ? [...patch.guardTopics] : s.guardTopics;
-    s.guardRefusalText = patch.guardRefusalText ?? s.guardRefusalText;
     return Promise.resolve(structuredClone(row.settings));
   };
 

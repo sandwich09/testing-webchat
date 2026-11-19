@@ -6,8 +6,8 @@ import { copy as commonCopy } from '@/common/common.constants';
 import {
   formatDateTime,
   formatInt,
+  formatMonthKey,
   formatUsdForScreen,
-  thaiShortMonth,
 } from '@/common/common.logic';
 import { ErrorState } from '@/common/ErrorState';
 import { testIds } from '@/common/test-ids';
@@ -34,13 +34,6 @@ type UsageDetailDialogProps = {
 
 const SKELETON_ROWS = 6;
 
-/** "2026-11" as "พ.ย. 2569"; anything else is shown as it came. */
-function monthText(month: string): string {
-  const match = /^(\d{4})-(\d{2})$/.exec(month);
-  if (!match) return month;
-  return `${thaiShortMonth(Number(match[2]))} ${String(Number(match[1]) + 543)}`;
-}
-
 /** Display name of a model: the name in the settings copy, or the id when it is not known. */
 function modelText(model: string): string {
   return Object.hasOwn(copy.ai.modelOption, model)
@@ -66,7 +59,7 @@ export function UsageDetailDialog({ month, contact, onClose }: UsageDetailDialog
   const [now] = useState(() => new Date());
   const title = copy.usage.detailTitle
     .replace('{name}', shown?.displayName ?? '')
-    .replace('{month}', monthText(month));
+    .replace('{month}', formatMonthKey(month));
   const records = detail.data === undefined ? undefined : [...detail.data].sort(byNewest);
 
   return (

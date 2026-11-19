@@ -1,11 +1,6 @@
-// API functions of the topic guard section and the Guardrails panel (ui-screens 1.6).
+// API functions of the topic guard section (ui-screens 1.6).
 import { apiFetch } from '@/common/common.api';
-import {
-  guardrailStatsResponseSchema,
-  testTopicGuardResponseSchema,
-  type GuardrailStatsDto,
-  type TestTopicGuardResponse,
-} from '@/contracts';
+import { testTopicGuardResponseSchema, type TestTopicGuardResponse } from '@/contracts';
 
 export type GuardTestResult = TestTopicGuardResponse;
 
@@ -16,9 +11,4 @@ export function testTopicGuard(text: string): Promise<GuardTestResult> {
     body: { text },
     schema: testTopicGuardResponseSchema,
   });
-}
-
-/** GET /api/system/guardrails */
-export function getGuardrailStats(signal?: AbortSignal): Promise<GuardrailStatsDto> {
-  return apiFetch('/api/system/guardrails', { schema: guardrailStatsResponseSchema, signal });
 }

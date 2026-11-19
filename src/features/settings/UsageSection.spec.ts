@@ -14,7 +14,9 @@ describe('UsageSection server render', () => {
       createElement(QueryClientProvider, { client }, createElement(UsageSection)),
     );
     expect(html).toContain(`data-testid="${testIds.usageMonth}"`);
-    expect(html).not.toContain('<option');
+    // The month trigger carries no value and shows no month label.
+    expect(html).not.toContain('data-value=');
+    expect(html).not.toMatch(/25[0-9]{2}/);
     // The report waits for the month: the loading skeleton, and no request was started.
     expect(html).toContain('aria-busy="true"');
     const usage = client.getQueryCache().findAll({ queryKey: ['usage'] });

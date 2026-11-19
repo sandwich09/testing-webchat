@@ -71,13 +71,6 @@ const MESSAGE_IDS = [
   '01a1ebf4-61c0-7000-8000-61e1a9a719c3',
 ] as const;
 
-const CANNED_REPLY_IDS = [
-  '01a1ebf4-65a8-7000-8000-658fd832aeaf',
-  '01a1ebf4-6990-7000-8000-69e90058b949',
-  '01a1ebf4-6d78-7000-8000-6d2625d3dbe6',
-  '01a1ebf4-7160-7000-8000-71810e4b815c',
-] as const;
-
 const KB_DOCUMENT_ID = '01a1ebf4-7548-7000-8000-763594bb5bfa';
 
 const USAGE_IDS = [
@@ -106,13 +99,6 @@ const ago = (offsetMs: number): Date => new Date(runAt - offsetMs);
 const MALEE_ADMIN_NOTICE = 'ขออนุญาตให้แอดมินมาตอบเรื่องนี้นะคะ';
 const AI_INSTRUCTIONS = 'ตอบสุภาพ เป็นกันเอง ถ้าลูกค้าถามเรื่องจัดเลี้ยงหรือสั่งจำนวนมาก ให้แอดมินตอบ';
 const GUARD_TOPICS = ['มุกตลกไทย', 'มีมจากละครและซีรีส์', 'มุกจากภาพยนตร์'];
-
-const CANNED_REPLIES = [
-  { title: 'เวลาเปิดร้าน', text: 'ร้านเปิดทุกวัน 08:00–18:00 ค่ะ' },
-  { title: 'ที่จอดรถ', text: 'มีที่จอดรถหน้าร้าน 4 คัน และจอดริมถนนได้ค่ะ' },
-  { title: 'ช่องทางชำระเงิน', text: 'รับเงินสด โอนผ่านพร้อมเพย์ และบัตรเครดิตค่ะ' },
-  { title: 'ขอบคุณ', text: 'ขอบคุณที่อุดหนุนต้นหอม คาเฟ่ ค่ะ' },
-];
 
 const MENU_TEXT = [
   'เมนูและราคา ต้นหอม คาเฟ่',
@@ -343,6 +329,8 @@ const contactRow = (c: ContactSeed, index: number) => {
   // A timeline event is not a conversation message, so the list shows the last real message.
   const last = [...c.messages].reverse().find(LAST_BY_TYPE);
   if (first === undefined || last === undefined) throw new Error('seed: contact without messages');
+  // The list is ordered by the customer's latest message (data-model, Contact.lastMessageAt).
+  const lastInbound = [...c.messages].reverse().find((d) => d.author === 'customer');
   const joinedAt = new Date(first.at.getTime() - MINUTE);
   return {
     id: c.id,
@@ -356,7 +344,7 @@ const contactRow = (c: ContactSeed, index: number) => {
     needsAdminReason: c.needsAdmin ? ('ai_needs_human_action' as const) : null,
     aiState: 'idle' as const,
     unreadCount: c.unreadCount,
-    lastMessageAt: last.at,
+    lastMessageAt: lastInbound?.at ?? null,
     lastMessagePreview: last.type === 'text' ? (last.text ?? null) : null,
     lastMessageBy: last.author,
     lastMessageType: last.type,
@@ -480,19 +468,6 @@ async function main(): Promise<void> {
       ).count,
       messages: (
         await prisma.message.createMany({ data: messageRows(contacts), skipDuplicates: true })
-      ).count,
-      cannedReplies: (
-        await prisma.cannedReply.createMany({
-          data: CANNED_REPLIES.map((r, i) => ({
-            id: CANNED_REPLY_IDS[i] as string,
-            title: r.title,
-            text: r.text,
-            sortOrder: i + 1,
-            createdAt: ago(7 * DAY),
-            updatedAt: ago(7 * DAY),
-          })),
-          skipDuplicates: true,
-        })
       ).count,
       documents: (
         await prisma.kbDocument.createMany({

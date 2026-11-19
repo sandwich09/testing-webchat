@@ -49,7 +49,7 @@ app/
 
 รายชื่อทั้งหมด ลายเซ็นและความหมายอยู่ใน [domain-and-ports](domain-and-ports.md#port)
 
-`MessagingGateway`, `ChatModel`, `DocumentExtractor`, `TopicGuard`, `KnowledgeSource`, `FileStorage`, `ContactRepository`, `MessageRepository`, `SettingsRepository`, `KnowledgeRepository`, `UsageRepository`, `CannedReplyRepository`, `WebhookEventRepository`, `RateLimitRepository`, `SecretCipher`, `AccessTokenSigner`, `ContentHasher`, `Clock`, `IdGenerator`, `Logger`
+`MessagingGateway`, `ChatModel`, `DocumentExtractor`, `TopicGuard`, `KnowledgeSource`, `FileStorage`, `ContactRepository`, `MessageRepository`, `SettingsRepository`, `KnowledgeRepository`, `UsageRepository`, `WebhookEventRepository`, `RateLimitRepository`, `SecretCipher`, `AccessTokenSigner`, `ContentHasher`, `Clock`, `IdGenerator`, `Logger`
 
 Adapter ของ `KnowledgeSource` อยู่ใน `src/adapters/prisma/` และ query ตาราง `KbDocument` ตรง ไม่เรียก `KnowledgeRepository` เพราะ adapter ห้ามเรียก adapter อื่น ทุก port มีตัวปลอมใน `src/adapters/fakes/` และชุดทดสอบของ port ที่รันกับทั้งตัวปลอมและตัวจริง
 
@@ -57,7 +57,7 @@ Adapter ของ `KnowledgeSource` อยู่ใน `src/adapters/prisma/` �
 
 ขั้นตอนและ test อยู่ใน [use-cases](use-cases.md)
 
-`VerifyAccess`, `UnlockAccess`, `CheckHealth`, `ReceiveLineEvents`, `StoreInboundMedia`, `GenerateAiReply`, `SendAdminMessage`, `RetryMessage`, `IssueUpload`, `DiscardUpload`, `WriteLocalUpload`, `ServeLocalMedia`, `ShowTypingToCustomer`, `SetContactAi`, `MarkContactRead`, `ListContacts`, `GetContact`, `GetMessages`, `GetSettings`, `UpdateSettings`, `TestTopicGuard`, `SetLineCredentials`, `TestLineConnection`, `IngestDocument`, `DeleteDocument`, `ListDocuments`, `GetDocument`, `SaveCannedReply`, `DeleteCannedReply`, `ListCannedReplies`, `GetUsageReport`, `GetContactUsage`, `GetSystemStatus`, `GetGuardrailStats`
+`VerifyAccess`, `UnlockAccess`, `CheckHealth`, `ReceiveLineEvents`, `StoreInboundMedia`, `GenerateAiReply`, `SendAdminMessage`, `RetryMessage`, `IssueUpload`, `DiscardUpload`, `WriteLocalUpload`, `ServeLocalMedia`, `ShowTypingToCustomer`, `SetContactAi`, `MarkContactRead`, `ListContacts`, `GetContact`, `GetMessages`, `GetSettings`, `UpdateSettings`, `TestTopicGuard`, `SetLineCredentials`, `TestLineConnection`, `IngestDocument`, `DeleteDocument`, `ListDocuments`, `GetDocument`, `GetUsageReport`, `GetContactUsage`, `GetSystemStatus`, `GetGuardrailStats`
 
 Use case ที่อ่านอย่างเดียวเรียก repository ตรงได้ ยกเว้น `ListContacts` ซึ่งเขียนแบบมีเงื่อนไขหนึ่งครั้งทุกรอบ: คืนสภาพงาน AI ที่ค้างเป็นรอแอดมินพร้อมบรรทัดเหตุการณ์ ตาม [ai-reply](../specs/ai-reply.md#งานที่ค้าง)
 
@@ -67,7 +67,7 @@ Use case ที่อ่านอย่างเดียวเรียก repo
 
 ตัวช่วยของ route (`withRoute`, `json`, `bodyStream`, `runJob`, ตัวแปลง DTO และตัวแปลง input) อยู่ใน `src/composition/` และ export จาก `src/composition/index.ts` route import จาก `@/composition` เท่านั้น ไฟล์ใน `app/api/_lib/` (`with-route.ts`, `to-dto.ts`) เป็นเพียง re-export และคำอธิบายวิธีเขียน route เพราะ unit test ของ Vitest เก็บเฉพาะ `src/**` `runJob(fn, fields)` รับงานและ field ของ log (`requestId`, `route`, `contactId`, `messageId`, `documentId`) ส่งงานเข้า `after()` และ log `job.run.failed` เมื่องาน throw สัญญาของแต่ละตัวอยู่ใน [api-contract](api-contract.md#endpoint)
 
-`POST /api/line/webhook`, `GET /api/health`, `POST /api/access/unlock`, `POST /api/access/lock`, `GET /api/contacts`, `GET /api/contacts/:id`, `PATCH /api/contacts/:id`, `POST /api/contacts/:id/read`, `GET /api/contacts/:id/messages`, `POST /api/contacts/:id/messages`, `POST /api/contacts/:id/messages/:messageId/retry`, `POST /api/contacts/:id/typing`, `POST /api/uploads`, `DELETE /api/uploads/:uploadId`, `PUT /api/local-storage/*key`, `GET /api/local-storage/*key`, `GET /api/settings`, `PATCH /api/settings`, `PUT /api/settings/line-credentials`, `POST /api/settings/line/test`, `POST /api/settings/guard/test`, `GET /api/knowledge/documents`, `POST /api/knowledge/documents`, `GET /api/knowledge/documents/:id`, `DELETE /api/knowledge/documents/:id`, `POST /api/knowledge/documents/:id/retry`, `GET /api/canned-replies`, `POST /api/canned-replies`, `PATCH /api/canned-replies/:id`, `DELETE /api/canned-replies/:id`, `GET /api/usage`, `GET /api/usage/contacts/:id`, `GET /api/system/status`, `GET /api/system/guardrails`
+`POST /api/line/webhook`, `GET /api/health`, `POST /api/access/unlock`, `POST /api/access/lock`, `GET /api/contacts`, `GET /api/contacts/:id`, `PATCH /api/contacts/:id`, `POST /api/contacts/:id/read`, `GET /api/contacts/:id/messages`, `POST /api/contacts/:id/messages`, `POST /api/contacts/:id/messages/:messageId/retry`, `POST /api/contacts/:id/typing`, `POST /api/uploads`, `DELETE /api/uploads/:uploadId`, `PUT /api/local-storage/*key`, `GET /api/local-storage/*key`, `GET /api/settings`, `PATCH /api/settings`, `PUT /api/settings/line-credentials`, `POST /api/settings/line/test`, `POST /api/settings/guard/test`, `GET /api/knowledge/documents`, `POST /api/knowledge/documents`, `GET /api/knowledge/documents/:id`, `DELETE /api/knowledge/documents/:id`, `POST /api/knowledge/documents/:id/retry`, `GET /api/usage`, `GET /api/usage/contacts/:id`, `GET /api/system/status`, `GET /api/system/guardrails`
 
 `PUT` และ `GET /api/local-storage/*key` มีเฉพาะเมื่อ `FILE_STORAGE=local`
 

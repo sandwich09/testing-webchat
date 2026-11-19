@@ -6,13 +6,11 @@ export const qk = {
   contacts: (p: { filter: ContactFilter; q: string }) => ['contacts', p] as const,
   contact: (id: string) => ['contact', id] as const,
   messages: (id: string) => ['messages', id] as const,
-  cannedReplies: () => ['canned-replies'] as const,
   kbDocuments: () => ['kb-documents'] as const,
   kbDocument: (id: string) => ['kb-document', id] as const,
   usage: (month: string) => ['usage', month] as const,
   usageDetail: (contactId: string, month: string) => ['usage-detail', contactId, month] as const,
   systemStatus: () => ['system-status'] as const,
-  guardrails: () => ['guardrails'] as const,
 };
 
 /** Prefixes that match every key of one kind, for `invalidateQueries` and `setQueriesData`. */

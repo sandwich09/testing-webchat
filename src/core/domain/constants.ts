@@ -46,9 +46,6 @@ export const PREVIEW_TEXT_MAX_CHARS = 100;
 export const MESSAGE_PAGE_LIMIT = 50;
 export const CONTACT_PAGE_LIMIT = 50;
 export const CONTACT_SEARCH_MAX_CHARS = 50;
-export const CANNED_REPLY_MAX_COUNT = 100;
-export const CANNED_TITLE_MAX_CHARS = 50;
-export const CANNED_TEXT_MAX_CHARS = 2000;
 export const AI_INSTRUCTIONS_MAX_CHARS = 2000;
 export const AI_DAILY_BUDGET_MAX_USD = '10.00';
 export const ACCESS_COOKIE_TTL_MS = 604_800_000;
@@ -60,14 +57,11 @@ export const DEFAULT_POLITE_PARTICLE: PoliteParticle = 'ค่ะ';
 // Topic guard (specs/topic-guard.md)
 export const GUARD_MAX_TOPICS = 20;
 export const GUARD_TOPIC_MAX_CHARS = 80;
-export const GUARD_REFUSAL_MAX_CHARS = 300;
 export const GUARD_TEST_MAX_CHARS = 1000;
 export const GUARD_MODEL: AiModelId = 'claude-haiku-5-5';
 export const GUARD_MAX_TOKENS = 2000;
 export const GUARD_TIMEOUT_MS = 10_000;
 export const GUARD_CONTEXT_TURNS = 4;
-/** Also the column default of Settings.guardRefusalText in prisma/schema.prisma. */
-export const DEFAULT_GUARD_REFUSAL_TEXT = 'คุยได้เฉพาะหัวข้อที่กำหนดไว้นะคะ';
 
 // 10.2 Rate limits (fixed window)
 export const RATE_LIMIT_UNLOCK = { limit: 5, windowMs: 60_000 } as const;

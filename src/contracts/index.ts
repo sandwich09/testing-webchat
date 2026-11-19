@@ -2,7 +2,6 @@
 import './zod-config';
 
 export * from './access.contract';
-export * from './canned-replies.contract';
 export * from './contacts.contract';
 export * from './dto.contract';
 export * from './error.contract';

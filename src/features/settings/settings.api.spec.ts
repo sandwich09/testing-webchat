@@ -3,8 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DocumentDto } from '@/contracts';
 
 import {
-  createCannedReply,
-  deleteCannedReply,
   deleteKbDocument,
   getKbDocument,
   getSystemStatus,
@@ -14,7 +12,6 @@ import {
   retryKbDocument,
   saveLineCredentials,
   testLineConnection,
-  updateCannedReply,
   updateSettings,
   uploadKbDocument,
 } from './settings.api';
@@ -50,7 +47,7 @@ const settings = {
     politeParticle: 'ครับ',
     instructions: 'สุภาพ',
   },
-  guard: { enabled: false, topics: [], refusalText: 'คุยได้เฉพาะหัวข้อที่กำหนดไว้นะคะ', blockedToday: 0 },
+  guard: { enabled: false, topics: [], blockedToday: 0 },
   line: {
     configured: false,
     status: 'not_configured',
@@ -74,7 +71,6 @@ const doc = (id: string, status: DocumentDto['status']): DocumentDto => ({
   createdAt: T,
   updatedAt: T,
 });
-const reply = { id: 'r/1', title: 'ราคา', text: '100 บาท', sortOrder: 1, updatedAt: T };
 const usage = {
   month: '2026-11',
   priceTableDate: '2026-11-01',
@@ -212,34 +208,6 @@ describe('knowledge base', () => {
     });
     expect(hasProcessingDocument(list('processing'))).toBe(true);
     expect(hasProcessingDocument(list('failed'))).toBe(false);
-  });
-});
-
-describe('canned replies', () => {
-  it('createCannedReply posts and parses the 201 body', async () => {
-    fetchMock.mockResolvedValue(json(reply, 201));
-    await expect(createCannedReply({ title: 'ราคา', text: '100 บาท' })).resolves.toEqual(reply);
-    expect(call()).toEqual({
-      url: '/api/canned-replies',
-      method: 'POST',
-      body: { title: 'ราคา', text: '100 บาท' },
-    });
-  });
-
-  it('updateCannedReply sends PATCH to the encoded id', async () => {
-    fetchMock.mockResolvedValue(json(reply));
-    await updateCannedReply('r/1', { sortOrder: 3 });
-    expect(call()).toEqual({
-      url: '/api/canned-replies/r%2F1',
-      method: 'PATCH',
-      body: { sortOrder: 3 },
-    });
-  });
-
-  it('deleteCannedReply sends DELETE', async () => {
-    fetchMock.mockResolvedValue(noContent());
-    await deleteCannedReply('r1');
-    expect(call()).toMatchObject({ url: '/api/canned-replies/r1', method: 'DELETE' });
   });
 });
 

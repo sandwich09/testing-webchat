@@ -42,6 +42,9 @@
   --color-popover: var(--color-surface);
   --color-popover-foreground: var(--color-fg);
 
+  /* Shadow of a popup over the page (the select list). */
+  --shadow-popover: 0 12px 32px rgb(25 19 39 / 0.14);
+
   /* Type scale of ui-screens 1.2: size, then line height. Only weights 100, 400 and 700 exist. */
   --text-body: 15px;
   --text-body--line-height: 1.55;

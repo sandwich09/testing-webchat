@@ -5,7 +5,6 @@ export { createMessageRepository } from './message.repository';
 export { createSettingsRepository } from './settings.repository';
 export { createKnowledgeRepository } from './knowledge.repository';
 export { createUsageRepository } from './usage.repository';
-export { createCannedReplyRepository } from './canned-reply.repository';
 export { createWebhookEventRepository } from './webhook-event.repository';
 export { createRateLimitRepository } from './rate-limit.repository';
 export { createKnowledgeSource } from './knowledge-source.adapter';

@@ -1,5 +1,4 @@
 import type {
-  CannedReplyId,
   ContactId,
   DocumentId,
   LineAccessToken,
@@ -13,19 +12,16 @@ import type { ContactListCursor } from '@/core/ports';
 import type {
   GetMessagesInput,
   ListContactsInput,
-  SaveCannedReplyInput,
   SendAdminMessageInput,
   SetLineCredentialsInput,
   UpdateSettingsInput,
 } from '@/core/use-cases';
 import {
   DEFAULT_CONTACT_FILTER,
-  type CreateCannedReplyBody,
   type GetMessagesQuery,
   type ListContactsQuery,
   type SendMessageBody,
   type SetLineCredentialsBody,
-  type UpdateCannedReplyBody,
   type UpdateSettingsBody,
 } from '@/contracts';
 import { decodeContactCursor } from './http-request';
@@ -36,7 +32,6 @@ import { decodeContactCursor } from './http-request';
 export const asContactId = (id: string): ContactId => id as ContactId;
 export const asMessageId = (id: string): MessageId => id as MessageId;
 export const asDocumentId = (id: string): DocumentId => id as DocumentId;
-export const asCannedReplyId = (id: string): CannedReplyId => id as CannedReplyId;
 export const asUploadId = (id: string): UploadId => id as UploadId;
 /** A decimal string the contract schema has already checked (seqStringSchema). */
 const asSeq = (digits: string): Seq => BigInt(digits) as Seq;
@@ -108,7 +103,6 @@ export const toUpdateSettingsInput = (
   if (body.aiInstructions !== undefined) input.aiInstructions = body.aiInstructions;
   if (body.guardEnabled !== undefined) input.guardEnabled = body.guardEnabled;
   if (body.guardTopics !== undefined) input.guardTopics = body.guardTopics;
-  if (body.guardRefusalText !== undefined) input.guardRefusalText = body.guardRefusalText;
   return ok(input);
 };
 
@@ -120,19 +114,6 @@ export const toSetLineCredentialsInput = (
   channelSecret: body.channelSecret,
   channelAccessToken: body.channelAccessToken as LineAccessToken,
 });
-
-/** POST /api/canned-replies. */
-export const toCreateCannedReplyInput = (body: CreateCannedReplyBody): SaveCannedReplyInput => ({
-  id: null,
-  title: body.title,
-  text: body.text,
-});
-
-/** PATCH /api/canned-replies/:id. */
-export const toUpdateCannedReplyInput = (
-  id: string,
-  body: UpdateCannedReplyBody,
-): SaveCannedReplyInput => ({ id: asCannedReplyId(id), ...body });
 
 /** `*key` segments of /api/local-storage/*key back into the storage key. */
 export const toLocalStorageKey = (segments: readonly string[]): string => segments.join('/');

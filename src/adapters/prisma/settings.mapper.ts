@@ -34,7 +34,6 @@ export function toSettings(row: SettingsRow): Settings {
     aiInstructions: row.aiInstructions,
     guardEnabled: row.guardEnabled,
     guardTopics: [...row.guardTopics],
-    guardRefusalText: row.guardRefusalText,
     lineConfigured: row.lineChannelSecretEnc !== null && row.lineAccessTokenEnc !== null,
     lineBotName: row.lineBotName,
     lineBasicId: row.lineBasicId,

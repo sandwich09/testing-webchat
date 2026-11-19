@@ -1,19 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { LINE_CHANNEL_ID_MAX_CHARS } from '@/contracts';
-import {
-  AI_DAILY_BUDGET_MAX_USD,
-  AI_INSTRUCTIONS_MAX_CHARS,
-  CANNED_TEXT_MAX_CHARS,
-  CANNED_TITLE_MAX_CHARS,
-  PDF_MAX_BYTES,
-} from '@/contracts';
+import { AI_DAILY_BUDGET_MAX_USD, AI_INSTRUCTIONS_MAX_CHARS, PDF_MAX_BYTES } from '@/contracts';
 import {
   kbUsage,
   monthOptions,
   parseBudgetInput,
   usageTokenTotal,
-  validateCannedReply,
   validateInstructions,
   validateLineCredentials,
   validatePdfFile,
@@ -98,36 +91,6 @@ describe('validateInstructions', () => {
   });
 });
 
-describe('validateCannedReply', () => {
-  it('requires both fields after trim', () => {
-    expect(validateCannedReply({ title: '  ', text: 'x' })).toEqual({
-      ok: false,
-      field: 'title',
-      code: 'required',
-    });
-    expect(validateCannedReply({ title: 'a', text: ' \n ' })).toEqual({
-      ok: false,
-      field: 'text',
-      code: 'required',
-    });
-  });
-
-  it('limits the lengths after trim', () => {
-    expect(
-      validateCannedReply({ title: 'x'.repeat(CANNED_TITLE_MAX_CHARS + 1), text: 'x' }),
-    ).toEqual({ ok: false, field: 'title', code: 'too_long' });
-    expect(
-      validateCannedReply({ title: 'a', text: 'x'.repeat(CANNED_TEXT_MAX_CHARS + 1) }),
-    ).toEqual({ ok: false, field: 'text', code: 'too_long' });
-    expect(
-      validateCannedReply({
-        title: ` ${'x'.repeat(CANNED_TITLE_MAX_CHARS)} `,
-        text: `${'x'.repeat(CANNED_TEXT_MAX_CHARS)}  `,
-      }),
-    ).toEqual({ ok: true });
-  });
-});
-
 describe('validateLineCredentials', () => {
   const id = '1234567890';
 
@@ -174,6 +137,15 @@ describe('monthOptions', () => {
     expect(options[0]).toEqual({ value: '2026-11', label: 'พ.ย. 2569' });
     expect(options[1]).toEqual({ value: '2026-10', label: 'ต.ค. 2569' });
     expect(options[11]).toEqual({ value: '2025-12', label: 'ธ.ค. 2568' });
+  });
+
+  it('starts from the Bangkok month at the year boundary, with the process in UTC', () => {
+    // 2026-12-31T17:30Z is 2027-01-01 00:30 in Bangkok.
+    const options = monthOptions(new Date('2026-12-31T17:30:00.000Z'), 2);
+    expect(options).toEqual([
+      { value: '2027-01', label: 'ม.ค. 2570' },
+      { value: '2026-12', label: 'ธ.ค. 2569' },
+    ]);
   });
 
   it('crosses the year boundary and honours count', () => {

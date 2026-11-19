@@ -71,7 +71,7 @@ export function budgetMeter(
 
 function StatusRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex min-h-16 flex-col justify-center gap-1 border-b border-line py-3.5 last:border-b-0 medium:flex-row medium:items-center medium:gap-6">
+    <div className="flex min-h-16 flex-col justify-center gap-1 py-3 medium:flex-row medium:items-center medium:gap-6">
       <p className="text-body font-bold medium:flex-1">{label}</p>
       <div className="min-w-0 medium:max-w-[60%] medium:text-right">{children}</div>
     </div>
@@ -146,10 +146,7 @@ function StatusSkeleton() {
         {commonCopy.loading}
       </span>
       {[0, 1, 2, 3, 4].map((row) => (
-        <div
-          key={row}
-          className="flex min-h-16 items-center justify-between gap-6 border-b border-line py-3.5 last:border-b-0"
-        >
+        <div key={row} className="flex min-h-16 items-center justify-between gap-6 py-3">
           <Skeleton className="h-4 w-40" />
           <Skeleton className="h-4 w-32" />
         </div>

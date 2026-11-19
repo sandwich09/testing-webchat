@@ -1,11 +1,9 @@
-// Pure logic of the topic guard section and the Guardrails panel (ui-screens 8.5).
+// Pure logic of the topic guard section (ui-screens 8.5).
 import {
   GUARD_MAX_TOPICS,
-  GUARD_REFUSAL_MAX_CHARS,
   GUARD_TEST_MAX_CHARS,
   GUARD_TOPIC_MAX_CHARS,
   normalizeGuardTopics,
-  type GuardrailStatsDto,
   type SettingsDto,
 } from '@/contracts';
 
@@ -19,51 +17,47 @@ export function fillTemplate(template: string, values: Record<string, string | n
   });
 }
 
-/** One topic per line, as the topics textarea shows them. */
-export function guardTopicsToText(topics: string[]): string {
-  return topics.join('\n');
-}
-
-/** The lines of the topics textarea. Both "\n" and "\r\n" split. */
-function topicLines(text: string): string[] {
-  return text.split(/\r?\n/);
-}
-
-/** Number of non-empty lines, for the counter under the topics textarea. */
-export function countGuardTopicLines(text: string): number {
-  return topicLines(text).filter((line) => line.trim() !== '').length;
-}
-
-export type GuardTopicsErrorCode =
-  'topics_required' | 'too_many_topics' | 'topic_too_long' | 'duplicate_topic';
+export type GuardTopicAddErrorCode =
+  'topic_required' | 'too_many_topics' | 'topic_too_long' | 'duplicate_topic';
 
 /**
- * Splits the textarea into lines and normalises them with the same function the server uses.
- * An empty result is an error only while the guard is on, because the guard cannot be on
- * without a topic.
+ * The topic list with a typed topic added at the end, checked with the same function the server
+ * uses (trimmed, at most GUARD_MAX_TOPICS, each at most GUARD_TOPIC_MAX_CHARS, no duplicate).
  */
-export function validateGuardTopicsInput(
-  text: string,
-  guardEnabled: boolean,
-): { ok: true; topics: string[] } | { ok: false; code: GuardTopicsErrorCode } {
-  const { topics, issue } = normalizeGuardTopics(topicLines(text));
-  if (issue === 'too_many') return { ok: false, code: 'too_many_topics' };
+export function addGuardTopic(
+  topics: readonly string[],
+  typed: string,
+): { ok: true; topics: string[] } | { ok: false; code: GuardTopicAddErrorCode } {
+  const topic = typed.trim();
+  if (topic === '') return { ok: false, code: 'topic_required' };
+  if (topics.length >= GUARD_MAX_TOPICS) return { ok: false, code: 'too_many_topics' };
+  const { topics: next, issue } = normalizeGuardTopics([...topics, topic]);
   if (issue === 'too_long') return { ok: false, code: 'topic_too_long' };
   if (issue === 'duplicate') return { ok: false, code: 'duplicate_topic' };
-  if (topics.length === 0 && guardEnabled) return { ok: false, code: 'topics_required' };
-  return { ok: true, topics };
+  if (issue === 'too_many') return { ok: false, code: 'too_many_topics' };
+  return { ok: true, topics: next };
 }
 
-export type GuardRefusalErrorCode = 'refusal_required' | 'refusal_too_long';
+/**
+ * The topic list without the topic at `index`. The last topic cannot go while the guard is on,
+ * because the guard cannot be on without a topic: turn it off first.
+ */
+export function removeGuardTopic(
+  topics: readonly string[],
+  index: number,
+  guardEnabled: boolean,
+): { ok: true; topics: string[] } | { ok: false; code: 'topics_required' } {
+  const next = topics.filter((_, i) => i !== index);
+  if (next.length === 0 && guardEnabled) return { ok: false, code: 'topics_required' };
+  return { ok: true, topics: next };
+}
 
-/** The refusal text is 1 to the limit characters after trim. */
-export function validateGuardRefusal(
-  text: string,
-): { ok: true } | { ok: false; code: GuardRefusalErrorCode } {
-  const length = text.trim().length;
-  if (length === 0) return { ok: false, code: 'refusal_required' };
-  if (length > GUARD_REFUSAL_MAX_CHARS) return { ok: false, code: 'refusal_too_long' };
-  return { ok: true };
+/**
+ * Where focus goes after the topic at `index` was removed from a list of `countBefore`: the
+ * delete button of the topic that took its place, or `null` for the add input when none did.
+ */
+export function focusAfterTopicRemoved(countBefore: number, index: number): number | null {
+  return index < countBefore - 1 ? index : null;
 }
 
 export type GuardTestErrorCode = 'test_required' | 'test_too_long';
@@ -80,7 +74,7 @@ export function validateGuardTestInput(
 
 /** Thai text of a code from the validators above, with its limit filled in. */
 export function guardErrorText(
-  code: GuardTopicsErrorCode | GuardRefusalErrorCode | GuardTestErrorCode,
+  code: GuardTopicAddErrorCode | 'topics_required' | GuardTestErrorCode,
 ): string {
   const template = copy.guard.errors[code];
   switch (code) {
@@ -88,13 +82,11 @@ export function guardErrorText(
       return fillTemplate(template, { max: GUARD_MAX_TOPICS });
     case 'topic_too_long':
       return fillTemplate(template, { max: GUARD_TOPIC_MAX_CHARS });
-    case 'refusal_too_long':
-      return fillTemplate(template, { max: GUARD_REFUSAL_MAX_CHARS });
     case 'test_too_long':
       return fillTemplate(template, { max: GUARD_TEST_MAX_CHARS });
     case 'topics_required':
+    case 'topic_required':
     case 'duplicate_topic':
-    case 'refusal_required':
     case 'test_required':
       return template;
   }
@@ -108,41 +100,4 @@ export function guardTestDisabledReason(settings: {
   if (!settings.ai.enabled) return 'killed';
   if (settings.guard.topics.length === 0) return 'needs_topics';
   return null;
-}
-
-export type GuardrailMetric =
-  | 'aiEnabled'
-  | 'guardBlocked'
-  | 'nonText'
-  | 'outputRejected'
-  | 'noTools'
-  | 'handoffNotInKnowledge'
-  | 'handoffNeedsHuman'
-  | 'handoffFailedOrTimeout'
-  | 'handoffOther'
-  | 'budgetReached';
-
-export type GuardrailLayer = 'input' | 'output' | 'action' | 'human' | 'control';
-
-export type GuardrailRow = {
-  layer: GuardrailLayer;
-  metric: GuardrailMetric;
-  /** A count, an on/off state, or `null` for the row that has no number (the action layer). */
-  value: number | boolean | null;
-};
-
-/** The rows of the Guardrails panel in the order of ui-screens 9.14. */
-export function guardrailRows(stats: GuardrailStatsDto): GuardrailRow[] {
-  return [
-    { layer: 'control', metric: 'aiEnabled', value: stats.aiEnabled },
-    { layer: 'input', metric: 'guardBlocked', value: stats.guardBlocked },
-    { layer: 'input', metric: 'nonText', value: stats.nonText },
-    { layer: 'output', metric: 'outputRejected', value: stats.outputRejected },
-    { layer: 'action', metric: 'noTools', value: null },
-    { layer: 'human', metric: 'handoffNotInKnowledge', value: stats.handoffs.notInKnowledge },
-    { layer: 'human', metric: 'handoffNeedsHuman', value: stats.handoffs.needsHuman },
-    { layer: 'human', metric: 'handoffFailedOrTimeout', value: stats.handoffs.failedOrTimeout },
-    { layer: 'human', metric: 'handoffOther', value: stats.handoffs.other },
-    { layer: 'control', metric: 'budgetReached', value: stats.budgetReached },
-  ];
 }

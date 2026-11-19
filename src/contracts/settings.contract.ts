@@ -3,7 +3,6 @@ import {
   AI_DAILY_BUDGET_MAX_USD,
   AI_INSTRUCTIONS_MAX_CHARS,
   AI_MODEL_IDS,
-  GUARD_REFUSAL_MAX_CHARS,
   GUARD_TEST_MAX_CHARS,
   LINE_CHANNEL_ID_MAX_CHARS,
   LINE_SECRET_STATUSES,
@@ -52,7 +51,6 @@ export const updateSettingsBodySchema = z
     aiInstructions: z.string().max(AI_INSTRUCTIONS_MAX_CHARS).optional(),
     guardEnabled: z.boolean().optional(),
     guardTopics: guardTopicsInputSchema.optional(),
-    guardRefusalText: z.string().trim().min(1).max(GUARD_REFUSAL_MAX_CHARS).optional(),
   })
   .refine((body) => Object.keys(body).length > 0, {
     message: 'At least one field is required',

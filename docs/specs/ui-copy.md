@@ -10,7 +10,7 @@
 - ข้อความ error ที่มาจาก server ตามรหัส error อยู่ใน [error-catalog](../architecture/error-catalog.md) ไม่ซ้ำที่นี่ เอกสารนี้มีเฉพาะข้อความที่ตรวจในฝั่ง browser และไม่เรียก server
 - `{ชื่อ}` คือค่าที่แทนตอนแสดง ตัวเลขจัดรูปแบบด้วยฟังก์ชันใน [ui-screens](ui-screens.md#8-ฟังก์ชันล้วนฝั่งหน้าจอ) ก่อนแทน `{max}` และ `{maxMb}` มาจาก constant ใน `src/contracts/` ซึ่งค่าอยู่ใน [project-setup](../architecture/project-setup.md#10-ค่าคงที่ของระบบ)
 - ชื่อ key: `<feature>.<พื้นที่>.<ชื่อ>` เป็น camelCase key ใดที่เป็นกลุ่มย่อยใช้จุดคั่นต่อ เช่น `inbox.media.other.audio`
-- กลุ่มข้อความ error ที่ตรวจใน browser ใช้ชื่อตามโค้ด: `error` ใน `access.error.*`, `inbox.attach.error.*`, `settings.ai.error.*`, `settings.line.error.*` และ `errors` (พหูพจน์) ใน `settings.guard.errors.*`, `settings.kb.errors.*`, `settings.canned.errors.*` (ใน `kb` และ `canned` key `error` เป็นข้อความเดี่ยวของการโหลดไม่สำเร็จอยู่แล้ว) ข้อความตามรหัส error ของ server และของรหัส client `client.network` ไม่อยู่ในกลุ่มเหล่านี้ หน้าเว็บได้จาก `errorMessage` ใน `src/common/error-messages.ts` ซึ่งใช้ `common.error.network` เป็นข้อความของ `client.network`
+- กลุ่มข้อความ error ที่ตรวจใน browser ใช้ชื่อตามโค้ด: `error` ใน `access.error.*`, `inbox.attach.error.*`, `settings.ai.error.*`, `settings.line.error.*` และ `errors` (พหูพจน์) ใน `settings.guard.errors.*`, `settings.kb.errors.*` (ใน `kb` key `error` เป็นข้อความเดี่ยวของการโหลดไม่สำเร็จอยู่แล้ว) ข้อความตามรหัส error ของ server และของรหัส client `client.network` ไม่อยู่ในกลุ่มเหล่านี้ หน้าเว็บได้จาก `errorMessage` ใน `src/common/error-messages.ts` ซึ่งใช้ `common.error.network` เป็นข้อความของ `client.network`
 - ในโค้ด แต่ละไฟล์ export object เดียวชื่อ `copy` เช่น `inbox.constants.ts` export `copy.list.title` ซึ่งตรงกับ key `inbox.list.title`
 - ข้อความใหม่ต้องอยู่ในตารางนี้ก่อนใช้ในโค้ด ถ้าต้องการคำใหม่ที่ไม่อยู่ในอภิธานศัพท์ ให้เพิ่มใน [ux-writing](../guidelines/ux-writing.md#อภิธานศัพท์) ด้วย
 
@@ -20,7 +20,7 @@
 
 | Key | ข้อความ | ใช้ที่ |
 | --- | --- | --- |
-| `common.appName` | Test webchat application | `<title>`, ชื่อร้านสำรองในเมนูเมื่อยังไม่ได้เชื่อม LINE OA |
+| `common.appName` | Test webchat | `<title>` ของทุกหน้า ชื่อข้างโลโก้ในเมนู และตัวอักษรบนโลโก้ (`initialOf`) |
 | `common.skipToContent` | ข้ามไปที่เนื้อหา | ลิงก์ข้ามที่เห็นเมื่อ focus |
 | `common.nav.label` | เมนูหลัก | `aria-label` ของ `<nav>` |
 | `common.nav.inbox` | แชท | เมนู |
@@ -93,7 +93,7 @@
 | `inbox.list.emptyNoLine.body` | เชื่อม LINE Official Account ที่หน้าตั้งค่า แล้วเพิ่มเพื่อนจากแอป LINE เพื่อเริ่มแชท | |
 | `inbox.list.goToSettings` | ไปที่ตั้งค่า | ลิงก์ในสถานะว่าง |
 | `inbox.list.empty.title` | ยังไม่มีลูกค้าทักมา | ไม่มีลูกค้าเลย เชื่อม LINE OA แล้ว |
-| `inbox.list.empty.body` | เมื่อลูกค้าเพิ่ม LINE Official Account ของร้านเป็นเพื่อนแล้วทักมา แชทจะขึ้นที่นี่ | |
+| `inbox.list.empty.body` | เมื่อลูกค้าเพิ่ม LINE Official Account เป็นเพื่อนแล้วทักมา แชทจะขึ้นที่นี่ | |
 | `inbox.list.emptyUnread` | ไม่มีแชทที่ยังไม่อ่าน | แท็บยังไม่อ่านว่าง |
 | `inbox.list.emptyNeedsAdmin` | ไม่มีแชทที่รอแอดมิน | แท็บรอแอดมินว่าง |
 | `inbox.list.emptySearch` | ไม่พบลูกค้าชื่อ “{q}” | ค้นหาไม่พบ |
@@ -184,7 +184,6 @@
 | `inbox.composer.hint` | Enter ส่ง · Shift+Enter ขึ้นบรรทัดใหม่ | ใต้ช่องพิมพ์ (จอกว้าง) |
 | `inbox.composer.send` | ส่ง | ปุ่มหลัก |
 | `inbox.composer.attach` | แนบรูปหรือวิดีโอ | ปุ่มไอคอน |
-| `inbox.composer.canned` | ข้อความสำเร็จรูป | ปุ่มไอคอน |
 | `inbox.composer.waitUpload` | ส่งได้เมื่ออัปโหลดเสร็จ | แทน hint เมื่อไฟล์แนบยังไม่พร้อม |
 | `inbox.composer.disabled.unfollowed` | ส่งข้อความหาลูกค้าที่เลิกติดตามแล้วไม่ได้ | แทนแถบเครื่องมือ |
 | `inbox.composer.disabled.lineNotConfigured` | เชื่อม LINE Official Account ที่หน้าตั้งค่าก่อนจึงจะส่งข้อความได้ | แทนแถบเครื่องมือ |
@@ -213,17 +212,6 @@
 | `inbox.attach.error.uploadFailed` | อัปโหลดไม่สำเร็จ แนบไฟล์อีกครั้ง |
 
 การขอสิทธิ์อัปโหลดที่ server ปฏิเสธ (ชนิด ขนาด จำกัดความถี่) ใช้ข้อความจาก [error-catalog](../architecture/error-catalog.md)
-
-### รายการข้อความสำเร็จรูปในหน้าแชท
-
-| Key | ข้อความ | ใช้ที่ |
-| --- | --- | --- |
-| `inbox.canned.title` | ข้อความสำเร็จรูป | หัว popover |
-| `inbox.canned.searchPlaceholder` | ค้นหาข้อความสำเร็จรูป | ช่องค้นหา |
-| `inbox.canned.empty` | ยังไม่มีข้อความสำเร็จรูป | ยังไม่มีรายการ |
-| `inbox.canned.goToSettings` | เพิ่มที่หน้าตั้งค่า | ลิงก์ใต้ข้อความว่าง |
-| `inbox.canned.noMatch` | ไม่พบข้อความสำเร็จรูปที่ค้นหา | |
-| `inbox.canned.error` | โหลดข้อความสำเร็จรูปไม่สำเร็จ | ตามด้วยปุ่ม `common.action.retry` |
 
 ### แผงข้อมูลลูกค้า
 
@@ -277,8 +265,8 @@
 | `settings.ai.particleOption.ka` | ค่ะ | ตัวเลือก |
 | `settings.ai.particleOption.krub` | ครับ | ตัวเลือก |
 | `settings.ai.instructions` | คำแนะนำสำหรับ AI | ป้ายแถว |
-| `settings.ai.instructionsDesc` | น้ำเสียงและข้อห้ามที่ร้านอยากให้ AI ทำตาม | คำอธิบาย |
-| `settings.ai.instructionsPlaceholder` | เช่น เรียกลูกค้าว่าคุณลูกค้า และไม่รับจองโต๊ะทางแชท | placeholder |
+| `settings.ai.instructionsDesc` | น้ำเสียงและข้อห้ามที่อยากให้ AI ทำตาม | คำอธิบาย |
+| `settings.ai.instructionsPlaceholder` | เช่น เรียกลูกค้าว่าคุณลูกค้า และไม่รับนัดหมายทางแชท | placeholder |
 | `settings.ai.instructionsCounter` | {n}/{max} | ตัวนับ `{max}` จาก `AI_INSTRUCTIONS_MAX_CHARS` |
 
 ข้อความ error ที่ตรวจใน browser:
@@ -297,16 +285,18 @@
 | --- | --- | --- |
 | `settings.guard.title` | ขอบเขตหัวข้อ | หัวส่วน |
 | `settings.guard.switch` | จำกัดหัวข้อที่ AI คุยได้ | ป้ายแถว |
-| `settings.guard.switchDesc` | เปิดแล้ว AI คุยได้เฉพาะหัวข้อในรายการ รวมถึงเรื่องของร้านที่ไม่อยู่ในรายการก็ไม่ตอบ | คำอธิบาย |
+| `settings.guard.switchDesc` | เปิดแล้ว AI ตอบเฉพาะหัวข้อในรายการ เรื่องอื่นไม่ตอบ | คำอธิบาย |
 | `settings.guard.enabledToast` | เปิดขอบเขตหัวข้อแล้ว | toast |
 | `settings.guard.disabledToast` | ปิดขอบเขตหัวข้อแล้ว | toast |
 | `settings.guard.topics` | หัวข้อที่คุยได้ | ป้ายแถว |
-| `settings.guard.topicsDesc` | หนึ่งบรรทัดต่อหนึ่งหัวข้อ | คำอธิบาย |
-| `settings.guard.topicsPlaceholder` | เช่น มุกตลกไทย | placeholder |
+| `settings.guard.topicsDesc` | เพิ่มทีละหัวข้อ บันทึกทันทีเมื่อเพิ่มหรือลบ | คำอธิบาย |
+| `settings.guard.topicInput` | หัวข้อใหม่ | `aria-label` ของช่องเพิ่มหัวข้อ |
+| `settings.guard.topicsPlaceholder` | พิมพ์หัวข้อ | placeholder |
+| `settings.guard.topicAdd` | เพิ่ม | ปุ่ม |
+| `settings.guard.topicRemove` | ลบ | ปุ่มของแต่ละหัวข้อ (จอแคบเหลือไอคอน) |
+| `settings.guard.topicRemoveAria` | ลบหัวข้อ {topic} | `aria-label` ของปุ่มลบ |
+| `settings.guard.topicsEmpty` | ยังไม่มีหัวข้อ | แทนรายการเมื่อไม่มีหัวข้อ |
 | `settings.guard.topicsCounter` | {n}/{max} หัวข้อ | ตัวนับ `{max}` จาก `GUARD_MAX_TOPICS` |
-| `settings.guard.refusal` | ข้อความเมื่อถูกกัน | ป้ายแถว |
-| `settings.guard.refusalDesc` | AI ส่งข้อความนี้ให้ลูกค้าเมื่อข้อความอยู่นอกหัวข้อ | คำอธิบาย |
-| `settings.guard.refusalCounter` | {n}/{max} | ตัวนับ `{max}` จาก `GUARD_REFUSAL_MAX_CHARS` |
 | `settings.guard.test` | ทดลอง | ป้ายแถว และ `aria-label` ของช่องทดลอง |
 | `settings.guard.testDesc` | ทดลองกับหัวข้อที่บันทึกไว้ มีค่าใช้จ่ายทุกครั้ง | คำอธิบาย |
 | `settings.guard.testPlaceholder` | พิมพ์ข้อความแบบที่ลูกค้าจะพิมพ์ | placeholder |
@@ -325,44 +315,14 @@
 | Key | ข้อความ |
 | --- | --- |
 | `settings.guard.errors.topics_required` | ใส่หัวข้ออย่างน้อยหนึ่งหัวข้อก่อนเปิดขอบเขตหัวข้อ |
+| `settings.guard.errors.topic_required` | พิมพ์หัวข้อก่อนกดเพิ่ม |
 | `settings.guard.errors.too_many_topics` | ใส่ได้ไม่เกิน {max} หัวข้อ |
-| `settings.guard.errors.topic_too_long` | มีหัวข้อที่ยาวเกิน {max} ตัวอักษร |
-| `settings.guard.errors.duplicate_topic` | มีหัวข้อซ้ำกัน ลบบรรทัดที่ซ้ำ |
-| `settings.guard.errors.refusal_required` | ใส่ข้อความเมื่อถูกกัน |
-| `settings.guard.errors.refusal_too_long` | ข้อความยาวเกิน {max} ตัวอักษร |
+| `settings.guard.errors.topic_too_long` | หัวข้อยาวเกิน {max} ตัวอักษร |
+| `settings.guard.errors.duplicate_topic` | มีหัวข้อนี้ในรายการแล้ว |
 | `settings.guard.errors.test_required` | พิมพ์ข้อความที่จะทดลอง |
 | `settings.guard.errors.test_too_long` | ข้อความยาวเกิน {max} ตัวอักษร |
 
 การเปิดโดยไม่มีหัวข้อที่ server ปฏิเสธ การทดลองถี่เกิน และความผิดพลาดของ AI ระหว่างทดลอง ใช้ข้อความจาก [error-catalog](../architecture/error-catalog.md)
-
-### Guardrails
-
-| Key | ข้อความ | ใช้ที่ |
-| --- | --- | --- |
-| `settings.guardrails.title` | Guardrails | หัวส่วน |
-| `settings.guardrails.description` | ตัวเลขของวันนี้ตามเวลาไทย อ่านอย่างเดียว | ใต้หัวส่วน |
-| `settings.guardrails.layer.input` | ชั้นข้อมูลเข้า | คำอธิบายของแถว |
-| `settings.guardrails.layer.output` | ชั้นผลลัพธ์ของ AI | คำอธิบายของแถว |
-| `settings.guardrails.layer.action` | ชั้นการกระทำ | คำอธิบายของแถว |
-| `settings.guardrails.layer.human` | ชั้นส่งต่อให้คน | คำอธิบายของแถว |
-| `settings.guardrails.layer.control` | ชั้นควบคุม | คำอธิบายของแถว |
-| `settings.guardrails.aiSwitch` | เปิดใช้ AI ทั้งระบบ | ป้ายแถว |
-| `settings.guardrails.guard` | ข้อความที่ขอบเขตหัวข้อกัน | ป้ายแถว |
-| `settings.guardrails.guardOn` | เปิด · {n} ข้อความ | ค่าเมื่อขอบเขตหัวข้อเปิด |
-| `settings.guardrails.nonText` | AI หยุดเพราะลูกค้าส่งข้อความที่ไม่ใช่ตัวอักษร | ป้ายแถว |
-| `settings.guardrails.outputRejected` | คำตอบของ AI ที่ไม่ผ่าน schema หรือถูกปฏิเสธ | ป้ายแถว |
-| `settings.guardrails.action` | AI ไม่มีเครื่องมือ ระบบเป็นผู้ส่งทุกข้อความ | ป้ายแถว |
-| `settings.guardrails.actionValue` | ไม่มีเครื่องมือ | ค่า |
-| `settings.guardrails.handoffNotInKnowledge` | รอแอดมิน: ไม่พบในคลังความรู้ | ป้ายแถว |
-| `settings.guardrails.handoffNeedsHuman` | รอแอดมิน: ต้องให้คนจัดการ | ป้ายแถว |
-| `settings.guardrails.handoffFailed` | รอแอดมิน: AI ตอบไม่สำเร็จหรือไม่ทันเวลา | ป้ายแถว |
-| `settings.guardrails.handoffOther` | รอแอดมิน: เหตุผลอื่น | ป้ายแถว |
-| `settings.guardrails.budget` | AI หยุดเพราะงบของวันนี้เต็ม | ป้ายแถว |
-| `settings.guardrails.on` | เปิด | ค่า |
-| `settings.guardrails.off` | ปิด | ค่า |
-| `settings.guardrails.times` | {n} ครั้ง | ค่า |
-| `settings.guardrails.note` | ตัวเลขที่เป็นครั้งนับเมื่อแชทขึ้นรอแอดมิน ไม่ใช่จำนวนข้อความ | ใต้ตาราง |
-| `settings.guardrails.error` | โหลดตัวเลขของ Guardrails ไม่สำเร็จ | ตามด้วยปุ่ม `common.action.retry` |
 
 ### LINE Official Account
 
@@ -435,7 +395,7 @@
 | `settings.kb.delete` | ลบ | ปุ่มในแถว |
 | `settings.kb.retry` | ลองใหม่ | ปุ่มในแถวที่ไม่สำเร็จ ถ้อยคำตาม [knowledge-base](knowledge-base.md) |
 | `settings.kb.retryHint` | เลือกไฟล์เดิมอีกครั้ง เพราะระบบไม่เก็บไฟล์ต้นฉบับ | tooltip ของปุ่มลองใหม่ |
-| `settings.kb.empty` | ยังไม่มีไฟล์ในคลังความรู้ อัปโหลด PDF ที่มีเมนู ราคา หรือเวลาเปิดปิดของร้าน | สถานะว่าง |
+| `settings.kb.empty` | ยังไม่มีไฟล์ในคลังความรู้ อัปโหลด PDF ที่มีข้อมูลที่อยากให้ AI ใช้ตอบลูกค้า | สถานะว่าง |
 | `settings.kb.error` | โหลดคลังความรู้ไม่สำเร็จ | ตามด้วยปุ่ม `common.action.retry` |
 | `settings.kb.textDialogSubtitle` | {pages} หน้า · {tokens} token · ข้อความที่ AI ใช้ตอบ แก้ไขไม่ได้ | บรรทัดรองของ dialog |
 | `settings.kb.textDialogError` | โหลดข้อความของไฟล์นี้ไม่สำเร็จ | dialog ดูข้อความ |
@@ -454,35 +414,6 @@
 | `settings.kb.errors.empty_file` | ไฟล์นี้ว่างเปล่า เลือกไฟล์อื่น |
 
 ไฟล์ซ้ำ เกินจำนวนหน้า เกินเพดานของคลัง ไม่มีข้อความ และแปลงไม่สำเร็จ ใช้ข้อความจาก [error-catalog](../architecture/error-catalog.md)
-
-### ข้อความสำเร็จรูป
-
-| Key | ข้อความ | ใช้ที่ |
-| --- | --- | --- |
-| `settings.canned.title` | ข้อความสำเร็จรูป | หัวส่วน (แถวบนไม่แสดงซ้ำ) |
-| `settings.canned.description` | ข้อความที่ใช้ตอบบ่อย เลือกใช้ได้จากช่องตอบในหน้าแชท | คำอธิบาย |
-| `settings.canned.add` | เพิ่มข้อความสำเร็จรูป | ปุ่ม |
-| `settings.canned.edit` | แก้ไข | `aria-label` ของปุ่มไอคอน |
-| `settings.canned.delete` | ลบ | `aria-label` ของปุ่มไอคอน |
-| `settings.canned.fieldTitle` | ชื่อ | ป้ายช่อง |
-| `settings.canned.fieldTitlePlaceholder` | เช่น เวลาเปิดร้าน | placeholder |
-| `settings.canned.fieldText` | ข้อความ | ป้ายช่อง |
-| `settings.canned.empty` | ยังไม่มีข้อความสำเร็จรูป | สถานะว่าง |
-| `settings.canned.error` | โหลดข้อความสำเร็จรูปไม่สำเร็จ | ตามด้วยปุ่ม `common.action.retry` |
-| `settings.canned.deleteTitle` | ลบ “{title}” | หัว dialog |
-| `settings.canned.deleteBody` | ข้อความสำเร็จรูปนี้จะหายจากรายการและเรียกคืนไม่ได้ | เนื้อหา dialog |
-| `settings.canned.deleteCancel` | เก็บไว้ | ปุ่มถอย |
-| `settings.canned.deleteConfirm` | ลบข้อความ | ปุ่มลงมือ |
-| `settings.canned.deletedToast` | ลบข้อความสำเร็จรูปแล้ว | toast |
-
-ข้อความ error ที่ตรวจใน browser:
-
-| Key | ข้อความ |
-| --- | --- |
-| `settings.canned.errors.titleRequired` | ใส่ชื่อ |
-| `settings.canned.errors.titleTooLong` | ชื่อยาวเกิน {max} ตัวอักษร |
-| `settings.canned.errors.textRequired` | ใส่ข้อความ |
-| `settings.canned.errors.textTooLong` | ข้อความยาวเกิน {max} ตัวอักษร |
 
 ### ค่าใช้จ่าย AI
 

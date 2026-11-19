@@ -30,12 +30,12 @@ The full requirement list, including the extras below, is in [requirements](docs
 ## Features
 
 - Access gate: a shared access code, a signed `HttpOnly` cookie, rate-limited attempts ([access-gate](docs/specs/access-gate.md)).
-- Inbox: contact list with unread and "needs admin" tabs and search, chat with day chips and grouping, polling instead of WebSockets ([ADR 0005](docs/adr/0005-polling-instead-of-realtime.md)).
+- Inbox: contact list ordered by each customer's latest message, loaded page by page as it scrolls, with unread and "needs admin" tabs and search, chat with day chips and grouping, polling instead of WebSockets ([ADR 0005](docs/adr/0005-polling-instead-of-realtime.md)).
 - Messages in both directions: text, images and video; stickers and other types are shown as labels. Images (JPEG, PNG, WebP, HEIC) are converted and get a preview in the browser before upload.
-- Delivery state (sending, sent, failed) with retry under the same LINE retry key; canned replies; LINE's typing indicator while the admin types.
+- Delivery state (sending, sent, failed) with retry under the same LINE retry key; LINE's typing indicator while the admin types.
 - AI reply per customer: Claude answers from the chat history and the knowledge base, hands over to an admin when it cannot answer, and turns itself off when an admin replies ([ai-reply](docs/specs/ai-reply.md), [ai-prompt](docs/specs/ai-prompt.md)).
-- Admin back office: LINE credentials (encrypted at rest), global AI kill switch, model choice, daily budget, PDF knowledge base, canned replies, token and cost report per customer, system status ([admin-backoffice](docs/specs/admin-backoffice.md), [usage-cost](docs/specs/usage-cost.md)).
-- Guardrail showcase: a topic boundary checked by a separate, cheaper model call before the reply model sees the message; out-of-topic messages get the shop's refusal text and never reach the reply model ([topic-guard](docs/specs/topic-guard.md), [ADR 0020](docs/adr/0020-topic-guardrail-as-separate-check.md)). A Guardrails panel in the settings page counts today's checks per layer (input, output, action, human, control), and [ai-guardrails](docs/security/ai-guardrails.md) maps each common guardrail practice to the code and the test that covers it. A manual evaluation script (`pnpm ai:eval`) computes attack success, false-positive, task success and unauthorized-action rates; it calls the real API and only runs when the owner asks.
+- Admin back office: LINE credentials (encrypted at rest), global AI kill switch, model choice, daily budget, PDF knowledge base, token and cost report per customer, system status ([admin-backoffice](docs/specs/admin-backoffice.md), [usage-cost](docs/specs/usage-cost.md)).
+- Guardrail showcase: a topic boundary checked by a separate, cheaper model call before the reply model sees the message; out-of-topic messages get a fixed refusal (its polite ending follows the chosen particle) and never reach the reply model ([topic-guard](docs/specs/topic-guard.md), [ADR 0020](docs/adr/0020-topic-guardrail-as-separate-check.md), [ADR 0024](docs/adr/0024-scope-reductions.md)). `GET /api/system/guardrails` returns today's checks per layer (input, output, action, human, control); no screen shows them. [ai-guardrails](docs/security/ai-guardrails.md) maps each common guardrail practice to the code and the test that covers it. A manual evaluation script (`pnpm ai:eval`) computes attack success, false-positive, task success and unauthorized-action rates; it calls the real API and only runs when the owner asks.
 
 ## Architecture
 
@@ -69,7 +69,7 @@ What starts:
 | `app` | 3000 | The built app (Next.js standalone); runs migrations at start |
 | `db` | 15432 | PostgreSQL 17 |
 | `stub` | 4010 | Stands in for the LINE Messaging API and the Claude API (records requests, returns canned answers) |
-| `seed` | | Loads sample contacts, messages, a knowledge-base document and canned replies once the app is healthy, then exits; safe to run again with `docker compose run --rm seed` |
+| `seed` | | Loads sample contacts, messages and a knowledge-base document once the app is healthy, then exits; safe to run again with `docker compose run --rm seed`. Local Docker only: production never runs it and starts with an empty database |
 
 Behind a proxy that re-signs HTTPS, pass its CA to the image build: `EXTRA_CA_FILE=/path/to/ca.pem docker compose up --build` ([project-setup 7.1](docs/architecture/project-setup.md#71-dockerfile)).
 

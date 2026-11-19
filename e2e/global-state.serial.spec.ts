@@ -1,9 +1,9 @@
 import { fileURLToPath } from 'node:url';
 import type { APIRequestContext, Page } from '@playwright/test';
 import {
-  DEFAULT_GUARD_REFUSAL_TEXT,
   GUARD_MAX_TOPICS,
   GUARD_MODEL,
+  guardRefusalText,
   LINE_CHANNEL_ID_MAX_CHARS,
   handoffText,
   type PoliteParticle,
@@ -15,6 +15,7 @@ import {
 } from './fixtures/line/credentials';
 import { AUTH_STATE_PATH } from './helpers/auth';
 import { expectNoA11yViolations } from './helpers/axe';
+import { expectDocumentNotScrollable } from './helpers/layout';
 import { createContactWithMessage, nextEventVars } from './helpers/contact';
 import { uiCopy } from './helpers/copy';
 import {
@@ -288,6 +289,7 @@ test.describe('journey 4: kill switch', () => {
   test('the kill switch stops AI everywhere and the contact switch comes back', async ({
     page,
     request,
+    isMobile,
   }) => {
     const suffix = uniqueSuffix();
     const name = `ลูกค้า kill ${suffix}`;
@@ -298,8 +300,45 @@ test.describe('journey 4: kill switch', () => {
     await turnContactAiOn(page);
 
     try {
-      // 4.2
+      // 4.2a: the model is a themed listbox driven by the keyboard. Escape closes it without a
+      // change and gives focus back to the trigger.
       await page.goto('/settings');
+      const model = page.getByTestId(testIds.settingsModel);
+      const savedModel = await model.getAttribute('data-value');
+      await model.focus();
+      await model.press('Enter');
+      await expect(model).toHaveAttribute('aria-expanded', 'true');
+      const listbox = page.getByRole('listbox');
+      await expect(listbox).toBeVisible();
+      const options = listbox.getByTestId(testIds.settingsModelOption);
+      await expect(options).toHaveCount(3);
+      await expect(options.and(page.locator('[aria-selected="true"]'))).toHaveAttribute(
+        'data-value',
+        savedModel ?? '',
+      );
+      await model.press('End');
+      await expect(options.last()).toHaveAttribute('data-active', 'true');
+      await expect(model).toHaveAttribute(
+        'aria-activedescendant',
+        (await options.last().getAttribute('id')) ?? '',
+      );
+      await model.press('Escape');
+      await expect(listbox).toBeHidden();
+      await expect(model).toHaveAttribute('aria-expanded', 'false');
+      await expect(model).toBeFocused();
+      await expect(model).toHaveAttribute('data-value', savedModel ?? '');
+      // The month of the usage report: a click on another month shows that month.
+      const month = page.getByTestId(testIds.usageMonth);
+      await expect(month).toHaveAttribute('data-value', /^\d{4}-\d{2}$/);
+      await month.click();
+      const previous = page.getByTestId(testIds.usageMonthOption).nth(1);
+      const previousValue = (await previous.getAttribute('data-value')) ?? '';
+      await previous.click();
+      await expect(month).toHaveAttribute('data-value', previousValue);
+      await expect(page.getByRole('listbox')).toBeHidden();
+      await expectDocumentNotScrollable(page);
+
+      // 4.2
       const killSwitch = page.getByTestId(testIds.settingsKillSwitch);
       await expect(killSwitch).toHaveAttribute('aria-checked', 'true');
       await killSwitch.click();
@@ -308,8 +347,19 @@ test.describe('journey 4: kill switch', () => {
         toastWith(page, uiCopy('settings.ai.killSwitchOffToast'), 'success'),
       ).toBeVisible();
 
-      // 4.3
+      // 4.3: only the inner columns scroll, on the list and in a chat.
+      await page.goto('/chats');
+      await expect(page.getByTestId(testIds.contactList)).toBeVisible();
+      await expectDocumentNotScrollable(page);
       await openChat(page, name);
+      await expectDocumentNotScrollable(page);
+      if (!isMobile) {
+        // A wide, short window as well (ui-screens 1.4).
+        const size = page.viewportSize();
+        await page.setViewportSize({ width: 1535, height: 920 });
+        await expectDocumentNotScrollable(page);
+        if (size !== null) await page.setViewportSize(size);
+      }
       const aiSwitch = page.getByTestId(testIds.threadAiSwitch);
       await expect(aiSwitch).toBeDisabled();
       await expect(aiSwitch).toHaveAttribute('aria-checked', 'false');
@@ -506,25 +556,53 @@ test.describe('journey 9: topic guard', () => {
     expect(order.indexOf(testIds.settingsSectionGuard)).toBe(
       order.indexOf(testIds.settingsSectionAi) + 1,
     );
-    const topicsInput = page.getByTestId(testIds.guardTopics);
+    const topicItems = page.getByTestId(testIds.guardTopic);
+    const counter = page.getByTestId(testIds.guardTopicsCounter);
+    const topicInput = page.getByTestId(testIds.guardTopicInput);
+    await expect(counter).toHaveText(
+      uiCopy('settings.guard.topicsCounter', {
+        n: initial.guard.topics.length,
+        max: GUARD_MAX_TOPICS,
+      }),
+    );
     const before = {
-      topics: await topicsInput.inputValue(),
       blocked: await trailingNumber(page, testIds.guardBlockedToday),
       day: bangkokDay(),
-      refusal: await page.getByTestId(testIds.guardRefusal).inputValue(),
+      // The refusal is fixed; only its ending follows the particle of the AI section.
+      refusal: guardRefusalText(initial.ai.politeParticle as PoliteParticle),
     };
-    expect(before.topics).toBe(initial.guard.topics.join('\n'));
-    expect(before.refusal).toBe(initial.guard.refusalText);
-    expect(initial.guard.refusalText).toBe(DEFAULT_GUARD_REFUSAL_TEXT);
 
     try {
-      // 9.2
-      await topicsInput.fill(topics.join('\n'));
-      await page.getByTestId(testIds.guardTopicsSave).click();
-      await expect(page.getByTestId(testIds.guardTopicsSave)).toBeHidden();
-      await expect(page.getByTestId(testIds.guardTopicsCounter)).toHaveText(
+      // 9.2: the list is edited one topic at a time; every add and remove saves at once.
+      for (let left = initial.guard.topics.length; left > 0; left -= 1) {
+        await topicItems.first().getByTestId(testIds.guardTopicRemove).click();
+        await expect(topicItems).toHaveCount(left - 1);
+      }
+      await topicInput.fill(topics[0] ?? '');
+      await topicInput.press('Enter');
+      await expect(topicItems).toHaveCount(1);
+      await expect(topicInput).toHaveValue('');
+      await expect(topicInput).toBeFocused();
+      await topicInput.fill(` ${topics[1] ?? ''} `);
+      await page.getByTestId(testIds.guardTopicAdd).click();
+      await expect(topicItems).toHaveCount(2);
+      expect(
+        await topicItems.evaluateAll((nodes) => nodes.map((n) => n.getAttribute('data-topic'))),
+      ).toEqual(topics);
+      await expect(counter).toHaveText(
         uiCopy('settings.guard.topicsCounter', { n: 2, max: GUARD_MAX_TOPICS }),
       );
+      // A duplicate is refused under the input, and the typed text stays.
+      await topicInput.fill(topics[0] ?? '');
+      await topicInput.press('Enter');
+      await expect(page.getByTestId(testIds.guardTopicsError)).toHaveAttribute(
+        'data-code',
+        'duplicate_topic',
+      );
+      await expect(topicInput).toHaveValue(topics[0] ?? '');
+      await expect(topicItems).toHaveCount(2);
+      expect((await getSettings(request)).guard.topics).toEqual(topics);
+      await topicInput.fill('');
       const guardSwitch = page.getByTestId(testIds.guardSwitch);
       await guardSwitch.click();
       await expect(guardSwitch).toHaveAttribute('aria-checked', 'true');
@@ -595,16 +673,12 @@ test.describe('journey 9: topic guard', () => {
         }),
       );
     } finally {
-      // 9.8: switch off and put the saved topics back, through the screen.
+      // 9.8: switch off through the screen, then put the saved topics back.
       await page.goto('/settings');
       const guardSwitch = page.getByTestId(testIds.guardSwitch);
       if ((await guardSwitch.getAttribute('aria-checked')) === 'true') await guardSwitch.click();
       await expect(guardSwitch).toHaveAttribute('aria-checked', 'false');
-      if ((await topicsInput.inputValue()) !== before.topics) {
-        await topicsInput.fill(before.topics);
-        await page.getByTestId(testIds.guardTopicsSave).click();
-        await expect(page.getByTestId(testIds.guardTopicsSave)).toBeHidden();
-      }
+      await patchSettings(request, { guardTopics: initial.guard.topics });
       const after = await getSettings(request);
       expect(after.guard.enabled).toBe(false);
       expect(after.guard.topics).toEqual(initial.guard.topics);

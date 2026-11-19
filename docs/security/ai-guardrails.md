@@ -4,7 +4,7 @@
 
 เอกสารนี้จับคู่แนวปฏิบัติด้าน guardrail ของ AI เก้าข้อ (input validation, prompt-injection defence, data privacy, least privilege, structured output, grounding and verification, human-in-the-loop, observability และ continuous evaluation) กับสิ่งที่ระบบนี้ทำจริง แยกตามชั้น แนวปฏิบัติเหล่านี้มาจากกรอบทั่วไปอย่าง OWASP Top 10 for LLM Applications และ NIST AI RMF เอกสารนี้ไม่ได้อ้างรายละเอียดหรือข้อกำหนดเฉพาะจากกรอบเหล่านั้น เพราะยังไม่ได้ตรวจกับต้นฉบับ
 
-ภัยและการรับมือของทั้งระบบอยู่ใน [threat-model](threat-model.md) ตัวเลขของวันนี้ของแต่ละชั้นแสดงในส่วน Guardrails ของหน้าตั้งค่า ([ui-screens ข้อ 9.14](../specs/ui-screens.md#914-ส่วน-guardrails), [GetGuardrailStats](../architecture/use-cases.md#getguardrailstats))
+ภัยและการรับมือของทั้งระบบอยู่ใน [threat-model](threat-model.md) ตัวเลขของวันนี้ของแต่ละชั้นไม่แสดงบนหน้าจอ ([ADR 0024](../adr/0024-scope-reductions.md)) ดูได้จาก: `GET /api/system/guardrails` ที่ต้องมี cookie ([api-contract](../architecture/api-contract.md#get-apisystemguardrails), [GetGuardrailStats](../architecture/use-cases.md#getguardrailstats)) ซึ่งรวมทุกชั้น, บรรทัด "วันนี้กันไป" ของส่วนขอบเขตหัวข้อ (ชั้นข้อมูลเข้า), แถวคัดกรองของส่วนค่าใช้จ่าย AI, ข้อผิดพลาดล่าสุดของ AI ในส่วนสถานะระบบ (ชั้นผลลัพธ์) และ log เหตุการณ์ `guard.blocked` และ `ai.reply.*` ([operations](../runbooks/operations.md))
 
 ## ชั้นข้อมูลเข้า (input)
 
@@ -42,7 +42,7 @@
 
 | แนวปฏิบัติ | สิ่งที่ระบบนี้ทำ | อยู่ที่ไหน | ทดสอบด้วย |
 | --- | --- | --- | --- |
-| Observability | ทุกการเรียกโมเดลมีแถว AiUsage พร้อม kind, outcome, error, token และต้นทุน, ข้อผิดพลาดล่าสุดของ AI อยู่ใน Settings, บรรทัดเหตุการณ์ในแชท, log ที่มีเฉพาะ field ที่อนุญาต (`guard.checked`, `guard.blocked`, `guard.failed`, `ai.model.called`), งบต่อวัน และส่วน Guardrails ที่นับของวันนี้จากข้อมูลเหล่านี้ | `UsageRepository`, `GetGuardrailStats`, `GetSystemStatus`, `GetUsageReport` | test ของ `GetGuardrailStats`, `GetSettings` และ `GetUsageReport`, ชุดทดสอบของ `UsageRepository` และ `MessageRepository` กับ Postgres, E2E เส้นที่ 9 ขั้น 9.7 |
+| Observability | ทุกการเรียกโมเดลมีแถว AiUsage พร้อม kind, outcome, error, token และต้นทุน, ข้อผิดพลาดล่าสุดของ AI อยู่ใน Settings, บรรทัดเหตุการณ์ในแชท, log ที่มีเฉพาะ field ที่อนุญาต (`guard.checked`, `guard.blocked`, `guard.failed`, `ai.model.called`), งบต่อวัน และ `GET /api/system/guardrails` ที่นับของวันนี้จากข้อมูลเหล่านี้ (ไม่มีหน้าจอแสดง) | `UsageRepository`, `GetGuardrailStats`, `GetSystemStatus`, `GetUsageReport` | test ของ `GetGuardrailStats`, `GetSettings` และ `GetUsageReport`, ชุดทดสอบของ `UsageRepository` และ `MessageRepository` กับ Postgres, E2E เส้นที่ 9 ขั้น 9.7 |
 
 ## ชั้นการประเมิน (evaluation)
 
@@ -57,4 +57,4 @@
 - ระบบมีร้านเดียว จึงมีเฉพาะการแยกประวัติรายลูกค้า ไม่มีการแยกข้อมูลระหว่างร้าน
 - ไม่มีขั้นตอนอนุมัติก่อนส่ง เพราะ AI ไม่มีสิทธิ์ลงมือ และข้อความที่ AI ตอบถูกส่งทันทีเมื่อผ่านทุกเงื่อนไข
 - ตัวชี้วัดของการประเมินมาจากคำถามจำนวนน้อยและรันด้วยมือเท่านั้น ไม่มีการเฝ้าดูคุณภาพบน production แบบอัตโนมัติ
-- ไม่มีการแจ้งเตือน ตัวเลขของ Guardrails ต้องเปิดดูในหน้าตั้งค่า และตัวเลขที่มาจากบรรทัดเหตุการณ์นับครั้งที่แชทขึ้นรอแอดมิน ไม่ใช่จำนวนข้อความ
+- ไม่มีการแจ้งเตือน และไม่มีหน้าจอที่รวมตัวเลขของทุกชั้น ต้องเรียก `GET /api/system/guardrails` เอง ตัวเลขที่มาจากบรรทัดเหตุการณ์นับครั้งที่แชทขึ้นรอแอดมิน ไม่ใช่จำนวนข้อความ

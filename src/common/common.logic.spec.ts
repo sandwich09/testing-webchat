@@ -5,9 +5,12 @@ import {
   bangkokDateKey,
   cn,
   dayDiff,
+  formatDateKey,
   formatDateTime,
   formatInt,
   formatMessageTime,
+  formatMonthKey,
+  formatMonthYear,
   formatUsdForScreen,
   initialOf,
   mergeById,
@@ -86,6 +89,20 @@ describe('time formats (TZ-independent)', () => {
   it('decides the year in Thai time', () => {
     const now = new Date('2026-12-31T17:30:00.000Z'); // 2027-01-01 in Thai time
     expect(formatDateTime('2026-12-31T05:00:00.000Z', now)).toBe('31 ธ.ค. 2569 12:00');
+  });
+
+  it('writes a month as the short month and the Buddhist-era year', () => {
+    expect(formatMonthYear(2026, 11)).toBe('พ.ย. 2569');
+    expect(formatMonthKey('2026-12')).toBe('ธ.ค. 2569');
+    expect(formatMonthKey('2027-01')).toBe('ม.ค. 2570');
+    expect(formatMonthKey('not a month')).toBe('not a month');
+  });
+
+  it('writes a calendar date key with its Buddhist-era year, never as ISO', () => {
+    expect(formatDateKey('2026-11-03')).toBe('3 พ.ย. 2569');
+    expect(formatDateKey('2026-12-31')).toBe('31 ธ.ค. 2569');
+    expect(formatDateKey('2027-01-01')).toBe('1 ม.ค. 2570');
+    expect(formatDateKey('2026-11')).toBe('2026-11');
   });
 
   it('builds date keys and day differences', () => {

@@ -23,7 +23,7 @@ export const AVATAR_COLORS = [
 ] as const;
 
 export const copy = {
-  appName: 'Test webchat application',
+  appName: 'Test webchat',
   skipToContent: 'ข้ามไปที่เนื้อหา',
   nav: {
     label: 'เมนูหลัก',

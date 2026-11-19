@@ -34,7 +34,7 @@ export const copy = {
     goToSettings: 'ไปที่ตั้งค่า',
     empty: {
       title: 'ยังไม่มีลูกค้าทักมา',
-      body: 'เมื่อลูกค้าเพิ่ม LINE Official Account ของร้านเป็นเพื่อนแล้วทักมา แชทจะขึ้นที่นี่',
+      body: 'เมื่อลูกค้าเพิ่ม LINE Official Account เป็นเพื่อนแล้วทักมา แชทจะขึ้นที่นี่',
     },
     emptyUnread: 'ไม่มีแชทที่ยังไม่อ่าน',
     emptyNeedsAdmin: 'ไม่มีแชทที่รอแอดมิน',
@@ -106,7 +106,6 @@ export const copy = {
     hint: 'Enter ส่ง · Shift+Enter ขึ้นบรรทัดใหม่',
     send: 'ส่ง',
     attach: 'แนบรูปหรือวิดีโอ',
-    canned: 'ข้อความสำเร็จรูป',
     waitUpload: 'ส่งได้เมื่ออัปโหลดเสร็จ',
     disabled: {
       unfollowed: 'ส่งข้อความหาลูกค้าที่เลิกติดตามแล้วไม่ได้',
@@ -129,14 +128,6 @@ export const copy = {
       convertFailed: 'แปลงรูปนี้ไม่ได้ ใช้ไฟล์ JPEG หรือ PNG แทน',
       uploadFailed: 'อัปโหลดไม่สำเร็จ แนบไฟล์อีกครั้ง',
     },
-  },
-  canned: {
-    title: 'ข้อความสำเร็จรูป',
-    searchPlaceholder: 'ค้นหาข้อความสำเร็จรูป',
-    empty: 'ยังไม่มีข้อความสำเร็จรูป',
-    goToSettings: 'เพิ่มที่หน้าตั้งค่า',
-    noMatch: 'ไม่พบข้อความสำเร็จรูปที่ค้นหา',
-    error: 'โหลดข้อความสำเร็จรูปไม่สำเร็จ',
   },
   info: {
     title: 'ข้อมูลลูกค้า',

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   AI_INSTRUCTIONS_MAX_CHARS,
   GUARD_MAX_TOPICS,
-  GUARD_REFUSAL_MAX_CHARS,
   GUARD_TEST_MAX_CHARS,
   GUARD_TOPIC_MAX_CHARS,
 } from './limits.contract';
@@ -26,7 +25,6 @@ describe('updateSettingsBodySchema', () => {
       { guardEnabled: true },
       { guardTopics: [] },
       { guardTopics: ['มุกตลกไทย'] },
-      { guardRefusalText: 'คุยได้แค่มุกนะคะ' },
     ]) {
       expect(updateSettingsBodySchema.safeParse(body).success).toBe(true);
     }
@@ -82,19 +80,10 @@ describe('updateSettingsBodySchema: topic guard', () => {
     expect(topics([1]).success).toBe(false);
   });
 
-  it('trims the refusal text and bounds it to 1 to GUARD_REFUSAL_MAX_CHARS', () => {
-    const parsed = updateSettingsBodySchema.safeParse({ guardRefusalText: '  ไม่ตอบนะคะ  ' });
-    expect(parsed.success && parsed.data.guardRefusalText).toBe('ไม่ตอบนะคะ');
-    for (const ok of [
-      'x',
-      'x'.repeat(GUARD_REFUSAL_MAX_CHARS),
-      ` ${'x'.repeat(GUARD_REFUSAL_MAX_CHARS)} `,
-    ]) {
-      expect(updateSettingsBodySchema.safeParse({ guardRefusalText: ok }).success).toBe(true);
-    }
-    for (const bad of ['', '   ', 'x'.repeat(GUARD_REFUSAL_MAX_CHARS + 1)]) {
-      expect(updateSettingsBodySchema.safeParse({ guardRefusalText: bad }).success).toBe(false);
-    }
+  it('rejects the refusal text, which is fixed in code', () => {
+    expect(updateSettingsBodySchema.safeParse({ guardRefusalText: 'ไม่ตอบนะคะ' }).success).toBe(
+      false,
+    );
   });
 
   it('rejects a non-boolean guardEnabled', () => {

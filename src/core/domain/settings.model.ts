@@ -14,8 +14,6 @@ export interface Settings {
   guardEnabled: boolean;
   /** 0 to GUARD_MAX_TOPICS topics, trimmed and unique. At least 1 while guardEnabled is true. */
   guardTopics: string[];
-  /** 1 to GUARD_REFUSAL_MAX_CHARS characters. */
-  guardRefusalText: string;
   /** Both encrypted credentials are stored. */
   lineConfigured: boolean;
   lineBotName: string | null;
