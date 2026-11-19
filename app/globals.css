@@ -1,8 +1,14 @@
 /* Design tokens come from docs/architecture/frontend.md ("Design system"); the colours are written
    here and nowhere else in the code. The font family is NOT declared here: `next/font/local` sets
    `--font-sans` on <html> (src/common/fonts/fonts.ts) and Tailwind's default `font-sans` reads it. */
-@import 'tailwindcss';
+@import 'tailwindcss' source(none);
 @import 'tw-animate-css';
+
+/* Class names are read from app/ and src/ only. Without this Tailwind 4 scans every file under the
+   project root that .gitignore does not exclude, so a new output or cache folder becomes input.
+   Paths are relative to this file. */
+@source '.';
+@source '../src';
 
 @theme {
   --color-page: #f3f1f5;
