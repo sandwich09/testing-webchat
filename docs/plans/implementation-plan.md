@@ -134,7 +134,7 @@
 - [x] CI ไม่ยกเลิกรอบที่เริ่มแล้ว ตรวจ migration ที่ทำลายข้อมูลทุกไฟล์ และงาน `deploy` เรียก Deploy Hook เฉพาะเมื่อ `main` ยังเป็น commit ที่ตรวจ
 - [x] `pnpm migrations:applied` เทียบ migration ที่ apply แล้วในฐานข้อมูลกับไฟล์ ([deploy](../runbooks/deploy.md#ตรวจ-migration-ที่-apply-แล้ว))
 - [x] Migration ที่สิบเอ็ด รวมค่าเริ่มต้น `TimeZone` เป็น UTC ของ database ([data-model](../architecture/data-model.md#migration-ที่สิบเอ็ด-ผลจากการ-review))
-- [ ] ใส่ `pnpm migrations:applied` ใน `vercel-build` ก่อน `prisma migrate deploy` (รอเจ้าของงานอนุมัติ เพราะเป็นการแก้ค่า deploy)
+- [x] ใส่ `pnpm migrations:applied` ใน `vercel-build` ก่อน `prisma migrate deploy` ([ADR 0029](../adr/0029-applied-migrations-check-in-production-build.md))
 
 ## สิ่งที่ต้องยืนยันก่อนหรือระหว่างสร้าง
 

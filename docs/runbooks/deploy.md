@@ -35,7 +35,7 @@
 1. เปิด PR เข้า `main` พร้อมผลของ lint, typecheck และ test ที่รันเอง
 2. เจ้าของงาน review และ merge แบบ squash
 3. CI รัน 4 งาน เมื่อผ่านทั้งหมดจึงเรียก Deploy Hook
-4. Build ของ production (`pnpm vercel-build` ใน `vercel.json`) รัน `prisma migrate deploy` ก่อน แล้วจึง build แอป ไม่รัน seed: production เริ่มจากฐานข้อมูลว่าง (ไม่มีลูกค้า ไม่มีคลังความรู้ ไม่มี credential ของ LINE ค่าใช้จ่ายเป็นศูนย์) seed (`pnpm db:seed`) เป็นข้อมูลตัวอย่างสำหรับ Docker ในเครื่องเท่านั้น ([data-model](../architecture/data-model.md#ข้อมูลตัวอย่าง-seed))
+4. Build ของ production (`pnpm vercel-build` ใน `vercel.json`) รัน `pnpm migrations:applied` และ `prisma migrate deploy` ก่อน แล้วจึง build แอป ไม่รัน seed: production เริ่มจากฐานข้อมูลว่าง (ไม่มีลูกค้า ไม่มีคลังความรู้ ไม่มี credential ของ LINE ค่าใช้จ่ายเป็นศูนย์) seed (`pnpm db:seed`) เป็นข้อมูลตัวอย่างสำหรับ Docker ในเครื่องเท่านั้น ([data-model](../architecture/data-model.md#ข้อมูลตัวอย่าง-seed))
 5. ตรวจหลัง deploy ตามหัวข้อถัดไป
 
 ## ตรวจหลัง deploy
@@ -66,7 +66,7 @@ Deploy Hook ไม่ถูกเรียก production จึงยังเ�
 DIRECT_URL='<connection string แบบตรงของ Neon>' pnpm migrations:applied
 ```
 
-คำสั่งอ่าน `_prisma_migrations` (เฉพาะแถวที่ apply สำเร็จและไม่ถูก roll back) แล้วเทียบ checksum (SHA-256 ของ `migration.sql`) กับไฟล์ใน `prisma/migrations/` ล้มพร้อมชื่อ directory และ `missing` หรือ `modified` ไม่พิมพ์ connection string ให้รันก่อน merge PR ที่แตะ `prisma/migrations/` และหลัง CI ของ `main` ล้มหรือถูกข้าม ถ้าล้ม ให้คืนไฟล์จากประวัติของ Git ตาม [D1](../guidelines/pitfalls-and-prevention.md#d1-แก้หรือลบ-migration-ที่-apply-ไปแล้ว) ก่อน deploy การใส่คำสั่งนี้ใน `vercel-build` ก่อน `prisma migrate deploy` ให้ deploy ล้มเองเป็นการแก้ค่า deploy ซึ่งรอเจ้าของงานอนุมัติ
+คำสั่งอ่าน `_prisma_migrations` (เฉพาะแถวที่ apply สำเร็จและไม่ถูก roll back) แล้วเทียบ checksum (SHA-256 ของ `migration.sql`) กับไฟล์ใน `prisma/migrations/` ล้มพร้อมชื่อ directory และ `missing` หรือ `modified` ไม่พิมพ์ connection string ให้รันก่อน merge PR ที่แตะ `prisma/migrations/` และหลัง CI ของ `main` ล้มหรือถูกข้าม ถ้าล้ม ให้คืนไฟล์จากประวัติของ Git ตาม [D1](../guidelines/pitfalls-and-prevention.md#d1-แก้หรือลบ-migration-ที่-apply-ไปแล้ว) ก่อน deploy Build ของ production รันคำสั่งนี้เองก่อน `prisma migrate deploy` ([ADR 0029](../adr/0029-applied-migrations-check-in-production-build.md)) ถ้าไม่ตรง build ล้มและ production ยังเป็นรุ่นเดิม การรันด้วยมือข้างบนใช้เพื่อรู้ก่อน merge
 
 ## ย้อนกลับ
 
