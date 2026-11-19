@@ -8,14 +8,14 @@ import { testIds } from '@/common/test-ids';
 import { Skeleton } from '@/common/ui/skeleton';
 import type { GuardrailStatsDto } from '@/contracts';
 
-import { useGuardrailStats } from './guard.hooks';
+import { copy } from './settings.constants';
+import { useGuardrailStats } from './settings.guard.hooks';
 import {
   fillTemplate,
   guardrailRows,
   type GuardrailMetric,
   type GuardrailRow,
-} from './guard.logic';
-import { copy } from './settings.constants';
+} from './settings.guard.logic';
 import { SettingsRow } from './SettingsRow';
 import { SettingsSection } from './SettingsSection';
 

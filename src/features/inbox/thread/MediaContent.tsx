@@ -7,7 +7,7 @@ import { cn } from '@/common/common.logic';
 import { testIds } from '@/common/test-ids';
 import { copy } from '@/features/inbox/inbox.constants';
 import type { ThreadMessage } from '@/features/inbox/inbox.logic';
-import type { MediaView } from '@/features/inbox/inbox.thread.logic';
+import type { MediaView } from '@/features/inbox/thread/inbox.thread.logic';
 
 type MediaContentProps = {
   message: ThreadMessage;

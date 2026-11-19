@@ -1,7 +1,7 @@
 // Pure logic of the contact list components (ui-screens 4). No clock, no browser.
 import { CONTACT_FILTERS, DEFAULT_CONTACT_FILTER, type ContactFilter } from '@/contracts';
 
-import { copy } from './inbox.constants';
+import { copy } from '../inbox.constants';
 
 /** The `?filter=` value of the URL as a filter. Anything unknown is `all`. */
 export function parseFilter(value: string | null | undefined): ContactFilter {

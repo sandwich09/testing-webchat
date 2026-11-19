@@ -2,7 +2,7 @@
 // WebP and HEIC/HEIF into JPEG, and make the small JPEG preview the upload ticket asks for. The
 // decisions (type, limits, sizes) are pure functions in inbox.logic.ts; this file only touches
 // `createImageBitmap`, `OffscreenCanvas` and `<video>`, each behind one small function.
-import { computeTargetSize } from './inbox.logic';
+import { computeTargetSize } from '../inbox.logic';
 
 /** Longest side of a converted image (WebP or HEIC to JPEG). */
 export const CONVERT_MAX_EDGE = 4096;

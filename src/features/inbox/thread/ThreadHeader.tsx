@@ -6,9 +6,9 @@ import { ContactAvatar } from '@/common/ContactAvatar';
 import { AVATAR_HEADER, THREAD_HEADER_HEIGHT } from '@/common/layout.constants';
 import { testIds } from '@/common/test-ids';
 import type { ContactDetailDto } from '@/contracts';
-import { AiSwitch } from '@/features/inbox/AiSwitch';
 import { copy } from '@/features/inbox/inbox.constants';
 import { threadSubline } from '@/features/inbox/inbox.logic';
+import { AiSwitch } from '@/features/inbox/thread/AiSwitch';
 
 type ThreadHeaderProps = {
   contact: ContactDetailDto;

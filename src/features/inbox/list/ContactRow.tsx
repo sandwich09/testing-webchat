@@ -6,9 +6,9 @@ import { AVATAR_LIST } from '@/common/layout.constants';
 import { testIds } from '@/common/test-ids';
 import type { ContactDto, ContactFilter } from '@/contracts';
 
-import { copy } from './inbox.constants';
+import { copy } from '../inbox.constants';
+import { buildContactPreview, formatListTime } from '../inbox.logic';
 import { contactHref, unreadAriaText, unreadBadgeText } from './inbox.list.logic';
-import { buildContactPreview, formatListTime } from './inbox.logic';
 
 type ContactRowProps = {
   contact: ContactDto;

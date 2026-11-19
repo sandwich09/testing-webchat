@@ -1,8 +1,8 @@
 import { ContactAvatar } from '@/common/ContactAvatar';
 import { AVATAR_GROUP } from '@/common/layout.constants';
 import { testIds } from '@/common/test-ids';
-import { MessageBubble } from '@/features/inbox/MessageBubble';
 import type { ThreadMessage } from '@/features/inbox/inbox.logic';
+import { MessageBubble } from '@/features/inbox/thread/MessageBubble';
 
 type MessageGroupProps = {
   author: 'customer' | 'admin' | 'ai';

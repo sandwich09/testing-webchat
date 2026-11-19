@@ -4,7 +4,7 @@ import { testIds } from '@/common/test-ids';
 import { copy } from '@/features/inbox/inbox.constants';
 import type { ThreadMessage } from '@/features/inbox/inbox.logic';
 import { retryPlan, outgoingStatus } from '@/features/inbox/inbox.send.logic';
-import { failedLineText } from '@/features/inbox/inbox.thread.logic';
+import { failedLineText } from '@/features/inbox/thread/inbox.thread.logic';
 
 type DeliveryStatusProps = {
   message: ThreadMessage;

@@ -21,8 +21,8 @@ import { cn } from '@/common/common.logic';
 import { testIds } from '@/common/test-ids';
 import { Skeleton } from '@/common/ui/skeleton';
 
-import { copy } from './inbox.constants';
-import { filterCannedReplies } from './inbox.logic';
+import { copy } from '../inbox.constants';
+import { filterCannedReplies } from '../inbox.logic';
 
 export type CannedReplyPickerProps = {
   open: boolean;

@@ -20,19 +20,19 @@ import { BP_NARROW } from '@/common/layout.constants';
 import { testIds } from '@/common/test-ids';
 import { Button } from '@/common/ui/button';
 
+import { copy } from '../inbox.constants';
+import { useSendMessage } from '../inbox.hooks';
+import { canSend, insertAtCaret, isSubmitKey } from '../inbox.logic';
 import { AttachmentTray } from './AttachmentTray';
 import { CannedReplyPicker } from './CannedReplyPicker';
+import { isAttachmentPending, trayView } from './inbox.attachment.logic';
 import {
-  isAttachmentPending,
   rememberSentPreview,
-  trayView,
   useAttachment,
+  useDraft,
   useReleaseSentPreviews,
-} from './inbox.attachment';
-import { copy } from './inbox.constants';
-import { useDraft, useSendMessage } from './inbox.hooks';
-import { canSend, insertAtCaret, isSubmitKey } from './inbox.logic';
-import { useTypingPing } from './inbox.typing';
+  useTypingPing,
+} from './inbox.composer.hooks';
 
 /** MOV stays pickable so the admin gets the "use MP4" message instead of a hidden file (5.10). */
 const ACCEPT = 'image/jpeg,image/png,image/heic,image/heif,image/webp,video/mp4,video/quicktime';

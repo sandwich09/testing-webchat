@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { TYPING_PING_INTERVAL_MS } from './inbox.constants';
-import { createTypingPinger } from './inbox.typing';
+import { TYPING_PING_INTERVAL_MS } from '../inbox.constants';
+import { createTypingPinger } from './inbox.typing.controller';
 
 describe('createTypingPinger', () => {
   beforeEach(() => {

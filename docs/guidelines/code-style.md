@@ -1,6 +1,6 @@
 # กฎโค้ด
 
-> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-18
+> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-19
 
 แต่ละข้อระบุว่าใครเป็นผู้ตรวจ: **lint** คือเครื่องมือบังคับ และ **review** คือคนตรวจตอนเปิด PR
 
@@ -60,13 +60,26 @@ composition/          →  ทุกชั้น
 
 - Use case ตั้งตามการกระทำ: `send-admin-message.use-case.ts`
 - ท้ายชื่อบอกบทบาท: `*.model.ts`, `*.logic.ts`, `*.port.ts`, `*.repository.ts`, `*.adapter.ts`, `*.mapper.ts`
-- หน้าจอขึ้นต้นด้วยชื่อ feature: `inbox.api.ts`, `inbox.logic.ts`, `InboxPage.tsx`
+- หน้าจอขึ้นต้นด้วยชื่อ feature: `inbox.api.ts`, `inbox.logic.ts`, `InboxPage.tsx` ไฟล์ที่เป็นของพื้นที่เดียวใน feature ใส่ชื่อพื้นที่ต่อ: `<feature>.<พื้นที่>.<บทบาท>.ts` เช่น `inbox.thread.logic.ts`, `settings.guard.hooks.ts` component ใช้ชื่อ PascalCase ตามเดิม
+- บทบาทของไฟล์หน้าจอ (ที่ไม่ใช่ component):
+
+  | ท้ายชื่อ | มีอะไร |
+  | --- | --- |
+  | `*.api.ts` | ฟังก์ชันเรียก API และตรวจคำตอบด้วย schema |
+  | `*.logic.ts` | ฟังก์ชันล้วนและ type: reducer, การแปลงข้อมูล, ข้อความที่แสดง ไม่มี React ไม่เรียก API ของ browser และไม่อ่านเวลา |
+  | `*.controller.ts` | object ธรรมดาที่เก็บ state และทำผลข้างเคียงผ่านฟังก์ชันที่รับเข้ามาเท่านั้น (API, browser, นาฬิกา) จึงทดสอบได้โดยไม่มี React และ browser เช่น `inbox.attachment.controller.ts`, `inbox.typing.controller.ts` |
+  | `*.hooks.ts` | React hook ที่ผูก API, cache และ controller เข้ากับฟังก์ชันจริงของ browser และ state ระดับ module ที่ hook เหล่านั้นใช้ร่วม (เช่น `rememberSentPreview`) |
+  | `*.constants.ts` | ข้อความบนหน้าจอและค่าคงที่ |
+  | `*.media.ts` | ฟังก์ชันที่เรียก API ของ browser ตรง (canvas, `<video>`) ใช้เฉพาะ `inbox.media.ts` |
 - Test อยู่ข้างไฟล์ที่ทดสอบ: `*.spec.ts`
 
 ## 8. หน้าจอ (review ยกเว้นที่ระบุ)
 
 - ไฟล์ใน `app/` ทำหน้าที่แค่ import component ของ feature
-- เฉพาะไฟล์ `*.api.ts` เรียก `fetch` ได้ (`src/features/*/<feature>.api.ts` และ `src/common/common.api.ts` ที่มี `apiFetch`) component และไฟล์อื่นของหน้าจอเรียกผ่านไฟล์เหล่านั้น (lint)
+- Feature แบ่งตามพื้นที่ของหน้าจอ ไม่แบ่งตามชนิด component (ไม่ใช้ atomic design) เมื่อ feature มีหลายพื้นที่ที่แต่ละพื้นที่มีไฟล์ของตัวเองหลายไฟล์ ให้แยกเป็นโฟลเดอร์ย่อยหนึ่งชั้นต่อพื้นที่ เช่น `src/features/inbox/{list,thread,composer}/` ไฟล์ที่มากกว่าหนึ่งพื้นที่ใช้ (หน้าหลักของ feature, `*.api.ts`, `*.constants.ts`, `*.logic.ts` และ `*.hooks.ts` ที่ใช้ร่วม) อยู่ที่ระดับบนของ feature Feature ที่ไฟล์ส่วนใหญ่ใช้โครงร่วมกัน (เช่น `settings` ที่ทุกส่วนใช้ `SettingsSection` และ `settings.hooks.ts`) อยู่ชั้นเดียว และแยกพื้นที่ด้วยชื่อไฟล์ตามข้อ 7
+- โฟลเดอร์ย่อยไม่มี `index.ts` และ import ไฟล์กันตรง ภายใน feature เดียวกันใช้ path แบบ relative หรือ `@/features/<feature>/...` ก็ได้
+- Hook ที่ export อยู่ในไฟล์ `*.hooks.ts` (hook ที่ไม่ export และใช้ใน component เดียว เช่น `useDebounced` ใน `ContactList.tsx` อยู่ในไฟล์ของ component นั้นได้): hook ที่ใช้ในพื้นที่เดียวอยู่ใน `*.hooks.ts` ของพื้นที่นั้น (เช่น `composer/inbox.composer.hooks.ts`, `thread/inbox.thread.hooks.ts`) hook ที่มากกว่าหนึ่งพื้นที่ใช้อยู่ใน `<feature>.hooks.ts` ที่ระดับบนของ feature และ hook ที่มากกว่าหนึ่ง feature ใช้อยู่ใน `src/common/` (`common.hooks.ts` และ hook ของ polling ใน `polling.ts`) ตัวจำกัดความถี่, reducer และ state machine ที่ hook ใช้ไม่อยู่ในไฟล์ hook แต่อยู่ใน `*.logic.ts` หรือ `*.controller.ts` เพื่อให้ทดสอบได้โดยไม่มี React
+- เฉพาะไฟล์ `*.api.ts` เรียก `fetch` ได้ (`src/features/**/*.api.ts` เช่น `inbox.api.ts` และ `src/common/common.api.ts` ที่มี `apiFetch`) component และไฟล์อื่นของหน้าจอเรียกผ่านไฟล์เหล่านั้น (lint)
 - การคำนวณและการแปลงข้อมูลอยู่ใน `*.logic.ts` เป็นฟังก์ชันล้วน
 - ข้อความที่ผู้ใช้เห็นอยู่ใน `*.constants.ts` ของ feature และเป็นไปตาม [ux-writing](ux-writing.md)
 - ไม่ใช้ environment variable ที่ขึ้นต้นด้วย `NEXT_PUBLIC_` (lint)

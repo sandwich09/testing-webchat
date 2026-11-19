@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { copy } from './inbox.constants';
-import type { ThreadMessage } from './inbox.logic';
+import { copy } from '../inbox.constants';
+import type { ThreadMessage } from '../inbox.logic';
 import {
   deliveryReason,
   failedLineText,

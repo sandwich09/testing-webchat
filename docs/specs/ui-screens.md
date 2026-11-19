@@ -95,7 +95,7 @@
 | `src/features/settings/settings.api.ts` | `updateSettings(patch: SettingsPatch): Promise<SettingsDto>` | `PATCH /api/settings` | `SettingsDto` |
 | | `saveLineCredentials(body: { channelSecret: string; channelAccessToken: string }): Promise<{ botName: string; basicId: string }>` | `PUT /api/settings/line-credentials` | `{ botName, basicId }` |
 | | `testLineConnection(): Promise<{ botName: string; basicId: string }>` | `POST /api/settings/line/test` | `{ botName, basicId }` |
-| `src/features/settings/guard.api.ts` | `testTopicGuard(text: string): Promise<GuardTestResult>` | `POST /api/settings/guard/test` | `{ allowed, matchedTopic, costUsd }` |
+| `src/features/settings/settings.guard.api.ts` | `testTopicGuard(text: string): Promise<GuardTestResult>` | `POST /api/settings/guard/test` | `{ allowed, matchedTopic, costUsd }` |
 | | `listKbDocuments(): Promise<KbDocumentsList>` | `GET /api/knowledge/documents` | `{ documents, usedTokens, capacityTokens }` |
 | | `uploadKbDocument(file: File): Promise<DocumentDto>` | `POST /api/knowledge/documents` | `DocumentDto` (202) |
 | | `getKbDocument(id: string): Promise<DocumentDetailDto>` | `GET /api/knowledge/documents/:id` | `DocumentDetailDto` |
@@ -107,7 +107,7 @@
 | | `getUsage(month: string): Promise<UsageReport>` | `GET /api/usage` (`?month=YYYY-MM`) | `{ month, priceTableDate, contacts, ingest, totalCostUsd, replyCount, averageCostPerReplyUsd }` |
 | | `getUsageDetail(contactId: string, month: string): Promise<UsageRecordDto[]>` | `GET /api/usage/contacts/:id` (`?month=YYYY-MM`) | `{ records }` |
 | | `getSystemStatus(): Promise<SystemStatusDto>` | `GET /api/system/status` | `SystemStatusDto` |
-| `src/features/settings/guard.api.ts` | `getGuardrailStats(): Promise<GuardrailStatsDto>` | `GET /api/system/guardrails` | `GuardrailStatsDto` |
+| `src/features/settings/settings.guard.api.ts` | `getGuardrailStats(): Promise<GuardrailStatsDto>` | `GET /api/system/guardrails` | `GuardrailStatsDto` |
 
 `SettingsPatch` คือ body ของ `PATCH /api/settings` ส่วน `ContactsPage`, `MessagesPage`, `KbDocumentsList`, `UsageReport` และ `GuardTestResult` คือ response ในคอลัมน์ขวาตามชื่อ field เดียวกัน
 
@@ -269,17 +269,21 @@ src/common/AppShell.tsx
 ```
 src/features/inbox/
   InboxPage.tsx                 จัด 3 คอลัมน์ตามขนาดจอ อ่าน contactId จาก URL
-    ContactList.tsx             หัวข้อ ค้นหา แท็บ รายการ
-      ContactSearch.tsx
-      ContactListTabs.tsx
-      ContactRow.tsx
-      ContactListSkeleton.tsx
-    Thread.tsx                  ข้อ 5
-    InfoPanel.tsx               ข้อ 6
-  inbox.hooks.ts                useContacts, useContactDetail, useThread, useSendMessage (ข้อ 7)
-  inbox.attachment.ts           useAttachment (ข้อ 7.6)
-  inbox.typing.ts               useTypingPing (ข้อ 5.8)
+    list/ContactList.tsx        หัวข้อ ค้นหา แท็บ รายการ
+      list/ContactSearch.tsx
+      list/ContactListTabs.tsx
+      list/ContactRow.tsx
+      list/ContactListSkeleton.tsx
+    thread/Thread.tsx           ข้อ 5
+    thread/InfoPanel.tsx        ข้อ 6
+  inbox.hooks.ts                useContacts, useSendMessage (ใช้มากกว่าหนึ่งส่วน ข้อ 7)
+  thread/inbox.thread.hooks.ts  useContactDetail, useSetContactAi, useThread (ข้อ 7)
+  composer/inbox.composer.hooks.ts
+                                useDraft (ข้อ 5.7), useAttachment (ข้อ 7.6), useTypingPing (ข้อ 5.8),
+                                useReleaseSentPreviews (ข้อ 7.6)
 ```
+
+การย่อหน้าคือลำดับการ render ส่วนโฟลเดอร์ย่อย `list/`, `thread/` และ `composer/` และที่อยู่ของ hook เป็นไปตาม [frontend](../architecture/frontend.md#โฟลเดอร์)
 
 `ContactList` state:
 
@@ -361,23 +365,23 @@ Field ของ `ContactDto` ที่ใช้: `id`, `displayName`, `pictureUr
 
 ```
 src/features/inbox/
-  Thread.tsx                    รับ contactId, ห่อ error boundary แยกของส่วนหัว ข้อความ ช่องตอบ
-    ThreadHeader.tsx
-      AiSwitch.tsx              ใช้ทั้งในส่วนหัวและแผงข้อมูล
-    MessageList.tsx             scroll, โหลดย้อนหลัง, ปุ่มข้อความใหม่
-      DayChip.tsx
-      MessageGroup.tsx
-        MessageBubble.tsx
-          MediaContent.tsx      รูป วิดีโอ สติกเกอร์ ป้ายชนิดอื่น
-          DeliveryStatus.tsx    กำลังส่ง / ส่งแล้ว / ส่งไม่สำเร็จ + ส่งอีกครั้ง
-      SystemLine.tsx
-      NewMessagesButton.tsx
-    Composer.tsx                ข้อ 5.7
-      AttachmentTray.tsx
-      CannedReplyPicker.tsx
-    MediaLightbox.tsx           ข้อ 6.4
-  ThreadPlaceholder.tsx         ยังไม่เลือกลูกค้า
-  inbox.media.ts                buildPreviewImage, convertToJpeg, captureVideoFrame, readHeadBytes (ใช้ API ของ browser)
+  thread/Thread.tsx             รับ contactId, ห่อ error boundary แยกของส่วนหัว ข้อความ ช่องตอบ
+    thread/ThreadHeader.tsx
+      thread/AiSwitch.tsx       ใช้ทั้งในส่วนหัวและแผงข้อมูล
+    thread/MessageList.tsx      scroll, โหลดย้อนหลัง, ปุ่มข้อความใหม่
+      thread/DayChip.tsx
+      thread/MessageGroup.tsx
+        thread/MessageBubble.tsx
+          thread/MediaContent.tsx    รูป วิดีโอ สติกเกอร์ ป้ายชนิดอื่น
+          thread/DeliveryStatus.tsx  กำลังส่ง / ส่งแล้ว / ส่งไม่สำเร็จ + ส่งอีกครั้ง
+      thread/SystemLine.tsx
+      thread/NewMessagesButton.tsx
+    composer/Composer.tsx       ข้อ 5.7
+      composer/AttachmentTray.tsx
+      composer/CannedReplyPicker.tsx
+    thread/MediaLightbox.tsx    ข้อ 6.4
+  thread/ThreadPlaceholder.tsx  ยังไม่เลือกลูกค้า
+  composer/inbox.media.ts       buildPreviewImage, convertToJpeg, captureVideoFrame, readHeadBytes (ใช้ API ของ browser)
 ```
 
 `Thread` ใช้:
@@ -487,11 +491,11 @@ Field ของ `MessageDto` ที่ใช้: `id`, `seq`, `updatedSeq`, `dir
 ### 5.7 ช่องตอบ
 
 ```
-Composer.tsx
-  AttachmentTray.tsx         แสดงเมื่อมีไฟล์แนบ
+composer/Composer.tsx
+  composer/AttachmentTray.tsx      แสดงเมื่อมีไฟล์แนบ
   <textarea>
   แถบเครื่องมือ: ปุ่มแนบ, ปุ่มข้อความสำเร็จรูป, hint, ปุ่มส่ง
-  CannedReplyPicker.tsx      popover
+  composer/CannedReplyPicker.tsx   popover
   <input type="file" hidden>
 ```
 
@@ -499,7 +503,7 @@ State ของ `Composer`:
 
 | State | ที่อยู่ | หมายเหตุ |
 | --- | --- | --- |
-| `draft` | `useDraft(contactId)` ใน `inbox.hooks.ts` เก็บใน `Map` ระดับ module แยกตาม contactId | เปลี่ยนแชทแล้วกลับมายังอยู่ หายเมื่อ refresh |
+| `draft` | `useDraft(contactId)` ใน `composer/inbox.composer.hooks.ts` เก็บใน `Map` ระดับ module แยกตาม contactId | เปลี่ยนแชทแล้วกลับมายังอยู่ หายเมื่อ refresh |
 | `attachment` | `useAttachment(contactId)` | state machine ข้อ 7.6 |
 | `pickerOpen` | boolean | |
 | `disabledReason` | `composerDisabledReason(contact, settings)` | ข้อ 8 |
@@ -530,7 +534,7 @@ State ของ `Composer`:
 
 ### 5.8 Loading ฝั่ง LINE ขณะพิมพ์
 
-`useTypingPing(contactId)` ผูกกับ `onChange` ของช่องพิมพ์:
+`useTypingPing(contactId)` ใน `composer/inbox.composer.hooks.ts` ผูกกับ `onChange` ของช่องพิมพ์ ตัวจำกัดความถี่คือ `createTypingPinger` ใน `composer/inbox.typing.controller.ts` ซึ่งรับนาฬิกาและฟังก์ชันส่งจากภายนอก:
 - เรียก `notifyTyping` เมื่อค่าใหม่ไม่ว่าง และ `shouldSendTypingPing(lastSentAt, now, TYPING_PING_INTERVAL_MS)` เป็นจริง หน้าเว็บจึงส่งไม่เกินหนึ่ง ping ต่อ `TYPING_PING_INTERVAL_MS` ขณะแอดมินพิมพ์
 - Server จำกัดเพิ่มอีกชั้นที่ `RATE_LIMIT_TYPING` ต่อลูกค้า และขอให้ LINE แสดง loading เป็นเวลา `LINE_LOADING_SECONDS` ([line-messaging](line-messaging.md#loading-ฝั่ง-line)) ค่าทั้งสามอยู่ใน [project-setup](../architecture/project-setup.md#10-ค่าคงที่ของระบบ)
 - `lastSentAt` เริ่มใหม่เมื่อเปลี่ยนแชท ไม่เรียกเมื่อช่องตอบถูกปิด
@@ -601,7 +605,7 @@ State ของ `Composer`:
 ### 6.1 Component
 
 ```
-src/features/inbox/InfoPanel.tsx
+src/features/inbox/thread/InfoPanel.tsx
   ContactAvatar, AiSwitch (size "md", showNote)
 ```
 
@@ -778,7 +782,7 @@ type ThreadState = { items: ThreadMessage[]; hasOlder: boolean; cursor: string }
 
 ### 7.6 ขั้นตอนแนบไฟล์
 
-`useAttachment(contactId)` เป็น state machine:
+`useAttachment(contactId)` เป็น state machine แยกเป็นสามไฟล์ใน `src/features/inbox/composer/`: `inbox.attachment.logic.ts` (`attachmentReducer`, `isAttachmentPending`, `conversionFor`, `trayView`, `attachmentErrorText`, `attachmentErrorCode`, `previewsToRelease` เป็นฟังก์ชันล้วน), `inbox.attachment.controller.ts` (`createAttachmentController` ทำขั้นตอนด้านล่างผ่านฟังก์ชันของ browser และ API ที่ส่งเข้ามา) และ `inbox.composer.hooks.ts` (`useAttachment`, `useReleaseSentPreviews` ผูก controller กับ React และฟังก์ชันจริงของ browser)
 
 ```
 idle → validating → converting → requesting → uploading → ready → (ส่ง) → idle
@@ -856,13 +860,13 @@ function mergeById<T extends { id: string; updatedSeq: string | null }>(current:
 
 ### 8.2 `src/features/inbox/inbox.logic.ts`
 
-ฟังก์ชันของหัวข้อนี้แยกอยู่สี่ไฟล์ตามเรื่อง ชื่อและพฤติกรรมตามที่เขียนไว้ด้านล่าง:
+ฟังก์ชันของหัวข้อนี้แยกอยู่สี่ไฟล์ตามเรื่อง ชื่อและพฤติกรรมตามที่เขียนไว้ด้านล่าง (path นับจาก `src/features/inbox/`):
 
 | ไฟล์ | ฟังก์ชัน |
 | --- | --- |
 | `inbox.logic.ts` | การจัดรูปเวลาในรายชื่อ ตัวอย่างข้อความล่าสุด การกรองและเรียงรายชื่อ การจัดกลุ่มข้อความและป้ายวัน `threadSubline`, `aiSwitchView` และ type `AttachmentState` |
-| `inbox.list.logic.ts` | `parseFilter`, `filterQuery`, `contactHref`, `unreadBadgeText`, `unreadAriaText`, `emptyState`, `nextRowIndex`, `nextTabIndex`, `tabbableRowId` |
-| `inbox.thread.logic.ts` | `newMessages`, `planTailScroll`, `shouldLoadOlder`, `restoredScrollTop`, `resolveMedia`, `otherLabel`, `deliveryReason`, `failedLineText`, `fillCopy` |
+| `list/inbox.list.logic.ts` | `parseFilter`, `filterQuery`, `contactHref`, `unreadBadgeText`, `unreadAriaText`, `emptyState`, `nextRowIndex`, `nextTabIndex`, `tabbableRowId` |
+| `thread/inbox.thread.logic.ts` | `newMessages`, `planTailScroll`, `shouldLoadOlder`, `restoredScrollTop`, `resolveMedia`, `otherLabel`, `deliveryReason`, `failedLineText`, `fillCopy` |
 | `inbox.send.logic.ts` | การเปลี่ยนสถานะของการส่งแบบ optimistic ตามข้อ 7.5 และการรวมหน้าของแชท (`threadFromFirstPage`, `applyThreadPoll`, `applyOlderPage`, `loadThread`, `buildSendBody`, `optimisticMessage`, `bodyFromRow`, `applySendEvent`, `failureEvent`, `pendingSendOfUpload`, `retryPlan`, `outgoingStatus`) |
 
 ```ts
@@ -984,7 +988,7 @@ function computeTargetSize(w: number, h: number, maxEdge: number): { width: numb
 // ย่อให้ด้านยาวไม่เกิน maxEdge คงสัดส่วน ไม่ขยายรูปเล็ก ปัดเป็นจำนวนเต็ม อย่างน้อย 1
 ```
 
-### 8.3 `src/features/inbox/inbox.media.ts` (ใช้ API ของ browser ไม่ใช่ฟังก์ชันล้วน)
+### 8.3 `src/features/inbox/composer/inbox.media.ts` (ใช้ API ของ browser ไม่ใช่ฟังก์ชันล้วน)
 
 ```ts
 function readHeadBytes(file: Blob, n: number): Promise<Uint8Array>
@@ -1012,7 +1016,7 @@ function validateAccessCode(value: string): { ok: true; code: string } | { ok: f
 
 ### 8.5 `src/features/settings/settings.logic.ts`
 
-ฟังก์ชันของส่วนขอบเขตหัวข้อและส่วน Guardrails อยู่ใน `src/features/settings/guard.logic.ts` (`guardTopicsToText`, `countGuardTopicLines`, `validateGuardTopicsInput`, `validateGuardRefusal`, `validateGuardTestInput`, `guardErrorText`, `guardTestDisabledReason`, `guardrailRows`, `fillTemplate`) และ hook ของสองส่วนนี้อยู่ใน `guard.hooks.ts`
+ฟังก์ชันของส่วนขอบเขตหัวข้อและส่วน Guardrails อยู่ใน `src/features/settings/settings.guard.logic.ts` (`guardTopicsToText`, `countGuardTopicLines`, `validateGuardTopicsInput`, `validateGuardRefusal`, `validateGuardTestInput`, `guardErrorText`, `guardTestDisabledReason`, `guardrailRows`, `fillTemplate`) hook ของสองส่วนนี้อยู่ใน `settings.guard.hooks.ts` และฟังก์ชันเรียก API อยู่ใน `settings.guard.api.ts`
 
 ```ts
 function kbUsage(list: { usedTokens: number; capacityTokens: number }): { used: number; limit: number; ratio: number; tone: "normal" | "warn" | "full" }
@@ -1068,6 +1072,7 @@ src/features/settings/
       UsageDetailDialog.tsx
     SystemStatusSection.tsx
   settings.api.ts  settings.logic.ts  settings.constants.ts  settings.hooks.ts
+  settings.guard.api.ts  settings.guard.logic.ts  settings.guard.hooks.ts   ของส่วนขอบเขตหัวข้อและส่วน Guardrails
 ```
 
 ### 9.2 โครงร่วม

@@ -17,7 +17,9 @@ import { Switch } from '@/common/ui/switch';
 import { Textarea } from '@/common/ui/textarea';
 import { GUARD_MAX_TOPICS, GUARD_REFUSAL_MAX_CHARS, type SettingsDto } from '@/contracts';
 
-import { useUpdateGuardSettings } from './guard.hooks';
+import { GuardTestBox } from './GuardTestBox';
+import { copy } from './settings.constants';
+import { useUpdateGuardSettings } from './settings.guard.hooks';
 import {
   countGuardTopicLines,
   fillTemplate,
@@ -25,9 +27,7 @@ import {
   guardTopicsToText,
   validateGuardRefusal,
   validateGuardTopicsInput,
-} from './guard.logic';
-import { GuardTestBox } from './GuardTestBox';
-import { copy } from './settings.constants';
+} from './settings.guard.logic';
 import { SettingsRow } from './SettingsRow';
 import { SettingsSection } from './SettingsSection';
 

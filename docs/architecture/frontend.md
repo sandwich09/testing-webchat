@@ -1,6 +1,6 @@
 # Frontend
 
-> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-18
+> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-19
 
 ## เครื่องมือ
 
@@ -39,17 +39,45 @@ URL บอกว่าเปิดแชทของลูกค้าคนไ�
 
 ```
 src/features/
-  access/     inbox/     settings/
-    <feature>.api.ts        เรียก API และตรวจคำตอบด้วย schema ใน contracts
-    <feature>.logic.ts      ฟังก์ชันล้วน
-    <feature>.constants.ts  ข้อความบนหน้าจอและค่าคงที่
-    Component.tsx
-src/common/                 ของที่ใช้มากกว่าหนึ่ง feature
+  access/                           ชั้นเดียว
+    access.api.ts  access.logic.ts  access.constants.ts  WelcomePage.tsx ...
+  inbox/                            แบ่งตามพื้นที่ของหน้าแชท
+    InboxPage.tsx                   จัดคอลัมน์ตามขนาดจอ
+    inbox.api.ts                    เรียก API และตรวจคำตอบด้วย schema ใน contracts
+    inbox.logic.ts                  ฟังก์ชันล้วนที่มากกว่าหนึ่งพื้นที่ใช้
+    inbox.send.logic.ts             การส่งแบบ optimistic และการรวมหน้าของแชท (inbox.hooks.ts และ thread ใช้)
+    inbox.hooks.ts                  hook ที่มากกว่าหนึ่งพื้นที่ใช้: useContacts, useSendMessage, useNow
+    inbox.constants.ts              ข้อความบนหน้าจอและค่าคงที่
+    list/                           รายชื่อลูกค้า
+      ContactList.tsx  ContactSearch.tsx  ContactListTabs.tsx  ContactRow.tsx  ContactListSkeleton.tsx
+      inbox.list.logic.ts
+    thread/                         ห้องแชท แผงข้อมูล และ lightbox
+      Thread.tsx  ThreadHeader.tsx  AiSwitch.tsx  MessageList.tsx  DayChip.tsx  MessageGroup.tsx
+      MessageBubble.tsx  MediaContent.tsx  DeliveryStatus.tsx  SystemLine.tsx  NewMessagesButton.tsx
+      ThreadPlaceholder.tsx  InfoPanel.tsx  MediaLightbox.tsx
+      inbox.thread.logic.ts
+      inbox.thread.hooks.ts         useContactDetail, useSetContactAi, useThread
+    composer/                       ช่องตอบ ไฟล์แนบ ข้อความสำเร็จรูป และ ping การพิมพ์
+      Composer.tsx  AttachmentTray.tsx  CannedReplyPicker.tsx
+      inbox.attachment.logic.ts     state machine ของไฟล์แนบ และสิ่งที่ tray แสดง (ฟังก์ชันล้วน)
+      inbox.attachment.controller.ts  ขั้นตอนแนบไฟล์ผ่านฟังก์ชันของ browser และ API ที่ส่งเข้ามา
+      inbox.typing.controller.ts    ตัวจำกัดความถี่ของ ping การพิมพ์
+      inbox.media.ts                เรียก API ของ browser: canvas, <video>, heic-to แบบ dynamic
+      inbox.composer.hooks.ts       useDraft, useAttachment, useReleaseSentPreviews, useTypingPing
+  settings/                         ชั้นเดียว ทุกส่วนใช้ SettingsSection และ settings.hooks.ts ร่วมกัน
+    settings.api.ts  settings.logic.ts  settings.hooks.ts  settings.constants.ts
+    settings.guard.api.ts  settings.guard.logic.ts  settings.guard.hooks.ts   ส่วนขอบเขตหัวข้อและ Guardrails
+    SettingsPage.tsx  *Section.tsx ...
+src/common/                         ของที่ใช้มากกว่าหนึ่ง feature
 ```
 
 ไฟล์ใน `app/` ทำหน้าที่แค่ import component ของ feature
 
-`src/features/*/` และ `src/common/` ไม่มี `index.ts` ผู้ใช้ import ไฟล์ตรง เฉพาะไฟล์ `*.api.ts` เรียก `fetch` ได้ ใน `src/common/` คือ `common.api.ts` (`apiFetch`) lint บังคับทั้งสองข้อตาม [project-setup](project-setup.md#63-eslintconfigmjs)
+Feature แบ่งตามพื้นที่ของหน้าจอ ไม่แบ่งตามชนิด component เมื่อ feature มีหลายพื้นที่ที่แต่ละพื้นที่มีไฟล์ของตัวเองหลายไฟล์ แยกเป็นโฟลเดอร์ย่อยหนึ่งชั้นต่อพื้นที่ ไฟล์ที่มากกว่าหนึ่งพื้นที่ใช้อยู่ที่ระดับบนของ feature ไฟล์ที่ไม่ใช่ component ของพื้นที่เดียวตั้งชื่อ `<feature>.<พื้นที่>.<บทบาท>.ts` ตาม [code-style ข้อ 7](../guidelines/code-style.md#7-การตั้งชื่อไฟล์-review)
+
+ที่อยู่ของ hook: hook ที่ใช้ในพื้นที่เดียวอยู่ใน `*.hooks.ts` ของพื้นที่นั้น hook ที่มากกว่าหนึ่งพื้นที่ใช้อยู่ใน `<feature>.hooks.ts` hook ที่มากกว่าหนึ่ง feature ใช้อยู่ใน `src/common/` ส่วน reducer, state machine และตัวจำกัดความถี่ที่ hook ใช้อยู่ใน `*.logic.ts` หรือ `*.controller.ts` ตาม [code-style ข้อ 8](../guidelines/code-style.md#8-หน้าจอ-review-ยกเว้นที่ระบุ)
+
+`src/features/*/` โฟลเดอร์ย่อยของ feature และ `src/common/` ไม่มี `index.ts` ผู้ใช้ import ไฟล์ตรง เฉพาะไฟล์ `*.api.ts` เรียก `fetch` ได้ ใน `src/common/` คือ `common.api.ts` (`apiFetch`) lint บังคับทั้งสองข้อตาม [project-setup](project-setup.md#63-eslintconfigmjs) และโฟลเดอร์ย่อยเป็นส่วนของ element `feature` เดียวกัน
 
 ## การดึงข้อมูล
 

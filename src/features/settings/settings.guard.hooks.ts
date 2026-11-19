@@ -8,9 +8,9 @@ import { pollController, trackPoll, usePollingInterval } from '@/common/polling'
 import { qk, qkAll } from '@/common/query-keys';
 import type { SettingsDto } from '@/contracts';
 
-import { getGuardrailStats, testTopicGuard } from './guard.api';
 import { updateSettings, type SettingsPatch } from './settings.api';
 import { SYSTEM_STATUS_POLL_MS } from './settings.constants';
+import { getGuardrailStats, testTopicGuard } from './settings.guard.api';
 import { applySavedSettings } from './settings.hooks';
 
 /** GET /api/system/guardrails, polled every `SYSTEM_STATUS_POLL_MS` while the page is open. */

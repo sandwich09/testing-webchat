@@ -10,12 +10,12 @@ import {
   BUBBLE_TAIL_RADIUS,
 } from '@/common/layout.constants';
 import { testIds } from '@/common/test-ids';
-import { DeliveryStatus } from '@/features/inbox/DeliveryStatus';
 import { copy } from '@/features/inbox/inbox.constants';
 import { linkify, type ThreadMessage } from '@/features/inbox/inbox.logic';
 import { outgoingStatus } from '@/features/inbox/inbox.send.logic';
-import { resolveMedia } from '@/features/inbox/inbox.thread.logic';
-import { MediaContent } from '@/features/inbox/MediaContent';
+import { DeliveryStatus } from '@/features/inbox/thread/DeliveryStatus';
+import { resolveMedia } from '@/features/inbox/thread/inbox.thread.logic';
+import { MediaContent } from '@/features/inbox/thread/MediaContent';
 
 type MessageBubbleProps = {
   message: ThreadMessage;

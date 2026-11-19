@@ -1,6 +1,7 @@
 // Pure transitions of the thread cache `qk.messages(id)`: the optimistic send state machine
-// (ui-screens 7.5) and the polling merges of the thread (ui-screens 7.3). `inbox.hooks.ts` wires
-// them to TanStack Query; nothing here reads the clock, makes ids or does I/O.
+// (ui-screens 7.5) and the polling merges of the thread (ui-screens 7.3). `inbox.hooks.ts` (send)
+// and `thread/inbox.thread.hooks.ts` (thread) wire them to TanStack Query; nothing here reads the
+// clock, makes ids or does I/O.
 import { errorCodeOf } from '@/common/common.api';
 import { advanceCursor, pollAfter } from '@/common/common.logic';
 import type { ErrorMessageCode } from '@/common/error-messages';

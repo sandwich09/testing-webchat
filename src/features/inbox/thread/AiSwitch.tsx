@@ -9,8 +9,8 @@ import { errorMessage } from '@/common/error-messages';
 import { testIds } from '@/common/test-ids';
 import { showToast } from '@/common/toast';
 import { Switch } from '@/common/ui/switch';
-import { useSetContactAi } from '@/features/inbox/inbox.hooks';
 import { aiSwitchView } from '@/features/inbox/inbox.logic';
+import { useSetContactAi } from '@/features/inbox/thread/inbox.thread.hooks';
 import type { ContactDetailDto } from '@/contracts';
 
 type AiSwitchProps = {

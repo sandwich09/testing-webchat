@@ -6,11 +6,11 @@ import { BP_NARROW, BP_WIDE, INFO_WIDTH, LIST_WIDTH } from '@/common/layout.cons
 import { useStoredFlag } from '@/common/useStoredFlag';
 import { SectionErrorBoundary } from '@/common/SectionErrorBoundary';
 import { cn } from '@/common/common.logic';
-import { ContactList } from '@/features/inbox/ContactList';
-import { InfoPanel } from '@/features/inbox/InfoPanel';
 import { copy } from '@/features/inbox/inbox.constants';
-import { Thread } from '@/features/inbox/Thread';
-import { ThreadPlaceholder } from '@/features/inbox/ThreadPlaceholder';
+import { ContactList } from '@/features/inbox/list/ContactList';
+import { InfoPanel } from '@/features/inbox/thread/InfoPanel';
+import { Thread } from '@/features/inbox/thread/Thread';
+import { ThreadPlaceholder } from '@/features/inbox/thread/ThreadPlaceholder';
 
 type ScreenRange = 'wide' | 'medium' | 'narrow';
 

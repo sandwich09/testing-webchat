@@ -1,44 +1,31 @@
 'use client';
 
-// Data hooks of the chat page (ui-screens 7.2 to 7.5 and 7.7). Cache transitions are the pure
-// functions of src/common/polling.ts and inbox.send.logic.ts; this file only wires them.
-import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+// Hooks shared by more than one area of the chat page (ui-screens 7.2 and 7.5): the contact list
+// (list and thread), the optimistic send (thread and composer) and the minute clock (list and
+// thread). Cache transitions are the
+// pure functions of src/common/polling.ts and inbox.send.logic.ts; this file only wires them.
+// Hooks of one area live in that area's `*.hooks.ts`.
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { v7 as uuidv7 } from 'uuid';
 
-import { ApiError } from '@/common/common.api';
 import {
   appendContactPage,
-  mergeContactIntoLists,
-  pollController,
-  polledQueryFn,
-  trackPoll,
   useContactListQuery,
-  usePollingInterval,
   type ContactListParams,
   type ContactListState,
 } from '@/common/polling';
 import { qk } from '@/common/query-keys';
-import type { ContactDetailDto, MessageDto, SendMessageBody } from '@/contracts';
+import type { MessageDto, SendMessageBody } from '@/contracts';
 
+import { listContacts, retryMessage, sendMessage } from './inbox.api';
+import { SEND_UNCONFIRMED_TIMEOUT_MS } from './inbox.constants';
+import { compareContacts, matchesContactFilter } from './inbox.logic';
 import {
-  getContact,
-  getMessages,
-  listContacts,
-  markContactRead,
-  retryMessage,
-  sendMessage,
-  setContactAi,
-} from './inbox.api';
-import { MARK_READ_DELAY_MS, SEND_UNCONFIRMED_TIMEOUT_MS } from './inbox.constants';
-import { compareContacts, matchesContactFilter, oldestSeq } from './inbox.logic';
-import {
-  applyOlderPage,
   applySendEvent,
   bodyFromRow,
   buildSendBody,
   failureEvent,
-  loadThread,
   optimisticMessage,
   pendingSendOfUpload,
   retryPlan,
@@ -52,8 +39,26 @@ export type { SendInput, ThreadState } from './inbox.send.logic';
 
 const ALL_CONTACTS: ContactListParams = { filter: 'all', q: '' };
 
-/** A 404 stops the polling of that chat: it will not come back by asking again. */
-const isNotFound = (error: unknown): boolean => error instanceof ApiError && error.status === 404;
+// ---------------------------------------------------------------------------
+// Clock of relative times (contact list times, day chips of the thread)
+// ---------------------------------------------------------------------------
+
+/** Relative times and day labels are recomputed this often. */
+const NOW_TICK_MS = 60_000;
+
+/** The current time, ticking once a minute so "today" turns into "yesterday" at midnight. */
+export function useNow(): Date {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(new Date());
+    }, NOW_TICK_MS);
+    return () => {
+      clearInterval(timer);
+    };
+  }, []);
+  return now;
+}
 
 // ---------------------------------------------------------------------------
 // Contact list (ui-screens 7.2)
@@ -118,156 +123,6 @@ export function useContacts(params: ContactListParams = ALL_CONTACTS) {
     fetchMore,
     isFetchingMore,
     fetchMoreError,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Contact detail and the AI switch (ui-screens 5.2, 7.7)
-// ---------------------------------------------------------------------------
-
-/** GET /api/contacts/:id, polled while the chat is open. Stops polling on 404 (`thread-not-found`). */
-export function useContactDetail(contactId: string) {
-  const { intervalMs } = usePollingInterval();
-  return useQuery({
-    queryKey: qk.contact(contactId),
-    queryFn: ({ signal }) => trackPoll(pollController, () => getContact(contactId, signal), signal),
-    staleTime: 0,
-    retry: 0,
-    refetchInterval: (query) => (isNotFound(query.state.error) ? false : intervalMs),
-    refetchIntervalInBackground: false,
-  });
-}
-
-/**
- * PATCH /api/contacts/:id. Optimistic on `qk.contact(id)`; on failure the old value comes back
- * (show the toast from `mutation.error` or an `onError` passed to `mutate`).
- */
-export function useSetContactAi(contactId: string) {
-  const client = useQueryClient();
-  const key = qk.contact(contactId);
-  return useMutation({
-    mutationFn: (aiEnabled: boolean) => setContactAi(contactId, aiEnabled),
-    onMutate: async (aiEnabled) => {
-      await client.cancelQueries({ queryKey: key });
-      const previous = client.getQueryData<ContactDetailDto>(key);
-      client.setQueryData<ContactDetailDto>(key, (old) =>
-        old === undefined ? old : { ...old, aiEnabled },
-      );
-      return { previous };
-    },
-    onError: (_error, _aiEnabled, context) => {
-      client.setQueryData(key, context?.previous);
-    },
-    onSuccess: (contact) => {
-      client.setQueryData<ContactDetailDto>(key, (old) =>
-        old === undefined ? old : { ...old, ...contact },
-      );
-      mergeContactIntoLists(client, contact);
-    },
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Unread (ui-screens 5.5)
-// ---------------------------------------------------------------------------
-
-/**
- * POST /api/contacts/:id/read, delayed by `MARK_READ_DELAY_MS` and joined into one call. Failure
- * shows nothing; the next request tries again.
- */
-function useMarkRead(contactId: string): () => void {
-  const client = useQueryClient();
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(
-    () => () => {
-      if (timer.current !== null) clearTimeout(timer.current);
-      timer.current = null;
-    },
-    [contactId],
-  );
-
-  return useCallback(() => {
-    if (timer.current !== null) return;
-    timer.current = setTimeout(() => {
-      timer.current = null;
-      markContactRead(contactId).then(
-        (contact) => {
-          mergeContactIntoLists(client, contact);
-        },
-        () => undefined,
-      );
-    }, MARK_READ_DELAY_MS);
-  }, [client, contactId]);
-}
-
-// ---------------------------------------------------------------------------
-// Thread (ui-screens 7.3)
-// ---------------------------------------------------------------------------
-
-/**
- * Messages of one chat, polled with `afterUpdatedSeq`. Opening the chat clears its unread count;
- * call `requestMarkRead()` when new inbound messages arrive while the tab is visible and the list
- * is at the bottom. `fetchOlder()` loads the page before the oldest `seq`.
- */
-export function useThread(contactId: string) {
-  const client = useQueryClient();
-  const { intervalMs } = usePollingInterval();
-  const key = qk.messages(contactId);
-  const query = useQuery({
-    queryKey: key,
-    queryFn: polledQueryFn<ThreadState>(key, ({ reload, getState, signal }) =>
-      loadThread({
-        reload,
-        getState,
-        fetchPage: (params, s) => getMessages(contactId, params, s),
-        signal,
-      }),
-    ),
-    staleTime: 0,
-    retry: 0,
-    refetchInterval: (q) => (isNotFound(q.state.error) ? false : intervalMs),
-    refetchIntervalInBackground: false,
-  });
-
-  const requestMarkRead = useMarkRead(contactId);
-  const loaded = query.isSuccess;
-  useEffect(() => {
-    if (loaded) requestMarkRead();
-  }, [loaded, requestMarkRead]);
-
-  const [isFetchingOlder, setFetchingOlder] = useState(false);
-  const loadingOlder = useRef(false);
-  const items = query.data?.items;
-  const hasOlder = query.data?.hasOlder ?? false;
-  const fetchOlder = useCallback(() => {
-    const beforeSeq = items === undefined ? undefined : oldestSeq(items);
-    if (loadingOlder.current || !hasOlder || beforeSeq === undefined) return;
-    loadingOlder.current = true;
-    setFetchingOlder(true);
-    getMessages(contactId, { beforeSeq })
-      .then((page) => {
-        client.setQueryData<ThreadState>(qk.messages(contactId), (state) =>
-          state === undefined ? state : applyOlderPage(state, page),
-        );
-      })
-      .catch(() => undefined) // the next scroll to the top asks again
-      .finally(() => {
-        loadingOlder.current = false;
-        setFetchingOlder(false);
-      });
-  }, [client, contactId, items, hasOlder]);
-
-  return {
-    items: items ?? [],
-    hasOlder,
-    isPending: query.isPending,
-    isError: query.isError,
-    error: query.error,
-    refetch: query.refetch,
-    fetchOlder,
-    isFetchingOlder,
-    requestMarkRead,
   };
 }
 
@@ -367,36 +222,4 @@ export function useSendMessage(contactId: string) {
   );
 
   return { send, retry };
-}
-
-// ---------------------------------------------------------------------------
-// Draft (ui-screens 5.7)
-// ---------------------------------------------------------------------------
-
-const drafts = new Map<string, string>();
-const draftListeners = new Set<() => void>();
-
-function subscribeDrafts(listener: () => void): () => void {
-  draftListeners.add(listener);
-  return () => {
-    draftListeners.delete(listener);
-  };
-}
-
-/** The composer text of a chat, kept per contact until the page reloads. */
-export function useDraft(contactId: string): [string, (value: string) => void] {
-  const draft = useSyncExternalStore(
-    subscribeDrafts,
-    () => drafts.get(contactId) ?? '',
-    () => '',
-  );
-  const setDraft = useCallback(
-    (value: string) => {
-      if (value === '') drafts.delete(contactId);
-      else drafts.set(contactId, value);
-      for (const listener of draftListeners) listener();
-    },
-    [contactId],
-  );
-  return [draft, setDraft];
 }

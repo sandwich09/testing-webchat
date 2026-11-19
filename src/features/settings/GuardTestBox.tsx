@@ -11,14 +11,14 @@ import { Button } from '@/common/ui/button';
 import { Input } from '@/common/ui/input';
 import type { SettingsDto } from '@/contracts';
 
-import { useTestTopicGuard } from './guard.hooks';
+import { copy } from './settings.constants';
+import { useTestTopicGuard } from './settings.guard.hooks';
 import {
   fillTemplate,
   guardErrorText,
   guardTestDisabledReason,
   validateGuardTestInput,
-} from './guard.logic';
-import { copy } from './settings.constants';
+} from './settings.guard.logic';
 
 type TestOutcome =
   | { result: 'allowed'; text: string; costUsd: string }

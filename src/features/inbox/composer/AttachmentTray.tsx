@@ -8,7 +8,7 @@ import type { JSX } from 'react';
 import { cn } from '@/common/common.logic';
 import { testIds } from '@/common/test-ids';
 
-import type { TrayView } from './inbox.attachment';
+import type { TrayView } from './inbox.attachment.logic';
 
 export function AttachmentTray({
   view,

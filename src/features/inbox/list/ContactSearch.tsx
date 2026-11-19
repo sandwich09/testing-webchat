@@ -7,7 +7,7 @@ import { testIds } from '@/common/test-ids';
 import { Input } from '@/common/ui/input';
 import { CONTACT_SEARCH_MAX_CHARS } from '@/contracts';
 
-import { copy } from './inbox.constants';
+import { copy } from '../inbox.constants';
 
 type ContactSearchProps = {
   value: string;

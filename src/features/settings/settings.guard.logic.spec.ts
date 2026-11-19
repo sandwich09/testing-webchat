@@ -8,6 +8,7 @@ import {
   type GuardrailStatsDto,
 } from '@/contracts';
 
+import { copy } from './settings.constants';
 import {
   countGuardTopicLines,
   fillTemplate,
@@ -18,8 +19,7 @@ import {
   validateGuardRefusal,
   validateGuardTestInput,
   validateGuardTopicsInput,
-} from './guard.logic';
-import { copy } from './settings.constants';
+} from './settings.guard.logic';
 
 describe('fillTemplate', () => {
   it('replaces named values and leaves unknown names as written', () => {

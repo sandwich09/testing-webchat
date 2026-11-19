@@ -1,8 +1,8 @@
 // Pure logic of the thread components (ui-screens 5.3, 5.4, 6.2). No clock, no browser.
 import { ERROR_MESSAGE_CODES, errorMessage, type ErrorMessageCode } from '@/common/error-messages';
 
-import { copy, LOAD_OLDER_THRESHOLD_PX } from './inbox.constants';
-import type { ThreadMessage } from './inbox.logic';
+import { copy, LOAD_OLDER_THRESHOLD_PX } from '../inbox.constants';
+import type { ThreadMessage } from '../inbox.logic';
 
 // ---------------------------------------------------------------------------
 // Scrolling (ui-screens 5.4)

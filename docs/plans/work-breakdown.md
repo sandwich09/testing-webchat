@@ -457,7 +457,7 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 | --- | --- |
 | Wave | 1 |
 | พึ่ง | T-0.1, T-0.5 |
-| เขียนได้ | `app/layout.tsx`, `app/page.tsx`, `app/globals.css`, `app/(app)/**`, `src/common/fonts/**`, `src/common/ui/**`, `src/common/AppRail.tsx`, `ConnectionBanner.tsx`, `ContactAvatar.tsx`, `SectionErrorBoundary.tsx`, `ErrorState.tsx`, `EmptyState.tsx`, `ConfirmDialog.tsx`, stub ของ `src/common/AppProviders.tsx` และ `src/common/AppShell.tsx` (ส่งต่อให้ T-2.8), `src/features/inbox/InboxPage.tsx`, `src/features/inbox/index.ts`, `src/features/settings/SettingsPage.tsx`, `SettingsSection.tsx`, `SettingsRow.tsx`, `src/features/settings/index.ts`, stub ของ component ของส่วนต่าง ๆ (ส่งต่อตามข้อ 3 ของ T-5.x) |
+| เขียนได้ | `app/layout.tsx`, `app/page.tsx`, `app/globals.css`, `app/(app)/**`, `src/common/fonts/**`, `src/common/ui/**`, `src/common/AppRail.tsx`, `ConnectionBanner.tsx`, `ContactAvatar.tsx`, `SectionErrorBoundary.tsx`, `ErrorState.tsx`, `EmptyState.tsx`, `ConfirmDialog.tsx`, stub ของ `src/common/AppProviders.tsx` และ `src/common/AppShell.tsx` (ส่งต่อให้ T-2.8), `src/features/inbox/InboxPage.tsx`, `src/features/settings/SettingsPage.tsx`, `SettingsSection.tsx`, `SettingsRow.tsx`, stub ของ component ของส่วนต่าง ๆ (ส่งต่อตามข้อ 3 ของ T-5.x) |
 | อ่านก่อน | [frontend: Design system](../architecture/frontend.md#design-system), [ui-screens ข้อ 1, 3, 9.1, 9.2](../specs/ui-screens.md#1-ฐานร่วม), [project-setup ข้อ 6.5, 6.6](../architecture/project-setup.md#65-postcss-และ-tailwind-4) |
 
 ขั้นตอน:
@@ -996,7 +996,7 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 | --- | --- |
 | Wave | 5 |
 | พึ่ง | T-1.7, T-1.8, T-2.8, T-4.2, T-4.3 |
-| เขียนได้ | `src/features/inbox/{ContactList,ContactSearch,ContactListTabs,ContactRow,ContactListSkeleton}.tsx`, `src/features/inbox/inbox.list.logic.ts` และ `inbox.list.logic.spec.ts` (ฟังก์ชันล้วนของรายชื่อ แยกจาก `inbox.logic.ts` ตาม [ui-screens ข้อ 8.2](../specs/ui-screens.md#82-srcfeaturesinboxinboxlogicts)) |
+| เขียนได้ | `src/features/inbox/list/{ContactList,ContactSearch,ContactListTabs,ContactRow,ContactListSkeleton}.tsx`, `src/features/inbox/list/inbox.list.logic.ts` และ `inbox.list.logic.spec.ts` (ฟังก์ชันล้วนของรายชื่อ แยกจาก `inbox.logic.ts` ตาม [ui-screens ข้อ 8.2](../specs/ui-screens.md#82-srcfeaturesinboxinboxlogicts)) |
 | อ่านก่อน | [ui-screens ข้อ 4](../specs/ui-screens.md#4-รายชื่อลูกค้า), [webchat-inbox: รายชื่อลูกค้า](../specs/webchat-inbox.md#รายชื่อลูกค้า), [ux-writing](../guidelines/ux-writing.md) |
 
 ขั้นตอน: สร้าง component ตามข้อ 4.1 ถึง 4.7 โดยใช้ `useContacts` จาก T-2.8
@@ -1015,7 +1015,7 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 | --- | --- |
 | Wave | 5 |
 | พึ่ง | T-1.7, T-1.8, T-2.8, T-4.2, T-4.3 |
-| เขียนได้ | `src/features/inbox/{Thread,ThreadHeader,AiSwitch,MessageList,DayChip,MessageGroup,MessageBubble,MediaContent,DeliveryStatus,SystemLine,NewMessagesButton,ThreadPlaceholder,InfoPanel,MediaLightbox}.tsx`, `src/features/inbox/inbox.thread.logic.ts` และ `inbox.thread.logic.spec.ts` (ฟังก์ชันล้วนของแชท แยกจาก `inbox.logic.ts`) |
+| เขียนได้ | `src/features/inbox/thread/{Thread,ThreadHeader,AiSwitch,MessageList,DayChip,MessageGroup,MessageBubble,MediaContent,DeliveryStatus,SystemLine,NewMessagesButton,ThreadPlaceholder,InfoPanel,MediaLightbox}.tsx`, `src/features/inbox/thread/inbox.thread.logic.ts` และ `inbox.thread.logic.spec.ts` (ฟังก์ชันล้วนของแชท แยกจาก `inbox.logic.ts`), `src/features/inbox/thread/inbox.thread.hooks.ts` |
 | อ่านก่อน | [ui-screens ข้อ 5.1 ถึง 5.6, 5.11 ถึง 5.13, 6](../specs/ui-screens.md#5-แชท), [error-catalog: บรรทัดเหตุการณ์](../architecture/error-catalog.md#บรรทัดเหตุการณ์) |
 
 ขั้นตอน: สร้าง component ตามข้อที่ระบุ `Thread` import `Composer` ซึ่งเป็น stub ของ T-5.3
@@ -1035,14 +1035,14 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 | --- | --- |
 | Wave | 5 |
 | พึ่ง | T-1.7, T-1.8, T-2.8, T-4.2, T-4.3 |
-| เขียนได้ | `src/features/inbox/{Composer,AttachmentTray,CannedReplyPicker}.tsx`, `src/features/inbox/inbox.attachment.ts`, `inbox.typing.ts`, `inbox.media.ts` |
+| เขียนได้ | `src/features/inbox/composer/{Composer,AttachmentTray,CannedReplyPicker}.tsx`, `src/features/inbox/composer/inbox.attachment.logic.ts`, `inbox.attachment.controller.ts`, `inbox.typing.controller.ts`, `inbox.media.ts`, `inbox.composer.hooks.ts` และ `.spec.ts` ของแต่ละไฟล์ |
 | อ่านก่อน | [ui-screens ข้อ 5.7 ถึง 5.10, 7.5, 7.6, 8.3](../specs/ui-screens.md#57-ช่องตอบ), [line-messaging: สื่อขาออก](../specs/line-messaging.md#สื่อขาออก), [ADR 0019](../adr/0019-heic-conversion-with-heic-to.md), [project-setup: CSP](../architecture/project-setup.md#62-nextconfigts) |
 
 ขั้นตอน:
 
 1. `Composer`, `AttachmentTray`, `CannedReplyPicker` ตามข้อ 5.7 ถึง 5.10
 2. `useAttachment` ตามข้อ 7.6, `useTypingPing` ตามข้อ 5.8
-3. `inbox.media.ts` ตามข้อ 8.3 รวม `convertHeicToJpeg` ที่โหลด `import("heic-to/csp")` เฉพาะตอนเลือกไฟล์ HEIC
+3. `composer/inbox.media.ts` ตามข้อ 8.3 รวม `convertHeicToJpeg` ที่โหลด `import("heic-to/csp")` เฉพาะตอนเลือกไฟล์ HEIC
 4. ยืนยัน CSP ที่ `heic-to/csp` ต้องใช้ใน Chrome และ Firefox แล้วรายงานให้ lead แก้ project-setup
 
 เกณฑ์รับ:
@@ -1100,7 +1100,7 @@ Wave 7   T-7.1 (integration, axe, README, exit criteria)
 | --- | --- |
 | Wave | 5 |
 | พึ่ง | T-1.7, T-1.8, T-2.8, T-2.9, T-4.2, T-4.3 |
-| เขียนได้ | `src/features/settings/GuardSection.tsx`, `GuardTestBox.tsx`, `GuardrailsSection.tsx` (ใหม่), `src/features/settings/SettingsPage.tsx` (เพิ่มสองส่วนถัดจาก `AiSettingsSection`), `src/features/settings/guard.logic.ts` และ `guard.logic.spec.ts` (ฟังก์ชันใหม่ในข้อ 8.5), `src/features/settings/guard.api.ts` (`testTopicGuard`, `getGuardrailStats`), `src/features/settings/guard.hooks.ts` (สามไฟล์นี้แทนการแก้ `settings.logic.ts`, `settings.api.ts` และ `settings.hooks.ts`), `src/common/query-keys.ts` (`qk.guardrails`) |
+| เขียนได้ | `src/features/settings/GuardSection.tsx`, `GuardTestBox.tsx`, `GuardrailsSection.tsx` (ใหม่), `src/features/settings/SettingsPage.tsx` (เพิ่มสองส่วนถัดจาก `AiSettingsSection`), `src/features/settings/settings.guard.logic.ts` และ `settings.guard.logic.spec.ts` (ฟังก์ชันใหม่ในข้อ 8.5), `src/features/settings/settings.guard.api.ts` (`testTopicGuard`, `getGuardrailStats`), `src/features/settings/settings.guard.hooks.ts` (สามไฟล์นี้แทนการแก้ `settings.logic.ts`, `settings.api.ts` และ `settings.hooks.ts`), `src/common/query-keys.ts` (`qk.guardrails`) |
 | อ่านก่อน | [ui-screens ข้อ 8.5, 9.13, 9.14, 7.1, 7.7](../specs/ui-screens.md#913-ส่วนขอบเขตหัวข้อ), [topic-guard](../specs/topic-guard.md), [ai-guardrails](../security/ai-guardrails.md), [ui-copy: ขอบเขตหัวข้อ](../specs/ui-copy.md#ขอบเขตหัวข้อ), [ux-writing](../guidelines/ux-writing.md) |
 
 ขั้นตอน:

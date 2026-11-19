@@ -4,40 +4,24 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 
 import { testIds } from '@/common/test-ids';
 import { Skeleton } from '@/common/ui/skeleton';
-import { DayChip } from '@/features/inbox/DayChip';
 import { copy } from '@/features/inbox/inbox.constants';
+import { useNow } from '@/features/inbox/inbox.hooks';
 import {
   groupMessagesForDisplay,
   oldestSeq,
   shouldStickToBottom,
   type ThreadMessage,
 } from '@/features/inbox/inbox.logic';
+import { DayChip } from '@/features/inbox/thread/DayChip';
 import {
   newMessages,
   planTailScroll,
   restoredScrollTop,
   shouldLoadOlder,
-} from '@/features/inbox/inbox.thread.logic';
-import { MessageGroup } from '@/features/inbox/MessageGroup';
-import { NewMessagesButton } from '@/features/inbox/NewMessagesButton';
-import { SystemLine } from '@/features/inbox/SystemLine';
-
-/** Day chips and "today" / "yesterday" labels are recomputed this often. */
-const NOW_TICK_MS = 60_000;
-
-/** The clock for day labels. Ticks once a minute so "today" turns into "yesterday" at midnight. */
-function useNow(): Date {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setNow(new Date());
-    }, NOW_TICK_MS);
-    return () => {
-      clearInterval(timer);
-    };
-  }, []);
-  return now;
-}
+} from '@/features/inbox/thread/inbox.thread.logic';
+import { MessageGroup } from '@/features/inbox/thread/MessageGroup';
+import { NewMessagesButton } from '@/features/inbox/thread/NewMessagesButton';
+import { SystemLine } from '@/features/inbox/thread/SystemLine';
 
 const prefersReducedMotion = (): boolean =>
   window.matchMedia('(prefers-reduced-motion: reduce)').matches;

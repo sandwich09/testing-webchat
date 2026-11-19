@@ -20,12 +20,12 @@ import { testIds } from '@/common/test-ids';
 import { Button } from '@/common/ui/button';
 import type { ContactFilter } from '@/contracts';
 
+import { copy, SEARCH_DEBOUNCE_MS } from '../inbox.constants';
+import { useContacts, useNow } from '../inbox.hooks';
 import { ContactListSkeleton } from './ContactListSkeleton';
 import { ContactListTabs } from './ContactListTabs';
 import { ContactRow } from './ContactRow';
 import { ContactSearch } from './ContactSearch';
-import { copy, SEARCH_DEBOUNCE_MS } from './inbox.constants';
-import { useContacts } from './inbox.hooks';
 import {
   emptyState,
   filterQuery,
@@ -33,22 +33,6 @@ import {
   parseFilter,
   tabbableRowId,
 } from './inbox.list.logic';
-
-/** The clock of the list: relative times ("yesterday") are recomputed once a minute. */
-const NOW_TICK_MS = 60000;
-
-function useNow(): Date {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setNow(new Date());
-    }, NOW_TICK_MS);
-    return () => {
-      clearInterval(timer);
-    };
-  }, []);
-  return now;
-}
 
 /** `value` after it has stopped changing for `delayMs`. */
 function useDebounced<T>(value: T, delayMs: number): T {

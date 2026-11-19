@@ -12,10 +12,10 @@ import { AVATAR_INFO, THREAD_HEADER_HEIGHT } from '@/common/layout.constants';
 import { testIds } from '@/common/test-ids';
 import { Skeleton } from '@/common/ui/skeleton';
 import type { ContactDetailDto } from '@/contracts';
-import { AiSwitch } from '@/features/inbox/AiSwitch';
 import { copy } from '@/features/inbox/inbox.constants';
-import { useContactDetail } from '@/features/inbox/inbox.hooks';
-import { fillCopy } from '@/features/inbox/inbox.thread.logic';
+import { AiSwitch } from '@/features/inbox/thread/AiSwitch';
+import { useContactDetail } from '@/features/inbox/thread/inbox.thread.hooks';
+import { fillCopy } from '@/features/inbox/thread/inbox.thread.logic';
 
 type InfoPanelProps = {
   contactId: string;

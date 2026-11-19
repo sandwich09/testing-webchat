@@ -1,11 +1,8 @@
 // Typing ping of the composer (ui-screens 5.8): ask LINE to show "loading" to the customer while
 // the admin types, at most once per `TYPING_PING_INTERVAL_MS`. The throttle is plain code with an
-// injected clock so it is tested without React; `useTypingPing` only wires it to a chat.
-import { useCallback, useEffect, useRef } from 'react';
-
-import { notifyTyping } from './inbox.api';
-import { TYPING_PING_INTERVAL_MS } from './inbox.constants';
-import { shouldSendTypingPing } from './inbox.logic';
+// injected clock and send, so it is tested without React; `useTypingPing` in
+// `inbox.composer.hooks.ts` wires it to a chat.
+import { shouldSendTypingPing } from '../inbox.logic';
 
 export type TypingPinger = {
   /** Call with every new value of the text box. Never throws and never waits. */
@@ -36,30 +33,4 @@ export function createTypingPinger(deps: {
       }
     },
   };
-}
-
-/**
- * `onChange` helper of the composer text box. A new chat starts a new throttle (`lastSentAt`
- * resets); nothing is sent while the composer is disabled.
- */
-export function useTypingPing(contactId: string, enabled: boolean): (value: string) => void {
-  const pinger = useRef<TypingPinger | null>(null);
-
-  useEffect(() => {
-    pinger.current = createTypingPinger({
-      intervalMs: TYPING_PING_INTERVAL_MS,
-      now: () => Date.now(),
-      send: () => notifyTyping(contactId),
-    });
-    return () => {
-      pinger.current = null;
-    };
-  }, [contactId]);
-
-  return useCallback(
-    (value: string) => {
-      if (enabled) pinger.current?.onInput(value);
-    },
-    [enabled],
-  );
 }

@@ -38,7 +38,7 @@ Code block ในเอกสารนี้เป็นข้อกำหนด
 | `@vercel/blob` | 2.9.0 | adapter ของ `FileStorage` ฝั่ง server และการอัปโหลดตรงจาก browser (`@vercel/blob/client`) |
 | `uuid` | 14.x (รุ่นล่าสุดของ 14 ตอน scaffold) | UUIDv7 ใน adapter ของ `IdGenerator` และใน browser สำหรับ id ของข้อความขาออก |
 | `server-only` | รุ่นล่าสุดตอน scaffold | ทำให้ build ล้มถ้าโค้ดฝั่ง server ถูก import จากฝั่ง client |
-| `heic-to` | 1.6.7 | แปลง HEIC/HEIF เป็น JPEG ใน browser (LGPL-3.0) ใช้ build `heic-to/csp` และโหลดด้วย `import()` แบบ dynamic เฉพาะตอนแอดมินเลือกไฟล์ HEIC เท่านั้น ห้ามอยู่ใน bundle แรก ดู [ADR 0019](../adr/0019-heic-conversion-with-heic-to.md) และ [ui-screens](../specs/ui-screens.md#83-srcfeaturesinboxinboxmediats-ใช้-api-ของ-browser-ไม่ใช่ฟังก์ชันล้วน) |
+| `heic-to` | 1.6.7 | แปลง HEIC/HEIF เป็น JPEG ใน browser (LGPL-3.0) ใช้ build `heic-to/csp` และโหลดด้วย `import()` แบบ dynamic เฉพาะตอนแอดมินเลือกไฟล์ HEIC เท่านั้น ห้ามอยู่ใน bundle แรก ดู [ADR 0019](../adr/0019-heic-conversion-with-heic-to.md) และ [ui-screens](../specs/ui-screens.md#83-srcfeaturesinboxcomposerinboxmediats-ใช้-api-ของ-browser-ไม่ใช่ฟังก์ชันล้วน) |
 | `sonner` | รุ่นล่าสุดตอน scaffold | toast (ใช้ผ่าน component `sonner` ของ shadcn) |
 | `class-variance-authority`, `clsx`, `tailwind-merge` | รุ่นล่าสุดตอน scaffold | ตัวช่วยของ shadcn/ui (`cn()`, variant) |
 | Package ของ Radix ตามตารางถัดไป | รุ่นล่าสุดตอน scaffold | ส่วนประกอบของ shadcn/ui |
@@ -98,7 +98,7 @@ pnpm 10 ไม่รัน install script ของ dependency โดยค่�
 
 ## 3. โครงโฟลเดอร์
 
-ชื่อไฟล์เป็นไปตาม [code-style ข้อ 7](../guidelines/code-style.md) แต่ละชั้นของ `src/core/`, adapter แต่ละตัว, `src/adapters/fakes/`, `src/contracts/` และ `src/composition/` มี `index.ts` เป็นทางเข้าเดียว ชั้นอื่น import ผ่าน `index.ts` เท่านั้น (lint บังคับ ดูหัวข้อ 6.3) ภายในชั้นเดียวกัน import ไฟล์กันตรงได้ ส่วน `src/common/` และ `src/features/*/` ไม่มี `index.ts` (ไม่มี barrel) ผู้ใช้ import ไฟล์ที่ต้องการตรง เพราะ barrel ร่วมจะถูกแก้โดยทุก ticket ของหน้าจอและปน module ฝั่ง client กับฝั่ง server
+ชื่อไฟล์เป็นไปตาม [code-style ข้อ 7](../guidelines/code-style.md) แต่ละชั้นของ `src/core/`, adapter แต่ละตัว, `src/adapters/fakes/`, `src/contracts/` และ `src/composition/` มี `index.ts` เป็นทางเข้าเดียว ชั้นอื่น import ผ่าน `index.ts` เท่านั้น (lint บังคับ ดูหัวข้อ 6.3) ภายในชั้นเดียวกัน import ไฟล์กันตรงได้ ส่วน `src/common/` และ `src/features/*/` ไม่มี `index.ts` (ไม่มี barrel) ผู้ใช้ import ไฟล์ที่ต้องการตรง เพราะ barrel ร่วมจะถูกแก้โดยทุก ticket ของหน้าจอและปน module ฝั่ง client กับฝั่ง server โฟลเดอร์ย่อยภายใน feature (เช่น `src/features/inbox/thread/`) เป็นส่วนของ element `feature` เดียวกัน จึง import กันตรงได้ และไม่มี `index.ts` เช่นกัน กฎการแบ่งโฟลเดอร์ย่อยอยู่ใน [code-style ข้อ 8](../guidelines/code-style.md#8-หน้าจอ-review-ยกเว้นที่ระบุ)
 
 ```
 .
@@ -180,8 +180,12 @@ pnpm 10 ไม่รัน install script ของ dependency โดยค่�
 │   │   └── route.ts                      ตัวห่อ route: request id, ตรวจ origin, ดัก error, แปลงเป็น response
 │   ├── features/
 │   │   ├── access/    access.api.ts, access.logic.ts, access.constants.ts, WelcomePage.tsx (ไม่มี index.ts)
-│   │   ├── inbox/     inbox.api.ts, inbox.logic.ts, inbox.constants.ts, InboxPage.tsx, ...
-│   │   └── settings/  settings.api.ts, settings.logic.ts, settings.constants.ts, SettingsPage.tsx, ...
+│   │   ├── inbox/     inbox.api.ts, inbox.logic.ts, inbox.constants.ts, inbox.hooks.ts, InboxPage.tsx, ...
+│   │   │   ├── list/      รายชื่อลูกค้า: ContactList.tsx, inbox.list.logic.ts, ...
+│   │   │   ├── thread/    ห้องแชทและแผงข้อมูล: Thread.tsx, inbox.thread.logic.ts, inbox.thread.hooks.ts, ...
+│   │   │   └── composer/  ช่องตอบและไฟล์แนบ: Composer.tsx, inbox.attachment.logic.ts, inbox.composer.hooks.ts, ...
+│   │   └── settings/  settings.api.ts, settings.logic.ts, settings.constants.ts, SettingsPage.tsx,
+│   │                  settings.guard.{api,logic,hooks}.ts, ... (ชั้นเดียว)
 │   └── common/                           ไม่มี index.ts ไฟล์อื่นของหน้าจอดู ui-screens.md
 │       ├── common.api.ts                 apiFetch() ที่เดียวใน common ที่เรียก fetch
 │       ├── common.logic.ts               มี cn() ของ shadcn/ui
@@ -480,7 +484,7 @@ rules: {
 | `src/contracts/**` ยกเว้น `src/contracts/**/*.spec.ts` | ทุก package ยกเว้น `zod` (ไฟล์ spec ได้รับยกเว้นเพราะต้อง import `vitest`) |
 | `src/features/**`, `src/common/**`, `app/**` ที่ไม่ใช่ `app/api/**` | `@prisma/*`, `pg`, `@anthropic-ai/*`, `@vercel/blob` (ยกเว้น `@vercel/blob/client` ในไฟล์ `*.api.ts` ของ `src/features/**` และ `src/common/**`), `server-only`, `node:*` |
 | ทุกไฟล์ | `node:process` ที่ดึง `env` |
-| ทุกไฟล์ | import แบบ static ของ `heic-to` และ `heic-to/*` (ใช้ได้เฉพาะ `import('heic-to/csp')` แบบ dynamic ใน `src/features/inbox/inbox.media.ts` ซึ่งกฎนี้ไม่ตรวจ) |
+| ทุกไฟล์ | import แบบ static ของ `heic-to` และ `heic-to/*` (ใช้ได้เฉพาะ `import('heic-to/csp')` แบบ dynamic ใน `src/features/inbox/composer/inbox.media.ts` ซึ่งกฎนี้ไม่ตรวจ) |
 
 ไฟล์ที่เป็นทางเข้าของฝั่ง server (`src/composition/index.ts`, `src/composition/env.ts` และ `index.ts` ของ adapter ทุกตัวยกเว้น `fakes`) บรรทัดแรกเป็น `import 'server-only'` (review)
 

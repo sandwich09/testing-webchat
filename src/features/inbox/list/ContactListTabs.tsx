@@ -6,7 +6,7 @@ import { cn } from '@/common/common.logic';
 import { testIds } from '@/common/test-ids';
 import type { ContactFilter } from '@/contracts';
 
-import { copy } from './inbox.constants';
+import { copy } from '../inbox.constants';
 import { nextTabIndex } from './inbox.list.logic';
 
 type ContactListTabsProps = {

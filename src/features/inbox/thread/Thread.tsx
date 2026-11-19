@@ -11,18 +11,14 @@ import { AVATAR_HEADER, BP_NARROW, THREAD_HEADER_HEIGHT } from '@/common/layout.
 import { SectionErrorBoundary } from '@/common/SectionErrorBoundary';
 import { testIds } from '@/common/test-ids';
 import { Skeleton } from '@/common/ui/skeleton';
-import { Composer } from '@/features/inbox/Composer';
+import { Composer } from '@/features/inbox/composer/Composer';
 import { copy } from '@/features/inbox/inbox.constants';
-import {
-  useContactDetail,
-  useContacts,
-  useSendMessage,
-  useThread,
-} from '@/features/inbox/inbox.hooks';
+import { useContacts, useSendMessage } from '@/features/inbox/inbox.hooks';
 import { composerDisabledReason, type ComposerBlock } from '@/features/inbox/inbox.logic';
-import { MediaLightbox } from '@/features/inbox/MediaLightbox';
-import { MessageList } from '@/features/inbox/MessageList';
-import { ThreadHeader } from '@/features/inbox/ThreadHeader';
+import { useContactDetail, useThread } from '@/features/inbox/thread/inbox.thread.hooks';
+import { MediaLightbox } from '@/features/inbox/thread/MediaLightbox';
+import { MessageList } from '@/features/inbox/thread/MessageList';
+import { ThreadHeader } from '@/features/inbox/thread/ThreadHeader';
 
 type ThreadProps = { contactId: string; infoOpen: boolean; onToggleInfo: () => void };
 
