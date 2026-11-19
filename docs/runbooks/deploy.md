@@ -21,7 +21,7 @@
 
 ### 3. GitHub
 
-1. เก็บ URL ของ Deploy Hook เป็น secret ของ repo
+1. เก็บ URL ของ Deploy Hook เป็น secret ของ repo ชื่อ `VERCEL_DEPLOY_HOOK_URL` ก่อนตั้งค่านี้ CI ยังรันสี่งานตรวจครบ แต่งาน `deploy` จะข้ามและไม่มีการ deploy
 2. ตั้ง branch protection ของ `main`: ต้องเข้าผ่าน PR และห้าม force-push
 3. เปิด secret scanning, push protection และการแจ้งเตือนของ Dependabot
 

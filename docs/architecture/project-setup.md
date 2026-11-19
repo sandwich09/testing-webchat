@@ -942,8 +942,8 @@ volumes:
 `.github/workflows/ci.yml` ตาม [infrastructure](infrastructure.md) และ [ADR 0013](../adr/0013-ci-on-main-then-deploy-hook.md) การแก้ไฟล์นี้ต้องถามเจ้าของงานก่อน ตาม `AGENTS.md`
 
 ```yaml
-# Every action is pinned to the full commit SHA of a release, and the gitleaks image to its digest;
-# the trailing comment names that version. Update both together.
+# Every action is pinned to the full commit SHA of a release (the trailing comment names the
+# version), and the gitleaks release archive to its SHA-256. Update each pair together.
 name: ci
 
 on:
@@ -1020,7 +1020,17 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version-file: .nvmrc }
       - run: pnpm audit --audit-level high
-      - run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f git /repo --redact --no-banner # v8.30.1
+      - name: Scan the history for secrets
+        env:
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          curl --fail --silent --show-error --location --output gitleaks.tgz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tgz" | sha256sum --check
+          tar -xzf gitleaks.tgz -C "$RUNNER_TEMP" gitleaks
+          rm gitleaks.tgz
+          "$RUNNER_TEMP/gitleaks" git . --redact --no-banner
 
   deploy:
     needs: [check, adapters, e2e, security]
@@ -1030,15 +1040,22 @@ jobs:
       - name: Trigger Vercel Deploy Hook
         env:
           DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
-        run: curl --fail --silent --show-error -X POST "$DEPLOY_HOOK_URL" > /dev/null
+        # Without the secret the checks above still gate main; the deploy starts once it is set.
+        run: |
+          if [ -z "$DEPLOY_HOOK_URL" ]; then
+            echo "::notice::VERCEL_DEPLOY_HOOK_URL is not set, so the deploy is skipped."
+            exit 0
+          fi
+          curl --fail --silent --show-error -X POST "$DEPLOY_HOOK_URL" > /dev/null
 ```
 
 | เรื่อง | ข้อกำหนด |
 | --- | --- |
-| การล็อก action | ทุก action ล็อกด้วย commit SHA เต็มของรุ่นที่ระบุใน comment ท้ายบรรทัด: `actions/checkout` v7.0.1, `pnpm/action-setup` v6.1.1, `actions/setup-node` v7.1.0, `actions/upload-artifact` v7.0.2 และ image gitleaks ล็อกด้วย digest ของ v8.30.1 การอัปเดตเปลี่ยน SHA และ comment พร้อมกัน |
-| Secret | มีตัวเดียวคือ `VERCEL_DEPLOY_HOOK_URL` ตาม [deploy](../runbooks/deploy.md) |
+| การล็อก action | ทุก action ล็อกด้วย commit SHA เต็มของรุ่นที่ระบุใน comment ท้ายบรรทัด: `actions/checkout` v7.0.1, `pnpm/action-setup` v6.1.1, `actions/setup-node` v7.1.0, `actions/upload-artifact` v7.0.2 และไฟล์ release ของ gitleaks v8.30.1 ล็อกด้วย SHA-256 การอัปเดตเปลี่ยนรุ่นและค่า hash พร้อมกัน |
+| Secret | มีตัวเดียวคือ `VERCEL_DEPLOY_HOOK_URL` ตาม [deploy](../runbooks/deploy.md) เมื่อยังไม่ได้ตั้ง งาน `deploy` แจ้งว่าข้ามและจบด้วยสถานะผ่าน สี่งานตรวจยังคุม `main` ตามปกติ |
 | E2E | seed รันแยกด้วย `docker compose run` เพราะ `up --wait` ไม่เหมาะกับ service ที่จบเอง |
-| สแกนความลับ | ใช้ image ของ gitleaks ตรง ไม่ใช้ action ของ gitleaks เพื่อไม่ต้องมี license key (ต้องยืนยันชื่อ subcommand `git` ของรุ่นที่ใช้ รุ่นเก่าใช้ `detect`) |
+| สแกนความลับ | ดาวน์โหลดไฟล์ release ของ gitleaks ตรวจ SHA-256 แล้วรัน `gitleaks git .` กับประวัติทั้งหมด ไม่ใช้ action ของ gitleaks เพื่อไม่ต้องมี license key กฎเริ่มต้นเปิดครบ ไฟล์ `.gitleaks.toml` ยกเว้นเฉพาะค่า `SESSION_SECRET` และ `CREDENTIALS_ENCRYPTION_KEY` สองค่าของ `docker-compose.yml` ซึ่งใช้ได้เฉพาะ stack ในเครื่อง |
+| ช่องโหว่ของ dependency | `pnpm audit --audit-level high` ผลขึ้นกับประกาศช่องโหว่ ณ วันที่รัน จึงล้มได้โดยที่โค้ดไม่เปลี่ยน เมื่อ dependency ทางอ้อมติดประกาศและรุ่นที่แก้แล้วเข้ากันได้ ให้ล็อกรุ่นด้วย `overrides` ใน `pnpm-workspace.yaml` พร้อมเหตุผล (ตัวอย่าง: `zod` ของ `@vercel/cli-config`) |
 | ช่องโหว่ | `pnpm audit` ล้มเมื่อพบระดับ high ขึ้นไป |
 | `cancel-in-progress` | push ใหม่ยกเลิกรอบเก่า Deploy Hook สร้างจาก HEAD ของ `main` อยู่แล้ว |
 
@@ -1214,4 +1231,5 @@ Rate limit ทั้งหมดเป็นแบบหน้าต่างค
 ผลของการตรวจครั้งสุดท้าย (2026-11-18) จากการ build และรันชุดตรวจทั้งหมดในเครื่อง:
 
 - ยืนยันแล้ว: `proxy.ts` ทำงานเป็นด่านตรวจ (E2E เส้นที่ 8), `next typegen` มีและใช้ใน `pnpm typecheck`, `eslint-config-next` 16.4.6 กับ ESLint 10 และ eslint-plugin-boundaries 7.4.4 (`pnpm lint` ผ่าน), `test.projects` ของ Vitest 5.1.1, Prisma 7.10.1 กับ `prisma.config.ts`, standalone ของ Docker มีไฟล์ของ Prisma client ครบ (แอปใน compose ทำงาน), Package ของ Radix แยกตัว, Chromium รับ cookie `Secure` จาก `http://localhost` (E2E ทุกเส้นที่เข้าระบบ), `libc6-compat` ไม่ต้องใช้ (image Alpine ทำงานโดยไม่มี), `onlyBuiltDependencies: []`, CSP ของ `heic-to/csp` ใน Chromium และ `heic-to` ไม่อยู่ใน bundle แรก (E2E ข้อ 5.11)
-- ยังไม่ได้ยืนยัน: Subcommand `git` ของ gitleaks (ดึง image ที่ล็อก digest ในเครื่องพัฒนาไม่ได้), CSP ของ `heic-to/csp` ใน Firefox, host ใน CSP ของ LINE และ Vercel Blob จริง, `git.deploymentEnabled` กับ Deploy Hook และคำเตือนของ `next start` กับ standalone (ไม่ได้รัน)
+- ยืนยันแล้ว: subcommand `git` ของ gitleaks v8.30.1 (รันไฟล์ release รุ่นเดียวกับ CI กับประวัติทั้งหมดของ repo)
+- ยังไม่ได้ยืนยัน: CSP ของ `heic-to/csp` ใน Firefox, host ใน CSP ของ LINE และ Vercel Blob จริง, `git.deploymentEnabled` กับ Deploy Hook และคำเตือนของ `next start` กับ standalone (ไม่ได้รัน)

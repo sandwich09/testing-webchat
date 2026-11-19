@@ -1,5 +1,5 @@
-# Every action is pinned to the full commit SHA of a release, and the gitleaks image to its digest;
-# the trailing comment names that version. Update both together.
+# Every action is pinned to the full commit SHA of a release (the trailing comment names the
+# version), and the gitleaks release archive to its SHA-256. Update each pair together.
 name: ci
 
 on:
@@ -76,7 +76,17 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version-file: .nvmrc }
       - run: pnpm audit --audit-level high
-      - run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f git /repo --redact --no-banner # v8.30.1
+      - name: Scan the history for secrets
+        env:
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          curl --fail --silent --show-error --location --output gitleaks.tgz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tgz" | sha256sum --check
+          tar -xzf gitleaks.tgz -C "$RUNNER_TEMP" gitleaks
+          rm gitleaks.tgz
+          "$RUNNER_TEMP/gitleaks" git . --redact --no-banner
 
   deploy:
     needs: [check, adapters, e2e, security]

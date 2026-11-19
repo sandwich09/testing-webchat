@@ -127,7 +127,7 @@
 | Vercel Blob: ชื่อฟังก์ชันอัปโหลดฝั่ง client การรายงานความคืบหน้า และการยกเลิก | `uploadToTarget` ใน [ui-screens](../specs/ui-screens.md#76-ขั้นตอนแนบไฟล์) |
 | CSP ที่ `heic-to/csp` ต้องใช้ใน Firefox (Chromium ยืนยันแล้ว ดูหัวข้อถัดไป) | CSP ใน [project-setup](../architecture/project-setup.md#62-nextconfigts), [ADR 0019](../adr/0019-heic-conversion-with-heic-to.md) |
 | `git.deploymentEnabled: false` ใน `vercel.json` ยังให้ Deploy Hook ทำงาน | [project-setup](../architecture/project-setup.md#611-ไฟล์อื่น), [deploy](../runbooks/deploy.md) |
-| รายการเครื่องมือที่เหลือจากตอน scaffold: subcommand ของ gitleaks และคำเตือนของ `next start` กับ standalone (ข้ออื่นยืนยันแล้ว) | [project-setup](../architecture/project-setup.md#11-สิ่งที่ต้องยืนยันตอน-scaffold) |
+| รายการเครื่องมือที่เหลือจากตอน scaffold: คำเตือนของ `next start` กับ standalone (ข้ออื่นยืนยันแล้ว) | [project-setup](../architecture/project-setup.md#11-สิ่งที่ต้องยืนยันตอน-scaffold) |
 
 ## สิ่งที่ยืนยันแล้ว
 
