@@ -665,7 +665,7 @@ export default defineConfig({
 | เรื่อง | ข้อกำหนด |
 | --- | --- |
 | `webServer` | ไม่ใช้ เพราะแอปมาจาก Docker compose |
-| Browser | Chromium อย่างเดียว ในสภาพแวดล้อมพัฒนามีของรุ่น 1.63.0 อยู่แล้ว ใน CI ติดตั้งด้วย `playwright install --with-deps chromium` |
+| Browser | Chromium อย่างเดียว ในสภาพแวดล้อมพัฒนามีของรุ่น 1.63.0 อยู่แล้ว ใน CI test รันใน image `mcr.microsoft.com/playwright:v1.63.0-noble` (ตรึงด้วย digest) ซึ่งมี Chromium และแพ็กเกจของระบบอยู่แล้ว tag ต้องตรงกับรุ่นของ `@playwright/test` ([ADR 0030](../adr/0030-e2e-in-playwright-container.md)) |
 | Trace | ปิดเป็นค่าเริ่มต้น เปิดเองเมื่อ debug ด้วย `pnpm test:e2e --trace on` |
 | ขนาดจอ | 1280x800 และ 390x844 ตาม [test-strategy](../qa/test-strategy.md) |
 | ขนาน | เส้นที่ใช้ลูกค้าของตัวเองรันขนานใน `desktop` และ `mobile` |
@@ -1026,8 +1026,15 @@ jobs:
       - run: docker compose build
       - run: docker compose up -d --wait db stub app
       - run: docker compose run --rm seed
-      - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm test:e2e
+      # The tests run in the Playwright image, which already holds Chromium and its system
+      # packages, so the job does not download them from the Ubuntu mirror on every run. The
+      # tag must equal the @playwright/test version in package.json; update the digest with it.
+      - name: Run the E2E tests in the Playwright container
+        run: |
+          docker run --rm --network host --ipc host -e CI=true -e TZ=UTC \
+            -v "$PWD:/work" -w /work \
+            mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27 \
+            npx playwright test
       - if: failure()
         run: docker compose logs app stub
       - if: failure()

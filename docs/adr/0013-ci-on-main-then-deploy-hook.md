@@ -1,6 +1,6 @@
 # 0013: CI รันบน main แล้วจึงเรียก Deploy Hook
 
-> สถานะ: อนุมัติ ข้อการตรวจ migration และเงื่อนไขของงาน deploy ถูกแทนที่บางส่วนโดย [0028](0028-review-fixes-concurrency-polling-and-ci.md) · วันที่: 2026-11-18
+> สถานะ: อนุมัติ ข้อการตรวจ migration และเงื่อนไขของงาน deploy ถูกแทนที่บางส่วนโดย [0028](0028-review-fixes-concurrency-polling-and-ci.md) ขั้นติดตั้ง browser ของงาน E2E ถูกแทนที่โดย [0030](0030-e2e-in-playwright-container.md) · วันที่: 2026-11-18
 
 ## บริบท
 
