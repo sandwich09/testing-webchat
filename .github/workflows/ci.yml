@@ -86,4 +86,10 @@ jobs:
       - name: Trigger Vercel Deploy Hook
         env:
           DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
-        run: curl --fail --silent --show-error -X POST "$DEPLOY_HOOK_URL" > /dev/null
+        # Without the secret the checks above still gate main; the deploy starts once it is set.
+        run: |
+          if [ -z "$DEPLOY_HOOK_URL" ]; then
+            echo "::notice::VERCEL_DEPLOY_HOOK_URL is not set, so the deploy is skipped."
+            exit 0
+          fi
+          curl --fail --silent --show-error -X POST "$DEPLOY_HOOK_URL" > /dev/null
