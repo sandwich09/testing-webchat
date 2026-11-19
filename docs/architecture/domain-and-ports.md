@@ -309,7 +309,7 @@ export type OutboundLinePart =
 
 ค่าทั้งหมดอยู่ใน `src/core/domain/constants.ts` ค่าของแต่ละตัวอยู่ในตาราง [ค่าคงที่ของระบบ](project-setup.md#10-ค่าคงที่ของระบบ) ที่เดียว ไฟล์นี้อ้างด้วยชื่อเท่านั้น ค่าที่มาจาก environment variable (`AI_DEBOUNCE_MS`, `AI_STUCK_AFTER_MS` ส่งผ่าน config, `RATE_LIMIT_SCALE`) ถูกส่งเข้ามาผ่าน `UseCaseConfig` ดู [use-cases](use-cases.md#การประกอบ)
 
-ชื่อที่แกนกลางใช้: `POLL_OVERLAP_SEQ`, `POLL_PAGE_LIMIT`, `AI_HISTORY_LIMIT`, `AI_REPLY_MAX_CHARS`, `AI_MAX_ROUNDS_PER_RUN`, `AI_STUCK_AFTER_MS`, `AI_MAX_TOKENS`, `AI_EXTRACT_MAX_TOKENS`, `LINE_LOADING_SECONDS`, `KNOWLEDGE_CAPACITY_TOKENS`, `PDF_MAX_BYTES`, `PDF_MAX_PAGES`, `IMAGE_MAX_BYTES`, `VIDEO_MAX_BYTES`, `PREVIEW_MAX_BYTES`, `UPLOAD_TICKET_TTL_MS`, `LINE_TEXT_MAX_CHARS`, `LINE_MAX_PARTS_PER_REQUEST`, `REPLY_TOKEN_USABLE_MS`, `LINE_RETRY_KEY_WINDOW_MS`, `LINE_CHANNEL_ID_MAX_CHARS`, `MEDIA_JOB_BUDGET_MS`, `MEDIA_CONTENT_CALL_WORST_MS`, `MEDIA_STATUS_CALL_WORST_MS`, `MEDIA_NOT_READY_POLL_MS`, `ADMIN_TEXT_MAX_CHARS`, `PREVIEW_TEXT_MAX_CHARS`, `PREVIEW_TEXT_MAX_UNITS`, `PROXY_BODY_MAX_BYTES` (ค่าของ `next.config.ts`), `MESSAGE_PAGE_LIMIT`, `CONTACT_PAGE_LIMIT`, `CONTACT_SEARCH_MAX_CHARS`, `AI_INSTRUCTIONS_MAX_CHARS`, `AI_NAME_MAX_CHARS`, `HOW_TO_TEXT_MAX_CHARS`, `WELCOME_TEXT_MAX_CHARS`, `POSTBACK_DATA_MAX_CHARS`, `RICH_MENU_WIDTH`, `RICH_MENU_HEIGHT`, `AI_DAILY_BUDGET_MAX_USD`, `ACCESS_COOKIE_TTL_MS`, `WEBHOOK_MAX_BODY_BYTES`, `JSON_MAX_BODY_BYTES`, `DEFAULT_AI_MODEL`, `DEFAULT_AI_DAILY_BUDGET_USD`, `DEFAULT_POLITE_PARTICLE`, `DEFAULT_AI_ANSWER_MODE`, ค่าของขอบเขตหัวข้อ `GUARD_MAX_TOPICS`, `GUARD_TOPIC_MAX_CHARS`, `GUARD_TEST_MAX_CHARS`, `GUARD_MODEL`, `GUARD_MAX_TOKENS`, `GUARD_TIMEOUT_MS`, `GUARD_CONTEXT_TURNS`, `GUARD_REFUSAL_MAX_TOPICS`, ค่าของโปรไฟล์ `PROFILE_REFRESH_AFTER_MS` และค่าจำกัดความถี่ `RATE_LIMIT_UNLOCK`, `RATE_LIMIT_SEND_MESSAGE`, `RATE_LIMIT_UPLOAD_TICKET`, `RATE_LIMIT_PDF_INGEST`, `RATE_LIMIT_TYPING`, `RATE_LIMIT_GUARD_TEST`, `RATE_LIMIT_NOTE_CREATE`, `RATE_LIMIT_RICH_MENU_TAP`
+ชื่อที่แกนกลางใช้: `POLL_OVERLAP_SEQ`, `POLL_PAGE_LIMIT`, `AI_HISTORY_LIMIT`, `AI_REPLY_MAX_CHARS`, `AI_MAX_ROUNDS_PER_RUN`, `AI_STUCK_AFTER_MS`, `AI_MAX_TOKENS`, `AI_EXTRACT_MAX_TOKENS`, `LINE_LOADING_SECONDS`, `KNOWLEDGE_CAPACITY_TOKENS`, `PDF_MAX_BYTES`, `PDF_MAX_PAGES`, `IMAGE_MAX_BYTES`, `VIDEO_MAX_BYTES`, `PREVIEW_MAX_BYTES`, `UPLOAD_TICKET_TTL_MS`, `LINE_TEXT_MAX_CHARS`, `LINE_MAX_PARTS_PER_REQUEST`, `REPLY_TOKEN_USABLE_MS`, `LINE_RETRY_KEY_WINDOW_MS`, `LINE_CHANNEL_ID_MAX_CHARS`, `MEDIA_JOB_BUDGET_MS`, `MEDIA_CONTENT_CALL_WORST_MS`, `MEDIA_STATUS_CALL_WORST_MS`, `MEDIA_NOT_READY_POLL_MS`, `STORAGE_PUT_TIMEOUT_MS`, `STORAGE_CALL_TIMEOUT_MS`, `MEDIA_STORE_CALL_WORST_MS`, `ADMIN_TEXT_MAX_CHARS`, `PREVIEW_TEXT_MAX_CHARS`, `PREVIEW_TEXT_MAX_UNITS`, `PROXY_BODY_MAX_BYTES` (ค่าของ `next.config.ts`), `MESSAGE_PAGE_LIMIT`, `CONTACT_PAGE_LIMIT`, `CONTACT_SEARCH_MAX_CHARS`, `AI_INSTRUCTIONS_MAX_CHARS`, `AI_NAME_MAX_CHARS`, `HOW_TO_TEXT_MAX_CHARS`, `WELCOME_TEXT_MAX_CHARS`, `POSTBACK_DATA_MAX_CHARS`, `RICH_MENU_WIDTH`, `RICH_MENU_HEIGHT`, `AI_DAILY_BUDGET_MAX_USD`, `ACCESS_COOKIE_TTL_MS`, `WEBHOOK_MAX_BODY_BYTES`, `JSON_MAX_BODY_BYTES`, `DEFAULT_AI_MODEL`, `DEFAULT_AI_DAILY_BUDGET_USD`, `DEFAULT_POLITE_PARTICLE`, `DEFAULT_AI_ANSWER_MODE`, ค่าของขอบเขตหัวข้อ `GUARD_MAX_TOPICS`, `GUARD_TOPIC_MAX_CHARS`, `GUARD_TEST_MAX_CHARS`, `GUARD_MODEL`, `GUARD_MAX_TOKENS`, `GUARD_TIMEOUT_MS`, `GUARD_CONTEXT_TURNS`, `GUARD_REFUSAL_MAX_TOPICS`, ค่าของโปรไฟล์ `PROFILE_REFRESH_AFTER_MS` และค่าจำกัดความถี่ `RATE_LIMIT_UNLOCK`, `RATE_LIMIT_SEND_MESSAGE`, `RATE_LIMIT_UPLOAD_TICKET`, `RATE_LIMIT_PDF_INGEST`, `RATE_LIMIT_TYPING`, `RATE_LIMIT_GUARD_TEST`, `RATE_LIMIT_NOTE_CREATE`, `RATE_LIMIT_RICH_MENU_TAP`
 
 ค่าจำกัดความถี่ประกาศเป็น `RATE_LIMIT_RULES: Record<RateLimitAction, { limit: number; windowMs: number; scaled: boolean }>` ซึ่งอ่านค่าจาก constant ข้างบน `scaled` เป็น false เฉพาะ `unlock`
 
@@ -534,7 +534,7 @@ export interface MessagingGateway {
 | `reply` | ส่งทุกชิ้นในคำขอเดียว คืน `line.reply_token_invalid` เฉพาะเมื่อ LINE ตอบ 400 ที่ `message` ตรงกับ `/invalid reply token/i` (token หมดอายุหรือถูกใช้แล้ว) ซึ่งผู้เรียกจะเปลี่ยนเป็น push ได้อย่างปลอดภัย 400 อื่น (body ผิดรูป มี `details[].property`) คืน `line.reply_failed` ซึ่งผู้เรียกห้าม push payload เดิมต่อ เครือข่ายล่มหรือ 5xx หลัง retry คืน `line.unavailable` ซึ่งหมายถึงไม่รู้ผล ผู้เรียกห้าม push ต่อเอง |
 | `push` | ใส่ header `X-Line-Retry-Key` ทุกครั้งรวมทุก retry ค่าเป็น UUID version 5 (variant RFC 4122) จาก 16 byte แรกของ SHA-256 ของ `retryKey` ตัวจริงทำผ่าน `toLineRetryKey` ตัวปลอมจำ `retryKey` ตรงตัว ถ้า LINE ตอบว่ารับคำขอนี้ไปแล้ว (สมมติว่าเป็น 409 ต้องยืนยัน) คืน `ok({ alreadyAccepted: true })` ตัวปลอมต้องจำ retryKey และไม่บันทึกการส่งซ้ำ แยก `line.quota_exceeded` ออกจาก `line.rate_limited` ด้วยข้อความของ LINE (ต้องยืนยัน) |
 | `getProfile` | timeout `LINE_PROFILE_TIMEOUT_MS` และไม่ retry เพราะเรียกก่อนตอบ webhook (ผู้ใช้ใหม่) หรือในงานดึงใหม่หลังตอบ 404 หรือ timeout คืน `line.profile_unavailable` |
-| `downloadContent` | ดึงจาก host ข้อมูลของ LINE ที่กำหนดตายตัวเท่านั้น เฉพาะ 200 คือไฟล์ 202 หรือ 2xx อื่นคืน `line.content_not_ready` โดยไม่อ่าน body ถ้า `Content-Length` เกิน `maxBytes` คืน `media.too_large` โดยไม่อ่าน body ถ้าไม่มี `Content-Length` stream ที่คืนต้อง error เมื่ออ่านเกิน `maxBytes` ด้วย error ที่มี `code: "media.too_large"` (ตัวจริงใช้ `LineContentTooLargeError` ตัวปลอมใช้ `FakeContentTooLargeError`) การขาดของ stream แบบอื่นต้องไม่มีรหัสนี้ 404 หรือ 410 คืน `line.content_unavailable` variant `preview` ใช้กับวิดีโอเท่านั้น (ต้องยืนยัน endpoint ภาพตัวอย่างของ LINE) |
+| `downloadContent` | ดึงจาก host ข้อมูลของ LINE ที่กำหนดตายตัวเท่านั้น เฉพาะ 200 คือไฟล์ 202 หรือ 2xx อื่นคืน `line.content_not_ready` โดยไม่อ่าน body ถ้า `Content-Length` เกิน `maxBytes` คืน `media.too_large` โดยไม่อ่าน body ถ้าไม่มี `Content-Length` stream ที่คืนต้อง error เมื่ออ่านเกิน `maxBytes` ด้วย error ที่มี `code: "media.too_large"` (ตัวจริงใช้ `LineContentTooLargeError` ตัวปลอมใช้ `FakeContentTooLargeError`) การขาดของ stream แบบอื่นต้องไม่มีรหัสนี้ ตัวจริงตัด body เอง (ไม่พึ่ง fetch) เมื่อ `LINE_CONTENT_TIMEOUT_MS` ของรอบที่ได้คำตอบหมด หรือเมื่อไม่มี chunk ใหม่นาน `LINE_CONTENT_IDLE_TIMEOUT_MS` ขณะผู้อ่านรออยู่ ด้วย `LineContentTimeoutError` ที่ไม่มีรหัส `media.too_large` ([ADR 0033](../adr/0033-buffer-inbound-media-and-stage-deadlines.md)) 404 หรือ 410 คืน `line.content_unavailable` variant `preview` ใช้กับวิดีโอเท่านั้น (ต้องยืนยัน endpoint ภาพตัวอย่างของ LINE) |
 | `getContentStatus` | `GET /v2/bot/message/{id}/content/transcoding` ครั้งเดียวด้วย `LINE_REQUEST_TIMEOUT_MS` คืน `processing` ระหว่างที่ `downloadContent` ยังได้ `line.content_not_ready` แล้ว `succeeded` (ตัวปลอมและ harness นับคำตอบ "ยังไม่พร้อม" รวมกันทั้งสอง method) |
 | `verifyChannelSecret` | `POST /v2/oauth/accessToken` แบบ form (`grant_type=client_credentials`, `client_id`, `client_secret`) ไม่มี bearer และไม่ retry (แต่ละครั้งออก token) 200 แล้วอ่าน `GET /v2/bot/info` ด้วย token นั้นครั้งเดียวไม่ retry (`userId` และ `basicId` คือ `LineBotIdentity` ของ channel ตอบไม่ได้หรือผิดรูปได้ `bot: null`) แล้วเพิกถอนด้วย `POST /v2/oauth/revoke` ทันทีแบบ best effort คืน ok, 4xx ที่ไม่ใช่ 429 คืน `line.channel_secret_invalid`, 429, 5xx, timeout และเครือข่ายคืน `line.unavailable` (ตรวจไม่ได้) secret และ token ไม่อยู่ใน detail ของ error |
 | `showLoading` | ไม่ retry ผู้เรียกไม่ถือผลเป็นความล้มเหลว `seconds` ที่ LINE ไม่รับคืน `line.loading_failed` |
@@ -732,11 +732,11 @@ export interface FileStorage {
 | Method | ความหมายที่ตัวจริงและตัวปลอมต้องตรงกัน |
 | --- | --- |
 | `issueUpload` | ไฟล์ที่อัปโหลดด้วยสิทธิ์นี้ต้องอยู่ที่ `key` ตรงตัว ไม่มีการเติมส่วนสุ่มต่อท้าย (Blob: ต้องยืนยันว่าตั้ง `addRandomSuffix: false` ได้) สิทธิ์จำกัดชนิดเป็น `contentType` และขนาดเป็น `sizeBytes` ที่แน่นอนของไฟล์ (target คืนค่านี้เป็น `maxSizeBytes`): ที่เก็บแบบ local รับเฉพาะขนาดนี้พอดี Blob รับไม่เกินนี้ หมดอายุที่ `expiresAt` |
-| `put` | เขียนแบบ stream ถ้าเกิน `maxSizeBytes` หยุดเขียน ลบส่วนที่เขียนแล้ว และคืน `media.too_large` เขียนทับ key เดิมได้ |
-| `inspect` | คืนอย่างน้อย 16 ไบต์แรกของไฟล์ (หรือทั้งไฟล์ถ้าสั้นกว่า) และ URL สาธารณะ ไม่มีไฟล์คืน `upload.not_found` (Blob: อ่าน 16 ไบต์แรกจาก URL ของ Blob ด้วย Range header ซึ่งเป็น host ที่กำหนดตายตัว) |
+| `put` | อ่าน body ตามลำดับ ถ้าเกิน `maxSizeBytes` หยุดอ่าน ไม่เหลือส่วนที่เขียนแล้ว และคืน `media.too_large` body ที่ error กลางทางทำให้ไม่สำเร็จ (throw หรือ `storage.unavailable`) และไม่เหลือไฟล์ เขียนทับ key เดิมได้ ดิสก์ในเครื่องเขียนแบบ stream ส่วน Blob อ่านทั้งไฟล์เข้าหน่วยความจำก่อนแล้วอัปโหลดครั้งเดียวด้วยความยาวที่รู้ (ไม่ส่ง stream ต่อเข้า SDK) และการอัปโหลดไม่เกิน `STORAGE_PUT_TIMEOUT_MS` ([ADR 0033](../adr/0033-buffer-inbound-media-and-stage-deadlines.md)) |
+| `inspect` | คืนอย่างน้อย 16 ไบต์แรกของไฟล์ (หรือทั้งไฟล์ถ้าสั้นกว่า) และ URL สาธารณะ ไม่มีไฟล์คืน `upload.not_found` (Blob: อ่าน 16 ไบต์แรกจาก URL ของ Blob ด้วย Range header ซึ่งเป็น host ที่กำหนดตายตัว ทั้ง `head` และการอ่านไม่เกิน `STORAGE_CALL_TIMEOUT_MS`) |
 | `read` | ไม่มีไฟล์คืน `media.not_found` Adapter ของ Blob คืน `media.not_found` เสมอ เพราะไฟล์บน Blob เปิดจาก URL ของ Blob ตรง |
 | `acceptSignedPut` | ตรวจ `sig` เป็น HMAC ของ `key`, `contentType`, ขนาดที่เซ็น และ `exp` แบบ timing-safe, `exp` ผ่านไปแล้วคืน `upload.expired`, `Content-Type` ไม่ตรงคืน `upload.content_mismatch`, body ยาวกว่าขนาดที่เซ็นคืน `media.too_large`, สั้นกว่าคืน `upload.incomplete` (body ที่ถูกตัดระหว่างทาง) และไม่เก็บไฟล์ Adapter ของ Blob คืน `upload.signature_invalid` เสมอ |
-| `delete` | ไม่มีไฟล์ถือว่าสำเร็จ (idempotent) |
+| `delete` | ไม่มีไฟล์ถือว่าสำเร็จ (idempotent) Blob: ไม่เกิน `STORAGE_CALL_TIMEOUT_MS` |
 
 URL สาธารณะอยู่ในผลของ `put` และ `inspect` แทนที่จะเป็น method แยก เพราะ Blob อาจรู้ URL หลังเขียนเสร็จเท่านั้น (ต้องยืนยัน) Adapter ดิสก์ในเครื่องสร้าง URL จาก `APP_BASE_URL` ที่ composition ส่งให้
 
@@ -1051,12 +1051,23 @@ export interface ContentHasher {
 ### Clock
 
 ```ts
+export interface ClockTimer {
+  /** resolve เมื่อถึงเวลา ไม่ resolve หลัง cancel */
+  fired: Promise<void>;
+  /** หยุดตัวจับเวลา เรียกซ้ำหรือเรียกหลังยิงแล้วได้ */
+  cancel(): void;
+}
+
 export interface Clock {
   now(): Date;
   /** ตัวปลอมเลื่อนเวลาทันทีโดยไม่รอจริง */
   sleep(ms: number): Promise<void>;
+  /** เพดานเวลาที่ use case ใช้แข่งกับงาน ตัวปลอมยิงเมื่อเวลาถูกเลื่อนถึงเท่านั้น (sleep, advance, set) */
+  startTimer(ms: number): ClockTimer;
 }
 ```
+
+`startTimer` มีเพื่อให้งานที่ไม่จบ (stream ที่ค้าง การเรียกที่ไม่คืนผล) ถูกตัดได้ทั้งในระบบจริงและใน test ผู้ใช้คือ `StoreInboundMedia` ([use-cases](use-cases.md#storeinboundmedia)) ชุดทดสอบของ port ตรวจว่ายิงหลังเวลาผ่าน ไม่ยิงก่อนเวลา และไม่ยิงหลัง `cancel`
 
 ### IdGenerator
 
@@ -1106,6 +1117,7 @@ export interface LogFields {
   cacheWriteTokens?: number;
   costNanoUsd?: string;
   sizeBytes?: number;
+  stage?: string;              // ขั้นของงาน ค่าจาก union ในแกนกลางเท่านั้น (MediaStoreStage)
   pageCount?: number;
   tokenCount?: number;
   count?: number;
@@ -1168,8 +1180,11 @@ export type LogEvent =
   | "line.welcome.skipped"          // info: contactId, reason (welcome_disabled)
   | "line.welcome.failed"           // warn: contactId, errorCode ตอบด้วย reply token ไม่สำเร็จ ไม่ push
   // สื่อและอัปโหลด
-  | "media.store.succeeded"
-  | "media.store.failed"            // errorCode
+  | "media.store.started"           // info: messageId ก่อนขั้นแรกของงาน
+  | "media.store.downloaded"        // info: messageId, sizeBytes ที่อ่านจาก LINE ครบ
+  | "media.store.uploaded"          // info: messageId, sizeBytes ที่ที่เก็บไฟล์รับ
+  | "media.store.succeeded"         // info: messageId, sizeBytes, durationMs
+  | "media.store.failed"            // warn: outcome (สถานะ หรือ deadline), errorCode, stage, durationMs
   | "media.store.not_ready"         // info: messageId, attempt ระหว่างรอ LINE เตรียมไฟล์
   | "media.store.stuck_recovered"   // warn: contactId, count
   | "upload.ticket.issued"

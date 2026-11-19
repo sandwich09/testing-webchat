@@ -29,6 +29,7 @@ const LOG_FIELD_KEYS: Record<keyof LogFields, true> = {
   cacheWriteTokens: true,
   costNanoUsd: true,
   sizeBytes: true,
+  stage: true,
   pageCount: true,
   tokenCount: true,
   count: true,

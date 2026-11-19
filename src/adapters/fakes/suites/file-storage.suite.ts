@@ -158,6 +158,26 @@ export const describeFileStorageSuite = (
       if (!inspected.ok) expect(inspected.error.code).toBe('upload.not_found');
     });
 
+    it('does not succeed and keeps nothing when the body breaks midway', async () => {
+      const storage = await makeSubject();
+      const key = newKey();
+      let sent = 0;
+      const breaking = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          sent += 1;
+          if (sent > 3) controller.error(new Error('connection reset'));
+          else controller.enqueue(bytesOf(16));
+        },
+      });
+      // Adapters report a broken source as a thrown read or storage.unavailable.
+      const put = await storage
+        .put(key, breaking, { contentType: 'image/png', maxSizeBytes: 1000 })
+        .catch(() => null);
+      expect(put === null || (!put.ok && put.error.code === 'storage.unavailable')).toBe(true);
+      const inspected = await storage.inspect(key);
+      expect(!inspected.ok && inspected.error.code).toBe('upload.not_found');
+    });
+
     it('overwrites an existing key', async () => {
       const storage = await makeSubject();
       const key = newKey();

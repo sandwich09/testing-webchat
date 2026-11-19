@@ -136,6 +136,7 @@ Route `oauth-token` และ `oauth-revoke` ไม่ใช้สามข้�
 | content ของ `messageId` ขึ้นต้นด้วย `img` | `tiny.jpg` `Content-Type: image/jpeg` | |
 | ขึ้นต้นด้วย `vid` | `tiny.mp4` `Content-Type: video/mp4` | |
 | ขึ้นต้นด้วย `aud` | `tiny.m4a` `Content-Type: audio/x-m4a` (ค่าที่ LINE ส่งจริงต้องยืนยัน) | ข้อความเสียง |
+| ขึ้นต้นด้วย `photo` | `tiny.jpg` ตามด้วยศูนย์จนครบ 3 MiB (decoder ไม่อ่าน byte หลังจุดจบของ JPEG) ส่งเป็น chunk ละ 64 KiB พร้อม `Content-Length` สร้างตอนตอบ ไม่มีไฟล์ใหญ่ใน repo | รูปขนาดเท่ารูปจากมือถือผ่านทางเก็บสื่อจนพร้อม ([ADR 0033](../adr/0033-buffer-inbound-media-and-stage-deadlines.md)) |
 | ขึ้นต้นด้วย `bigimg` | stream ขนาด 11 MiB ขึ้นต้นด้วย byte ของ JPEG ตามด้วยศูนย์ ไม่ส่ง `Content-Length` | รูปเกิน 10 MB ไม่ถูกเก็บ |
 | ขึ้นต้นด้วย `bigvid` | stream 51 MiB ขึ้นต้นด้วย header ของ MP4 | วิดีโอเกิน 50 MB |
 | ขึ้นต้นด้วย `fakeimg` | ข้อความ `not an image` แต่ `Content-Type: image/jpeg` | ตรวจชนิดจากเนื้อไฟล์ |
@@ -268,6 +269,7 @@ Stub แยกชนิดคำขอตามลำดับนี้ แล�
 | `message-text-quote.json` | ข้อความตัวอักษรที่ตอบกลับข้อความอื่น: `message.quotedMessageId` เป็น `{{quotedMessageId}}` (ค่าใหม่เมื่อไม่ให้) ใช้ id จาก `sentMessages` ของคำขอที่ stub บันทึก หรือ `messageId` ของข้อความขาเข้าก่อนหน้า |
 | `message-image.json` | หนึ่ง event รูป `message.id` = `img{{messageId}}` |
 | `message-video.json` | หนึ่ง event วิดีโอ `message.id` = `vid{{messageId}}` |
+| `message-image-photo.json` | รูป `message.id` = `photo{{messageId}}` (3 MiB หลาย chunk) |
 | `message-image-too-large.json` | รูป `message.id` = `bigimg{{messageId}}` |
 | `message-image-gone.json` | รูป `message.id` = `gone{{messageId}}` |
 | `message-sticker.json` | หนึ่ง event สติกเกอร์ |
@@ -457,7 +459,7 @@ Helper อื่นใน `e2e/helpers/`:
 | 1.8 | `postLineWebhook("batch-with-malformed.json", v2)` | status 200, ข้อความตัวอักษรและ `message-bubble[data-type="sticker"]` ปรากฏ |
 | 1.9 | `postLineWebhook("unknown-type.json", v3)` | status 200 และรายชื่อไม่เปลี่ยน |
 | 1.10 | `postLineWebhook("message-text.json", v4, { signature: "invalid" })` | status 401 |
-| 1.11 | ส่ง `message-image.json` | `message-bubble[data-type="image"]` ได้ `data-media-status="ready"` และมี `<img>` |
+| 1.11 | ส่ง `message-image.json` แล้ว `message-image-photo.json` | `message-bubble[data-type="image"]` ได้ `data-media-status="ready"` และมี `<img>` ทั้งสองฟอง (รูปที่สองเป็น 3 MiB หลาย chunk) |
 | 1.12 | ส่ง `message-image-gone.json` | `data-media-status="failed"`, `data-failure="download_failed"` และมีข้อความ `inbox.media.problem.download_failed` |
 | 1.13 | `expectNoA11yViolations(page)` | ไม่มี violation |
 | 1.14 | (test แยก หนึ่งครั้งต่อ host) `stubLineProfile` ที่มี `pictureUrl` บน `profile.line-scdn.net` หรือ `sprofile.line-scdn.net` ส่ง follow และข้อความ แล้วเปิด `/chats` | แถวของผู้ใช้มี `<img>` ที่ `src` เป็น URL นั้นและโหลดสำเร็จ (`naturalWidth` > 0) ไม่มี CSP violation (fixture ของ test ล้มเมื่อมี) ไม่เรียก host จริง ([pitfalls S7](../guidelines/pitfalls-and-prevention.md#s7-รูปโปรไฟล์ของ-line-ไม่ขึ้นเพราะ-host-ไม่อยู่ใน-csp)) |

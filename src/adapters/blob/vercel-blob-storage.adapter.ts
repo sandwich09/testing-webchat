@@ -1,6 +1,6 @@
 import { BlobNotFoundError, del, head, put } from '@vercel/blob';
 import { generateClientTokenFromReadWriteToken } from '@vercel/blob/client';
-import { err, ok } from '@/core/domain';
+import { STORAGE_CALL_TIMEOUT_MS, STORAGE_PUT_TIMEOUT_MS, err, ok } from '@/core/domain';
 import type { FileStorage } from '@/core/ports';
 
 export interface VercelBlobStorageConfig {
@@ -28,26 +28,66 @@ const isBlobHost = (url: string): boolean => {
   }
 };
 
-class BodyTooLargeError extends Error {}
+type ReadOutcome =
+  | { kind: 'read'; bytes: Buffer }
+  | { kind: 'too_large' }
+  | { kind: 'source_failed'; error: unknown };
 
-/** Counts bytes on the way through and fails the stream at the first byte over the cap. */
-const limitStream = (
+/**
+ * Reads the whole body into memory, failing at the first byte over the cap (the rest is not read:
+ * the source is cancelled). Nothing is sent to Blob before the body has ended, so a body that
+ * breaks or is too large never leaves a partial file, and the upload always has a known length.
+ */
+const readAll = async (
   body: ReadableStream<Uint8Array>,
   maxSizeBytes: number,
-  state: { exceeded: boolean; total: number },
-): ReadableStream<Uint8Array> => {
-  return body.pipeThrough(
-    new TransformStream<Uint8Array, Uint8Array>({
-      transform(chunk, controller) {
-        state.total += chunk.length;
-        if (state.total > maxSizeBytes) {
-          state.exceeded = true;
-          throw new BodyTooLargeError();
-        }
-        controller.enqueue(chunk);
-      },
-    }),
-  );
+): Promise<ReadOutcome> => {
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxSizeBytes) {
+        await reader.cancel().catch(() => undefined);
+        return { kind: 'too_large' };
+      }
+      chunks.push(value);
+    }
+  } catch (e) {
+    return { kind: 'source_failed', error: e };
+  }
+  return { kind: 'read', bytes: Buffer.concat(chunks, total) };
+};
+
+class StorageTimeoutError extends Error {
+  constructor() {
+    super('storage call timed out');
+    this.name = 'TimeoutError';
+  }
+}
+
+/**
+ * Runs one SDK call with an abort signal that fires after `ms`, and settles at that time even when
+ * the call ignores its signal, so no Blob call can hold the job past its own bound.
+ */
+const withTimeout = async <T>(ms: number, run: (signal: AbortSignal) => Promise<T>): Promise<T> => {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      const e = new StorageTimeoutError();
+      controller.abort(e);
+      reject(e);
+    }, ms);
+  });
+  try {
+    return await Promise.race([run(controller.signal), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
 };
 
 const detailOf = (e: unknown): string => (e instanceof Error ? e.name : 'unknown');
@@ -104,23 +144,29 @@ export const createVercelBlobStorage = (config: VercelBlobStorageConfig): FileSt
     },
 
     async put(key, body, opts) {
-      if (!isValidKey(key)) return err('storage.unavailable', 'invalid_key');
-      const state = { exceeded: false, total: 0 };
+      if (!isValidKey(key)) {
+        await body.cancel().catch(() => undefined);
+        return err('storage.unavailable', 'invalid_key');
+      }
+      // Buffer first, then one upload of a known length. A streamed body of unknown length was
+      // seen to hang for a real photo while a tiny file passed (ADR 0033).
+      const read = await readAll(body, opts.maxSizeBytes);
+      if (read.kind === 'too_large') return err('media.too_large');
+      if (read.kind === 'source_failed') return err('storage.unavailable', 'source_failed');
       try {
-        const result = await put(key, limitStream(body, opts.maxSizeBytes, state), {
-          access: 'public',
-          token,
-          contentType: opts.contentType,
-          addRandomSuffix: false,
-          allowOverwrite: true,
-        });
-        return ok({ publicUrl: result.url, sizeBytes: state.total });
+        const result = await withTimeout(STORAGE_PUT_TIMEOUT_MS, (abortSignal) =>
+          put(key, read.bytes, {
+            access: 'public',
+            token,
+            contentType: opts.contentType,
+            addRandomSuffix: false,
+            allowOverwrite: true,
+            abortSignal,
+          }),
+        );
+        return ok({ publicUrl: result.url, sizeBytes: read.bytes.byteLength });
       } catch (e) {
-        if (state.exceeded) {
-          // Best effort: remove anything the store kept of the partial upload.
-          await del(key, { token }).catch(() => undefined);
-          return err('media.too_large');
-        }
+        // A timed-out upload may still land; the message never points at it, so it is unreachable.
         return err('storage.unavailable', detailOf(e));
       }
     },
@@ -128,18 +174,24 @@ export const createVercelBlobStorage = (config: VercelBlobStorageConfig): FileSt
     async inspect(key) {
       if (!isValidKey(key)) return err('upload.not_found');
       try {
-        const meta = await head(key, { token });
-        if (!isBlobHost(meta.url)) return err('storage.unavailable', 'unexpected_host');
-        const response = await doFetch(meta.url, {
-          headers: { Range: `bytes=0-${String(LEADING_BYTES - 1)}` },
-          redirect: 'error',
-        });
-        if (!response.ok) return err('storage.unavailable', `status_${String(response.status)}`);
-        return ok({
-          publicUrl: meta.url,
-          sizeBytes: meta.size,
-          contentType: meta.contentType === '' ? null : meta.contentType,
-          leadingBytes: await readLeading(response),
+        return await withTimeout(STORAGE_CALL_TIMEOUT_MS, async (abortSignal) => {
+          const meta = await head(key, { token, abortSignal });
+          if (!isBlobHost(meta.url)) return err('storage.unavailable', 'unexpected_host');
+          const response = await doFetch(meta.url, {
+            headers: { Range: `bytes=0-${String(LEADING_BYTES - 1)}` },
+            redirect: 'error',
+            signal: abortSignal,
+          });
+          if (!response.ok) {
+            await response.body?.cancel().catch(() => undefined);
+            return err('storage.unavailable', `status_${String(response.status)}`);
+          }
+          return ok({
+            publicUrl: meta.url,
+            sizeBytes: meta.size,
+            contentType: meta.contentType === '' ? null : meta.contentType,
+            leadingBytes: await readLeading(response),
+          });
         });
       } catch (e) {
         return e instanceof BlobNotFoundError
@@ -157,7 +209,9 @@ export const createVercelBlobStorage = (config: VercelBlobStorageConfig): FileSt
     async delete(key) {
       if (!isValidKey(key)) return ok(undefined);
       try {
-        await del(key, { token });
+        await withTimeout(STORAGE_CALL_TIMEOUT_MS, (abortSignal) =>
+          del(key, { token, abortSignal }),
+        );
         return ok(undefined);
       } catch (e) {
         return e instanceof BlobNotFoundError

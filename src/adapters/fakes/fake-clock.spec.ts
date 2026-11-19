@@ -22,6 +22,25 @@ describe('FakeClock test controls', () => {
     expect(clock.now().toISOString()).toBe('2027-01-01T00:00:00.000Z');
   });
 
+  it('fires a timer only when advance or set moves the time to it', async () => {
+    const clock = new FakeClock(new Date('2026-11-18T00:00:00Z'));
+    const fired: string[] = [];
+    const a = clock.startTimer(1000);
+    const b = clock.startTimer(5000);
+    void a.fired.then(() => fired.push('a'));
+    void b.fired.then(() => fired.push('b'));
+    clock.advance(999);
+    await Promise.resolve();
+    expect(fired).toEqual([]);
+    clock.advance(1);
+    await Promise.resolve();
+    expect(fired).toEqual(['a']);
+    clock.set(new Date('2026-11-18T00:00:05Z'));
+    await Promise.resolve();
+    expect(fired).toEqual(['a', 'b']);
+    expect(clock.pendingTimers).toBe(0);
+  });
+
   it('does not run backwards for a negative sleep', async () => {
     const clock = new FakeClock(new Date('2026-11-18T00:00:00Z'));
     await clock.sleep(-5);

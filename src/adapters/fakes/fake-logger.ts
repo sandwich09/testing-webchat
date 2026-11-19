@@ -27,6 +27,7 @@ export const LOG_FIELD_KEYS = [
   'cacheWriteTokens',
   'costNanoUsd',
   'sizeBytes',
+  'stage',
   'pageCount',
   'tokenCount',
   'count',

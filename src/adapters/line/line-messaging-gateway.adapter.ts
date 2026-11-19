@@ -11,6 +11,7 @@ import type {
 import { err, ok } from '@/core/domain';
 import type { MessagingGateway, RichMenuError } from '@/core/ports';
 import {
+  LINE_CONTENT_IDLE_TIMEOUT_MS,
   LINE_CONTENT_TIMEOUT_MS,
   LINE_LOADING_MAX_RETRIES,
   LINE_MAX_RETRIES,
@@ -47,6 +48,18 @@ export class LineContentTooLargeError extends Error {
   constructor(maxBytes: number) {
     super(`LINE content exceeds ${String(maxBytes)} bytes`);
     this.name = 'LineContentTooLargeError';
+  }
+}
+
+/**
+ * The stream of `downloadContent` errors with this when the body stalls (no chunk for
+ * `LINE_CONTENT_IDLE_TIMEOUT_MS`) or the attempt's `LINE_CONTENT_TIMEOUT_MS` passes mid-body.
+ * It has no `media.too_large` code, so the caller treats it as a plain download failure.
+ */
+export class LineContentTimeoutError extends Error {
+  constructor(readonly kind: 'idle' | 'deadline') {
+    super(`LINE content body ${kind === 'idle' ? 'stalled' : 'passed its deadline'}`);
+    this.name = 'LineContentTimeoutError';
   }
 }
 
@@ -90,8 +103,8 @@ const sentEntrySchema = z.looseObject({ id: z.string().min(1) });
 /**
  * The LINE ids of the sent messages. Tolerant: a body without `sentMessages`, or entries without
  * a string id, give the ids that can be read and never fail the send, which already succeeded.
- * Assumption (ต้องยืนยันกับเอกสาร LINE): `sentMessages[].id` is the id a later `quotedMessageId`
- * names.
+ * `sentMessages[].id` is the id a later `quotedMessageId` names: confirmed on production
+ * (2026-11-19), where a customer reply quoting an AI message resolved to that message.
  */
 export const sentIdsOf = (body: unknown): LineMessageId[] => {
   const list = sentListSchema.safeParse(body);
@@ -149,6 +162,75 @@ const contentPath = (
 const contentLength = (headers: Headers): number | null => {
   const value = headers.get('content-length');
   return value !== null && /^\d+$/.test(value) ? Number(value) : null;
+};
+
+/**
+ * Bounds the read of a content body on its own, without relying on the fetch implementation to
+ * cut a body when the request signal fires: the attempt's `deadline` signal errors the stream
+ * (and cancels the body), and so does a wait of `idleMs` for the next chunk. The idle clock runs
+ * only while the consumer waits for a chunk, so a slow consumer is not mistaken for a stall.
+ */
+const boundStream = (
+  body: ReadableStream<Uint8Array>,
+  deadline: AbortSignal,
+  idleMs: number,
+): ReadableStream<Uint8Array> => {
+  const reader = body.getReader();
+  // A holder, not a `let`: the failure is set from a timer or a signal while a read is pending.
+  const state: { failure: LineContentTimeoutError | null } = { failure: null };
+  const currentFailure = (): LineContentTimeoutError | null => state.failure;
+  let rejectWaiting: ((e: LineContentTimeoutError) => void) | null = null;
+  const fail = (e: LineContentTimeoutError): void => {
+    if (state.failure !== null) return;
+    state.failure = e;
+    rejectWaiting?.(e);
+    void reader.cancel(e).catch(() => undefined);
+  };
+  const onDeadline = (): void => {
+    fail(new LineContentTimeoutError('deadline'));
+  };
+  if (deadline.aborted) onDeadline();
+  else deadline.addEventListener('abort', onDeadline, { once: true });
+  const release = (): void => {
+    deadline.removeEventListener('abort', onDeadline);
+  };
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      if (state.failure !== null) {
+        release();
+        controller.error(state.failure);
+        return;
+      }
+      let idle: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const next = await Promise.race([
+          reader.read(),
+          new Promise<never>((_, reject) => {
+            rejectWaiting = reject;
+            idle = setTimeout(() => {
+              fail(new LineContentTimeoutError('idle'));
+            }, idleMs);
+          }),
+        ]);
+        if (next.done) {
+          release();
+          controller.close();
+        } else controller.enqueue(next.value);
+      } catch (e) {
+        release();
+        const failure = currentFailure();
+        controller.error(failure ?? e);
+        if (failure === null) void reader.cancel(e).catch(() => undefined);
+      } finally {
+        clearTimeout(idle);
+        rejectWaiting = null;
+      }
+    },
+    cancel(reason) {
+      release();
+      return reader.cancel(reason);
+    },
+  });
 };
 
 const capStream = (body: ReadableStream<Uint8Array>, maxBytes: number) => {
@@ -379,7 +461,7 @@ export const createLineMessagingGateway = (
           },
         });
       return ok({
-        stream: capStream(body, maxBytes),
+        stream: capStream(boundStream(body, o.signal, LINE_CONTENT_IDLE_TIMEOUT_MS), maxBytes),
         contentType: o.response.headers.get('content-type'),
         sizeBytes,
       });

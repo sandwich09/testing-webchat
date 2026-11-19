@@ -45,7 +45,9 @@
 ## สื่อขาเข้า
 
 - LINE เก็บไฟล์ของข้อความไว้ชั่วคราว จึงต้องดาวน์โหลดตอนรับ
-- ดาวน์โหลดแบบ stream จาก host ของ LINE ที่กำหนดตายตัวเท่านั้น
+- ดาวน์โหลดแบบ stream จาก host ของ LINE ที่กำหนดตายตัวเท่านั้น แล้วอ่านทั้งไฟล์เข้าหน่วยความจำ (ตรวจเพดานขนาดระหว่างอ่าน) ก่อนอัปโหลดเข้าที่เก็บไฟล์ครั้งเดียวด้วยความยาวที่รู้แล้ว ไม่ส่ง stream ของ LINE ต่อเข้า Vercel Blob โดยตรง ([ADR 0033](../adr/0033-buffer-inbound-media-and-stage-deadlines.md))
+- ทุกขั้นมีเพดานเวลา: การดาวน์โหลดหนึ่งรอบรวม body ไม่เกิน `LINE_CONTENT_TIMEOUT_MS` และ body ที่ไม่มี chunk ใหม่นาน `LINE_CONTENT_IDLE_TIMEOUT_MS` ถูกตัด การอัปโหลดไม่เกิน `STORAGE_PUT_TIMEOUT_MS` การตรวจไฟล์และการลบไม่เกิน `STORAGE_CALL_TIMEOUT_MS` และทั้งงานไม่เกิน `MEDIA_JOB_BUDGET_MS` นับจากเริ่มงาน งานที่ถึงเพดานนี้เป็น `failed` ด้วยเหตุผล `interrupted` ทันที ไม่ค้าง `pending` จน function ถูกตัด
+- log บอกขั้นของงาน: `media.store.started`, `media.store.downloaded` (ขนาดที่อ่านจาก LINE), `media.store.uploaded` (ขนาดที่เก็บ), แล้ว `media.store.succeeded` หรือ `media.store.failed` พร้อม `stage` (`access`, `download`, `wait_ready`, `upload`, `inspect`, `preview`, `save`) และ `durationMs` ไม่มี URL หรือ token ใน log
 - เฉพาะ HTTP 200 คือไฟล์ LINE ตอบ 202 (หรือ 2xx อื่น) เมื่อยังเตรียมไฟล์ไม่เสร็จ เช่น วิดีโอที่กำลัง transcode ระบบไม่อ่านคำตอบนั้นเป็นไฟล์ แต่รอ `MEDIA_NOT_READY_POLL_MS` แล้วถามสถานะที่ `GET /v2/bot/message/{id}/content/transcoding` (`processing`, `succeeded`, `failed`) ซ้ำ จนพร้อมจึงดาวน์โหลดอีกครั้ง ข้อความคง `pending` ระหว่างนี้เฉพาะเมื่องบ `MEDIA_JOB_BUDGET_MS` ยังพอสำหรับเวลาแย่ที่สุดของทุกขั้นที่เหลือ ถ้าไม่พอหรือ LINE บอกว่าล้มเหลว สื่อเป็น `failed` ทันที ([use-cases StoreInboundMedia](../architecture/use-cases.md#storeinboundmedia))
 - รูปไม่เกิน `IMAGE_MAX_BYTES` และวิดีโอไม่เกิน `VIDEO_MAX_BYTES` เกินกว่านั้นไม่เก็บ (`mediaStatus` เป็น `too_large`) และแสดงป้ายว่าไฟล์ใหญ่เกิน
 - ตรวจชนิดจากเนื้อไฟล์ เสียงรับ MPEG-4 (`ftyp` ที่ไม่ใช่ QuickTime โดย brand `M4A ` หรือ `M4B ` คือเสียงชัดเจน) เก็บเป็น `.m4a` `audio/mp4`, MP3 (`ID3` หรือ frame sync ที่ layer ไม่ใช่ 00) เป็น `.mp3` `audio/mpeg` และ AAC แบบ ADTS เป็น `.aac` `audio/aac` อย่างอื่นเป็น `failed` ชนิดของเสียงอ่านจาก 16 byte แรกก่อนเก็บ ไฟล์จึงได้นามสกุลและ `Content-Type` ที่ browser เล่นได้ ไม่ใช้ `Content-Type` ที่ LINE ส่งมา
@@ -143,7 +145,8 @@
 - ข้อความตัวอักษรขาเข้าที่มี `message.quotedMessageId` (string ไม่ว่าง ค่าอื่นถูกเพิกเฉยโดยไม่ทิ้งข้อความ) เก็บ id นั้นไว้ การหาข้อความต้นทางทำตอนอ่าน ไม่ใช่ตอนรับ: `GetMessages` รวม id ที่ถูกอ้างของทั้งหน้าแล้วหาด้วย `findByLineIds` ครั้งเดียว (`lineMessageId` ของข้อความขาเข้า หรือหนึ่งใน `lineSentIds` ของข้อความขาออก ในแชทเดียวกัน) ทั้งโหลดล่าสุด โหลดย้อนหลัง และ polling ([use-cases](../architecture/use-cases.md#getmessages))
 - ข้อความต้นทางที่หาไม่พบ (ส่งก่อน migration ที่เจ็ด, เป็นของแชทอื่น หรือไม่เคยถูกเก็บ) แสดงเป็น "ข้อความต้นทางไม่พร้อมแสดง"
 - ประวัติที่ส่งให้โมเดลมีบรรทัดสั้นบอกว่าผู้ใช้ตอบกลับข้อความใด ([ai-prompt ข้อ 4.2](ai-prompt.md#42-แปลงเป็น-turn))
-- ต้องยืนยันกับ LINE จริง: ชื่อและรูปแบบของ `quotedMessageId` (สมมติเป็น string id ของข้อความ), ข้อความชนิดใดมี `quotedMessageId` (ระบบอ่านเฉพาะข้อความตัวอักษร), และ `sentMessages[].id` ของ reply และ push เป็น id เดียวกับที่ `quotedMessageId` อ้าง (ขั้นใน [line-oa-setup](../runbooks/line-oa-setup.md#ทดสอบด้วยมือเมื่อมี-line-oa-จริง))
+- ยืนยันกับ LINE จริงแล้ว (2026-11-19 บน production): `message.quotedMessageId` ของข้อความตัวอักษรเป็น string id ของข้อความ และ `sentMessages[].id` ของ reply และ push เป็น id เดียวกับที่ `quotedMessageId` อ้าง ข้อความของผู้ใช้ที่ตอบกลับทั้งข้อความของผู้ใช้เองและข้อความของ AI แสดงกล่องอ้างอิงข้อความต้นทางได้ ([test report](../qa/test-report.md))
+- ยังต้องยืนยันกับ LINE จริง: ข้อความชนิดอื่นนอกจากตัวอักษรมี `quotedMessageId` หรือไม่ (ระบบอ่านเฉพาะข้อความตัวอักษร) (ขั้นใน [line-oa-setup](../runbooks/line-oa-setup.md#ทดสอบด้วยมือเมื่อมี-line-oa-จริง))
 
 ### งานส่งที่ค้าง
 

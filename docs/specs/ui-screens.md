@@ -991,7 +991,7 @@ type MediaKind = "jpeg" | "png" | "webp" | "heic" | "mp4" | "mov" | "unknown";
 function sniffMediaType(head: Uint8Array): MediaKind
 ```
 - JPEG: `FF D8 FF`; PNG: `89 50 4E 47 0D 0A 1A 0A`; WebP: `RIFF....WEBP`
-- ISO BMFF (byte 4 ถึง 7 = `ftyp`): brand `heic`, `heix`, `mif1`, `msf1` → `heic`; `qt  ` → `mov`; `isom`, `iso2`, `mp41`, `mp42`, `avc1`, `M4V ` → `mp4`
+- ISO BMFF (byte 4 ถึง 7 = `ftyp`): brand `heic`, `heix`, `mif1`, `msf1` → `heic`; `qt  ` → `mov`; `M4A `, `M4B `, `avif`, `avis` → `unknown`; brand อื่นทุกตัว (เช่น `isom`, `iso5`, `mp42`, `avc1`) → `mp4` ตรงกับที่ server อ่านด้วย `sniffContentType`
 
 ```ts
 type AttachmentCheck =

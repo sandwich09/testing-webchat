@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as BlobSdk from '@vercel/blob';
 import type { StorageKey } from '@/core/domain';
+import { STORAGE_CALL_TIMEOUT_MS, STORAGE_PUT_TIMEOUT_MS } from '@/core/domain';
 import { describeFileStorageSuite } from '@/adapters/fakes';
 import { createVercelBlobStorage } from './vercel-blob-storage.adapter';
 
@@ -54,13 +55,15 @@ const drain = async (stream: ReadableStream<Uint8Array>): Promise<Uint8Array> =>
 /** In-memory stand-in for the SDK calls and the Range fetch, shared by the suite and the tests. */
 const installFakeSdk = (): { blobs: Map<string, StoredBlob>; fetchMock: typeof fetch } => {
   const blobs = new Map<string, StoredBlob>();
-  sdk.put.mockImplementation(async (pathname: string, body: ReadableStream<Uint8Array>, opts) => {
-    blobs.set(pathname, {
-      bytes: await drain(body),
-      contentType: (opts as { contentType: string }).contentType,
-    });
-    return { url: `${HOST}/${pathname}`, pathname };
-  });
+  sdk.put.mockImplementation(
+    async (pathname: string, body: ReadableStream<Uint8Array> | Uint8Array, opts) => {
+      blobs.set(pathname, {
+        bytes: body instanceof ReadableStream ? await drain(body) : new Uint8Array(body),
+        contentType: (opts as { contentType: string }).contentType,
+      });
+      return { url: `${HOST}/${pathname}`, pathname };
+    },
+  );
   sdk.head.mockImplementation((pathname: string) => {
     const blob = blobs.get(pathname);
     if (blob === undefined) return Promise.reject(new BlobNotFoundError());
@@ -149,18 +152,89 @@ describe('vercel blob storage SDK calls', () => {
       contentType: 'image/png',
       addRandomSuffix: false,
       allowOverwrite: true,
+      abortSignal: expect.any(AbortSignal) as AbortSignal,
     });
   });
 
-  it('fails the stream over the cap, deletes the partial blob and returns media.too_large', async () => {
+  it('uploads a body of many chunks as one buffer of known length, never as a stream', async () => {
+    const { blobs } = installFakeSdk();
+    const storage = createVercelBlobStorage({ token: TOKEN });
+    const size = 3 * 1024 * 1024;
+    const chunk = 64 * 1024;
+    const source = Uint8Array.from({ length: size }, (_, i) => (i * 31) % 251);
+    let offset = 0;
+    let pulls = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (offset >= size) {
+          controller.close();
+          return;
+        }
+        pulls += 1;
+        controller.enqueue(source.slice(offset, offset + chunk));
+        offset += chunk;
+      },
+    });
+
+    const result = await storage.put(key('a/photo.jpg'), body, {
+      contentType: 'image/jpeg',
+      maxSizeBytes: 10 * 1024 * 1024,
+    });
+
+    expect(pulls).toBe(size / chunk);
+    expect(result).toEqual({
+      ok: true,
+      value: { publicUrl: `${HOST}/a/photo.jpg`, sizeBytes: size },
+    });
+    expect(sdk.put).toHaveBeenCalledTimes(1);
+    const sent: unknown = sdk.put.mock.calls[0]?.[1];
+    expect(sent).not.toBeInstanceOf(ReadableStream);
+    expect(sent).toBeInstanceOf(Uint8Array);
+    expect((sent as Uint8Array).byteLength).toBe(size);
+    expect(blobs.get('a/photo.jpg')?.bytes).toEqual(source);
+  });
+
+  it('returns media.too_large and uploads nothing when the stream passes the cap', async () => {
     installFakeSdk();
     const storage = createVercelBlobStorage({ token: TOKEN });
-    const result = await storage.put(key('a/big.png'), new Blob([new Uint8Array(20)]).stream(), {
+    let cancelled = false;
+    let pulls = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1;
+        controller.enqueue(new Uint8Array(8));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const result = await storage.put(key('a/big.png'), body, {
       contentType: 'image/png',
-      maxSizeBytes: 10,
+      maxSizeBytes: 20,
     });
     expect(!result.ok && result.error.code).toBe('media.too_large');
-    expect(sdk.del).toHaveBeenCalledWith('a/big.png', { token: TOKEN });
+    expect(sdk.put).not.toHaveBeenCalled();
+    expect(cancelled).toBe(true); // nothing past the cap is read on
+    expect(pulls).toBeLessThanOrEqual(4);
+  });
+
+  it('fails and uploads nothing when the source errors midway', async () => {
+    installFakeSdk();
+    const storage = createVercelBlobStorage({ token: TOKEN });
+    let pulls = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1;
+        if (pulls > 2) controller.error(new Error('connection reset'));
+        else controller.enqueue(new Uint8Array(64));
+      },
+    });
+    const result = await storage.put(key('a/broken.png'), body, {
+      contentType: 'image/png',
+      maxSizeBytes: 1000,
+    });
+    expect(!result.ok && result.error.code).toBe('storage.unavailable');
+    expect(sdk.put).not.toHaveBeenCalled();
   });
 
   it('reads the first 16 bytes with a Range request from the store host only', async () => {
@@ -178,6 +252,7 @@ describe('vercel blob storage SDK calls', () => {
     expect(fetchSpy).toHaveBeenCalledWith(`${HOST}/a/b.png`, {
       headers: { Range: 'bytes=0-15' },
       redirect: 'error',
+      signal: expect.any(AbortSignal) as AbortSignal,
     });
   });
 
@@ -294,5 +369,80 @@ describe('vercel blob storage errors', () => {
 
   it('rejects an empty token', () => {
     expect(() => createVercelBlobStorage({ token: '' })).toThrow();
+  });
+});
+
+describe('vercel blob storage deadlines', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const never = <T>(): Promise<T> => new Promise<T>(() => undefined);
+
+  it('fails a put that never settles after STORAGE_PUT_TIMEOUT_MS and aborts it', async () => {
+    installFakeSdk();
+    let signal: AbortSignal | undefined;
+    sdk.put.mockImplementation((_p: string, _b: unknown, opts: { abortSignal: AbortSignal }) => {
+      signal = opts.abortSignal;
+      return never();
+    });
+    const storage = createVercelBlobStorage({ token: TOKEN });
+    let settled = false;
+    const pending = storage
+      .put(key('a/b.jpg'), new Blob([new Uint8Array(10)]).stream(), {
+        contentType: 'image/jpeg',
+        maxSizeBytes: 100,
+      })
+      .finally(() => {
+        settled = true;
+      });
+
+    await vi.advanceTimersByTimeAsync(STORAGE_PUT_TIMEOUT_MS - 1);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    const result = await pending;
+
+    expect(!result.ok && result.error.code).toBe('storage.unavailable');
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it('fails an inspect and a delete that never settle after STORAGE_CALL_TIMEOUT_MS', async () => {
+    installFakeSdk();
+    const signals: AbortSignal[] = [];
+    const hang = (_p: string, opts: { abortSignal: AbortSignal }) => {
+      signals.push(opts.abortSignal);
+      return never();
+    };
+    sdk.head.mockImplementation(hang);
+    sdk.del.mockImplementation(hang);
+    const storage = createVercelBlobStorage({ token: TOKEN });
+    const inspected = storage.inspect(key('a/b.jpg'));
+    const deleted = storage.delete(key('a/b.jpg'));
+
+    await vi.advanceTimersByTimeAsync(STORAGE_CALL_TIMEOUT_MS);
+
+    const [i, d] = await Promise.all([inspected, deleted]);
+    expect(!i.ok && i.error.code).toBe('storage.unavailable');
+    expect(!d.ok && d.error.code).toBe('storage.unavailable');
+    expect(signals.map((x) => x.aborted)).toEqual([true, true]);
+  });
+
+  it('bounds the Range read of inspect by the same deadline', async () => {
+    installFakeSdk();
+    sdk.head.mockResolvedValueOnce({ url: `${HOST}/a`, size: 1, contentType: 'a/b' });
+    const stalled = vi.fn(() =>
+      Promise.resolve(new Response(new ReadableStream<Uint8Array>(), { status: 206 })),
+    ) as unknown as typeof fetch;
+    const storage = createVercelBlobStorage({ token: TOKEN, fetch: stalled });
+    const inspected = storage.inspect(key('a'));
+
+    await vi.advanceTimersByTimeAsync(STORAGE_CALL_TIMEOUT_MS);
+
+    const result = await inspected;
+    expect(!result.ok && result.error.code).toBe('storage.unavailable');
   });
 });

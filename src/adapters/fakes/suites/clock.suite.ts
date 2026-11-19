@@ -38,5 +38,40 @@ export const describeClockSuite = (makeSubject: () => Clock | Promise<Clock>): v
       const clock = await makeSubject();
       await expect(clock.sleep(0)).resolves.toBeUndefined();
     });
+
+    it('a timer fires once its time has passed', async () => {
+      const clock = await makeSubject();
+      const timer = clock.startTimer(20);
+      await clock.sleep(40);
+      await expect(timer.fired).resolves.toBeUndefined();
+      timer.cancel(); // after it fired: no effect, no throw
+    });
+
+    it('a cancelled timer never fires', async () => {
+      const clock = await makeSubject();
+      let fired = false;
+      const timer = clock.startTimer(20);
+      void timer.fired.then(() => {
+        fired = true;
+      });
+      timer.cancel();
+      timer.cancel();
+      await clock.sleep(40);
+      await Promise.resolve();
+      expect(fired).toBe(false);
+    });
+
+    it('a timer does not fire before its time', async () => {
+      const clock = await makeSubject();
+      let fired = false;
+      const timer = clock.startTimer(60_000);
+      void timer.fired.then(() => {
+        fired = true;
+      });
+      await clock.sleep(10);
+      await Promise.resolve();
+      expect(fired).toBe(false);
+      timer.cancel();
+    });
   });
 };

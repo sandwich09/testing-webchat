@@ -360,16 +360,18 @@ Test: ลำดับการเรียกและผลที่บัน�
 
 1. `messages.findById` ถ้าไม่มี หรือไม่ใช่รูปหรือวิดีโอ หรือ `mediaStatus` ไม่ใช่ `pending` คืน ok ทันที (ทำซ้ำได้)
 
-ทุก `setMediaStatus(failed)` บันทึกเหตุผล (`Message.mediaFailure`) ที่หน้าเว็บแสดงในฟอง: เนื้อไฟล์ไม่ใช่ชนิดที่รับ (ข้อ 6 และ container เสียงที่ไม่รู้จัก) เป็น `unsupported_type` นอกนั้นเป็น `download_failed` สื่อจาก URL ภายนอกได้ `external_source` ตั้งแต่ `ReceiveLineEvents` และงานที่ถูกตัดได้ `interrupted` จาก `failStuckMedia`
+ทุก `setMediaStatus(failed)` บันทึกเหตุผล (`Message.mediaFailure`) ที่หน้าเว็บแสดงในฟอง: เนื้อไฟล์ไม่ใช่ชนิดที่รับ (ข้อ 6 และ container เสียงที่ไม่รู้จัก) เป็น `unsupported_type` นอกนั้นเป็น `download_failed` สื่อจาก URL ภายนอกได้ `external_source` ตั้งแต่ `ReceiveLineEvents` และงานที่ถูกตัดได้ `interrupted` ทั้งจากเพดานเวลาของงานเอง (ด้านล่าง) และจาก `failStuckMedia`
+
+เพดานเวลาของงาน: หลังข้อ 1 log `media.store.started` จดเวลาเริ่ม แล้วรันข้อ 2 ถึง 9 แข่งกับ `clock.startTimer(MEDIA_JOB_BUDGET_MS)` ถ้าตัวจับเวลายิงก่อน `setMediaStatus(failed, "interrupted")` log `media.store.failed` (`outcome: deadline`, `stage` คือขั้นที่ค้าง, `durationMs`) ยกเลิก stream ของ LINE ที่กำลังอ่าน แล้วคืน `failed` ขั้นที่ถูกทิ้งอาจจบทีหลัง แต่เปลี่ยนข้อความไม่ได้เพราะทุกการเขียนเป็น compare-and-set บน `pending` และถ้ามันเก็บไฟล์ได้ `setMediaReady` ได้ false จึงลบไฟล์ของตัวเอง ขั้นที่ log เป็น `stage` คือ `access` (ข้อ 2), `download` (ข้อ 4 และการอ่าน body ในข้อ 5), `wait_ready` (รอไฟล์), `upload` (ข้อ 5 หลัง body ของ LINE จบ หรือเมื่อที่เก็บไฟล์ปฏิเสธ), `inspect` (ข้อ 6), `preview` (ข้อ 8) และ `save` (ข้อ 9) ทุก `media.store.failed` มี `stage` และ `durationMs` ([ADR 0033](../adr/0033-buffer-inbound-media-and-stage-deadlines.md))
 
 `setMediaStatus` และ `setMediaReady` ทุกจุดของ use case นี้เป็น compare-and-set บน `pending` ([MessageRepository](domain-and-ports.md#messagerepository)) งานสองงานของข้อความเดียวกัน (เช่น งานที่ได้ซ้ำจากการส่งซ้ำของ LINE) อาจดาวน์โหลดพร้อมกันได้ แต่ผลแรกที่บันทึกเป็นผลสุดท้าย งานที่แพ้ไม่ทับผลนั้น (ไม่เปลี่ยน ready เป็น failed) ไม่ log `media.store.failed` คืนสถานะที่อ่านได้จากแถว และถ้างานที่แพ้เก็บไฟล์ไว้แล้ว (`setMediaReady` ได้ false) จะลบไฟล์ original และ preview ของตัวเองแบบ best effort
 2. `loadLineAccess()` ล้มเหลว: `setMediaStatus(failed)` log `media.store.failed` คืน
 3. `max = inboundMediaMaxBytes(type)`, `keys = inboundStorageKeys(ids.randomToken(), type === "image" ? "jpg" : "mp4")` นามสกุลเดาจากชนิดของข้อความ ถ้าเนื้อจริงเป็น PNG ในชื่อ `.jpg` ยอมรับได้ เพราะ browser อ่านชนิดจากเนื้อและ header
-4. `gateway.downloadContent(access, lineMessageId, "original", max)` (จดเวลาเริ่มของงานไว้ก่อนเรียก)
+4. `gateway.downloadContent(access, lineMessageId, "original", max)` (เวลาเริ่มของงานจดไว้ก่อนข้อ 2)
    - `line.content_not_ready` (LINE ตอบ 202 หรือ 2xx อื่นที่ไม่ใช่ 200 ขณะยังเตรียมไฟล์ เช่นวิดีโอที่กำลัง transcode): ไป "รอไฟล์" ด้านล่าง แล้วใช้ผลของการดาวน์โหลดครั้งใหม่แทนในข้อนี้
    - `media.too_large`: `setMediaStatus(too_large)` คืน
    - error อื่น: `setMediaStatus(failed)` log `media.store.failed` คืน
-5. `storage.put(keys.original, stream, { contentType: contentType ?? "application/octet-stream", maxSizeBytes: max })` โดย `contentType` มาจากคำตอบของ LINE
+5. `storage.put(keys.original, stream, { contentType: contentType ?? "application/octet-stream", maxSizeBytes: max })` โดย `contentType` มาจากคำตอบของ LINE เมื่อ stream ของ LINE อ่านจบ log `media.store.downloaded` (`sizeBytes` ที่อ่านได้) เมื่อ put สำเร็จ log `media.store.uploaded` (`sizeBytes` ที่เก็บ) Adapter ของ Blob อ่านทั้งไฟล์ก่อนแล้วอัปโหลดครั้งเดียว ([FileStorage](domain-and-ports.md#filestorage))
    - `media.too_large`: `setMediaStatus(too_large)` คืน
    - `storage.unavailable`: `setMediaStatus(failed)` คืน
    - stream ของ LINE error ระหว่างอ่าน (adapter ของที่เก็บไฟล์อาจ throw หรือคืน `storage.unavailable`): ลบไฟล์ที่เขียนไปแล้ว แล้ว `setMediaStatus(too_large)` เฉพาะเมื่อรู้ว่าขนาดเกินเพดาน คือ `sizeBytes` (Content-Length) มากกว่า `max` หรือ error ของ stream มี `code: "media.too_large"` ตามสัญญาของ [MessagingGateway](domain-and-ports.md#messaginggateway) นอกนั้น (เช่น การเชื่อมต่อขาดใน body ที่ไม่มี Content-Length) `setMediaStatus(failed)` พร้อม log รหัส `line.unavailable`
@@ -377,16 +379,16 @@ Test: ลำดับการเรียกและผลที่บัน�
 7. `mediaUrl` คือ `publicUrl` จากข้อ 5
 8. ภาพตัวอย่าง:
    - รูป: `previewUrl = mediaUrl`
-   - วิดีโอ: `downloadContent(..., "preview", PREVIEW_MAX_BYTES)` แล้ว `put(keys.preview, ...)` ถ้าไม่สำเร็จ ใช้ `previewUrl = mediaUrl` และหน้าเว็บแสดงไอคอนวิดีโอแทนภาพ
-9. `messages.setMediaReady(id, mediaUrl, previewUrl)` log `media.store.succeeded` คืน `ready`
+   - วิดีโอ: ถ้างบที่เหลือ (`MEDIA_JOB_BUDGET_MS` ลบเวลาที่ใช้ไป) ยังไม่น้อยกว่า `MEDIA_CONTENT_CALL_WORST_MS` + `MEDIA_STORE_CALL_WORST_MS` จึง `downloadContent(..., "preview", PREVIEW_MAX_BYTES)` แล้ว `put(keys.preview, ...)` ถ้างบไม่พอหรือไม่สำเร็จ ใช้ `previewUrl = mediaUrl` และหน้าเว็บแสดงไอคอนวิดีโอแทนภาพ
+9. `messages.setMediaReady(id, mediaUrl, previewUrl)` log `media.store.succeeded` (`sizeBytes`, `durationMs`) คืน `ready`
 
-รอไฟล์: `rest = MEDIA_CONTENT_CALL_WORST_MS × (วิดีโอ 2 รูป 1)` คือเวลาแย่ที่สุดของการดาวน์โหลด original อีกครั้งกับภาพตัวอย่างของวิดีโอ วนตามลำดับนี้
+รอไฟล์: `rest = MEDIA_CONTENT_CALL_WORST_MS + MEDIA_STORE_CALL_WORST_MS` คือเวลาแย่ที่สุดของการดาวน์โหลด original อีกครั้งและการเก็บ (ภาพตัวอย่างของวิดีโอไม่ได้สำรองไว้ ข้อ 8 ดึงเมื่องบยังพอเท่านั้น) วนตามลำดับนี้
 
 1. ถ้าเวลาที่ใช้ไปแล้ว + `MEDIA_NOT_READY_POLL_MS` + `MEDIA_STATUS_CALL_WORST_MS` + `rest` เกิน `MEDIA_JOB_BUDGET_MS` ออกจากวง
 2. log `media.store.not_ready` (`messageId`, `attempt`) แล้ว `clock.sleep(MEDIA_NOT_READY_POLL_MS)` ระหว่างรอข้อความยัง `pending` เพราะมีการลองใหม่ที่กำลังจะเกิดจริง
 3. `gateway.getContentStatus(access, lineMessageId)`: `failed` คืน `line.content_unavailable` (ข้อ 4 ตั้ง failed), `succeeded` ออกจากวง, `processing` หรือเรียกไม่สำเร็จ วนต่อ
 
-หลังออกจากวง ถ้าเวลาที่ใช้ไปแล้ว + `rest` เกิน `MEDIA_JOB_BUDGET_MS` คืน `line.content_not_ready` (ข้อ 4 ตั้ง failed ทันที ไม่ปล่อยค้าง pending โดยไม่มีการลองใหม่) นอกนั้นดาวน์โหลด original อีกหนึ่งครั้ง ถ้ายังไม่พร้อมก็เป็น failed ด้วย `line.content_not_ready` เวลาทั้งงานจึงไม่เกิน `MEDIA_JOB_BUDGET_MS` ซึ่ง [`timing-budget.spec.ts`](../../src/composition/timing-budget.spec.ts) ตรึงไว้ใต้งบของ webhook และต่ำกว่า `MEDIA_STUCK_AFTER_MS` การคืนสภาพสื่อที่ค้างยังเป็นทางสุดท้ายเมื่อ function ถูกตัด
+หลังออกจากวง ถ้าเวลาที่ใช้ไปแล้ว + `rest` เกิน `MEDIA_JOB_BUDGET_MS` คืน `line.content_not_ready` (ข้อ 4 ตั้ง failed ทันที ไม่ปล่อยค้าง pending โดยไม่มีการลองใหม่) นอกนั้นดาวน์โหลด original อีกหนึ่งครั้ง ถ้ายังไม่พร้อมก็เป็น failed ด้วย `line.content_not_ready` เวลาทั้งงานไม่เกิน `MEDIA_JOB_BUDGET_MS` (เพดานเวลาของงานตัดเสมอ) ซึ่ง [`timing-budget.spec.ts`](../../src/composition/timing-budget.spec.ts) ตรึงไว้ใต้งบของ webhook และต่ำกว่า `MEDIA_STUCK_AFTER_MS` การคืนสภาพสื่อที่ค้างยังเป็นทางสุดท้ายเมื่อ function ถูกตัด
 
 ทั้ง use case อยู่ใน `try/catch` ถ้า throw ให้พยายาม `setMediaStatus(failed)` แล้ว throw ต่อให้ `runJob` log
 
@@ -412,6 +414,12 @@ Test:
 - การดาวน์โหลดแรกใช้เวลาแย่ที่สุดแล้วได้ไม่พร้อม → ไม่รอ failed ทันที
 - LINE บอกว่าการเตรียมไฟล์ล้มเหลว → failed ด้วย `line.content_unavailable`
 - การถามสถานะล้มเหลวหนึ่งครั้ง → ถามต่อ แล้ว ready
+- รูปปกติ → log `media.store.started`, `media.store.downloaded`, `media.store.uploaded`, `media.store.succeeded` ตามลำดับพร้อมขนาด และตัวจับเวลาถูกยกเลิก
+- ที่เก็บไฟล์ล่ม → `media.store.failed` มี `stage: upload`
+- body ของ LINE หยุดส่งกลางทาง → pending จนถึง `MEDIA_JOB_BUDGET_MS` พอดีแล้วเป็น failed (`interrupted`) `outcome: deadline`, `stage: download` และ stream ของ LINE ถูกยกเลิก
+- `put` ที่ไม่คืนผลหลังอ่าน body จบ → failed (`interrupted`) ที่ `stage: upload`
+- ขั้นที่ถูกทิ้งจบหลังเพดาน → แถวยัง failed และไฟล์ที่ขั้นนั้นเก็บถูกลบ
+- วิดีโอที่ original ใช้เวลาแย่ที่สุด → ready โดยไม่ดึงภาพตัวอย่าง
 
 ## GenerateAiReply
 

@@ -13,6 +13,7 @@ import {
   MEDIA_CONTENT_CALL_WORST_MS,
   MEDIA_JOB_BUDGET_MS,
   MEDIA_NOT_READY_POLL_MS,
+  MEDIA_STORE_CALL_WORST_MS,
   PREVIEW_MAX_BYTES,
   err,
   ok,
@@ -216,10 +217,11 @@ describe('StoreInboundMedia', () => {
 
       expect(await run({ messageId: m.id }, ctx)).toEqual(ok({ status: 'failed' }));
 
-      // Every wait left room for the worst case of what came after it.
-      expect(clock.now().getTime() - started + 2 * MEDIA_CONTENT_CALL_WORST_MS).toBeLessThanOrEqual(
-        MEDIA_JOB_BUDGET_MS,
-      );
+      // Every wait left room for the worst case of what came after it: the original once more
+      // and its store (a video's preview is only fetched when the budget still holds it).
+      expect(
+        clock.now().getTime() - started + MEDIA_CONTENT_CALL_WORST_MS + MEDIA_STORE_CALL_WORST_MS,
+      ).toBeLessThanOrEqual(MEDIA_JOB_BUDGET_MS);
       expect(clock.sleeps.length).toBeGreaterThan(0);
       expect((await reload(m.id)).mediaStatus).toBe('failed');
       expect(logger.entries).toContainEqual(
@@ -277,6 +279,177 @@ describe('StoreInboundMedia', () => {
 
       expect(await run({ messageId: m.id }, ctx)).toEqual(ok({ status: 'ready' }));
       expect(clock.sleeps).toEqual([MEDIA_NOT_READY_POLL_MS, MEDIA_NOT_READY_POLL_MS]);
+    });
+  });
+
+  describe('stages and the job deadline', () => {
+    const stalledStream = (): { stream: ReadableStream<Uint8Array>; cancelled: () => boolean } => {
+      let cancelled = false;
+      let sent = false;
+      const stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (!sent) {
+            sent = true;
+            controller.enqueue(JPEG.slice(0, 8));
+          }
+          // then no chunk ever again
+          return new Promise<void>(() => undefined);
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+      return { stream, cancelled: () => cancelled };
+    };
+
+    const events = (): string[] =>
+      logger.entries.map((e) => e.event).filter((e) => e.startsWith('media.store.'));
+
+    const logged = async (event: string): Promise<void> => {
+      await vi.waitFor(() => {
+        expect(events()).toContain(event);
+      });
+    };
+
+    it('logs started, downloaded and uploaded with the byte counts before succeeded', async () => {
+      const m = await insertMedia('image');
+      gateway.setContent(lineIdOf(m), { original: JPEG, contentType: 'image/jpeg' });
+
+      expect(await run({ messageId: m.id }, ctx)).toEqual(ok({ status: 'ready' }));
+
+      expect(events()).toEqual([
+        'media.store.started',
+        'media.store.downloaded',
+        'media.store.uploaded',
+        'media.store.succeeded',
+      ]);
+      const byEvent = (event: string) => logger.entries.find((e) => e.event === event);
+      expect(byEvent('media.store.started')).toMatchObject({ messageId: m.id, requestId: 'job-1' });
+      expect(byEvent('media.store.downloaded')).toMatchObject({ sizeBytes: JPEG.length });
+      expect(byEvent('media.store.uploaded')).toMatchObject({ sizeBytes: JPEG.length });
+      expect(byEvent('media.store.succeeded')).toMatchObject({ durationMs: 0 });
+      expect(clock.pendingTimers).toBe(0); // the deadline timer is cleared
+    });
+
+    it('names the stage of a failure', async () => {
+      const m = await insertMedia('image');
+      gateway.setContent(lineIdOf(m), { original: JPEG, contentType: 'image/jpeg' });
+      storage.setUnavailable(true);
+
+      expect(await run({ messageId: m.id }, ctx)).toEqual(ok({ status: 'failed' }));
+
+      expect(logger.entries).toContainEqual(
+        expect.objectContaining({
+          event: 'media.store.failed',
+          errorCode: 'storage.unavailable',
+          stage: 'upload',
+          outcome: 'failed',
+        }),
+      );
+    });
+
+    it('marks failed (interrupted) at MEDIA_JOB_BUDGET_MS when the LINE body stalls, with stage download', async () => {
+      const m = await insertMedia('image');
+      const stalled = stalledStream();
+      vi.spyOn(gateway, 'downloadContent').mockResolvedValue(
+        ok({ stream: stalled.stream, contentType: 'image/jpeg', sizeBytes: null }),
+      );
+      const started = clock.now().getTime();
+
+      const pending = run({ messageId: m.id }, ctx);
+      await logged('media.store.started');
+      clock.advance(MEDIA_JOB_BUDGET_MS - 1);
+      await Promise.resolve();
+      expect((await reload(m.id)).mediaStatus).toBe('pending');
+      clock.advance(1);
+
+      expect(await pending).toEqual(ok({ status: 'failed' }));
+      expect(clock.now().getTime() - started).toBe(MEDIA_JOB_BUDGET_MS);
+      const after = await reload(m.id);
+      expect(after.mediaStatus).toBe('failed');
+      expect(after.mediaFailure).toBe('interrupted');
+      expect(logger.entries).toContainEqual(
+        expect.objectContaining({
+          event: 'media.store.failed',
+          outcome: 'deadline',
+          stage: 'download',
+          durationMs: MEDIA_JOB_BUDGET_MS,
+        }),
+      );
+      expect(events()).not.toContain('media.store.downloaded');
+      await vi.waitFor(() => {
+        expect(stalled.cancelled()).toBe(true); // the LINE stream is let go
+      });
+    });
+
+    it('marks failed (interrupted) at MEDIA_JOB_BUDGET_MS when the storage put never settles, with stage upload', async () => {
+      const m = await insertMedia('image');
+      gateway.setContent(lineIdOf(m), { original: JPEG, contentType: 'image/jpeg' });
+      vi.spyOn(storage, 'put').mockImplementation(async (_key, body) => {
+        await drain(body); // the download ends, then the upload hangs
+        return new Promise(() => undefined);
+      });
+
+      const pending = run({ messageId: m.id }, ctx);
+      await logged('media.store.downloaded');
+      clock.advance(MEDIA_JOB_BUDGET_MS);
+
+      expect(await pending).toEqual(ok({ status: 'failed' }));
+      expect((await reload(m.id)).mediaFailure).toBe('interrupted');
+      expect(logger.entries).toContainEqual(
+        expect.objectContaining({
+          event: 'media.store.failed',
+          outcome: 'deadline',
+          stage: 'upload',
+        }),
+      );
+    });
+
+    it('keeps the failed status when the abandoned step ends after the deadline', async () => {
+      const m = await insertMedia('image');
+      gateway.setContent(lineIdOf(m), { original: JPEG, contentType: 'image/jpeg' });
+      let release: (() => void) | undefined;
+      const put = storage.put.bind(storage);
+      vi.spyOn(storage, 'put').mockImplementation(async (...args) => {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        return put(...args);
+      });
+
+      const pending = run({ messageId: m.id }, ctx);
+      await vi.waitFor(() => {
+        expect(release).toBeDefined();
+      });
+      clock.advance(MEDIA_JOB_BUDGET_MS);
+      expect(await pending).toEqual(ok({ status: 'failed' }));
+
+      release?.();
+      await vi.waitFor(() => {
+        expect(storedKeys()).toEqual([]); // the late file is dropped
+      });
+      expect((await reload(m.id)).mediaStatus).toBe('failed');
+      expect(events().filter((e) => e === 'media.store.succeeded')).toEqual([]);
+    });
+
+    it('skips the video preview when the budget left cannot hold it', async () => {
+      const m = await insertMedia('video');
+      gateway.setContent(lineIdOf(m), {
+        original: MP4,
+        preview: PREVIEW_JPEG,
+        contentType: 'video/mp4',
+      });
+      const download = gateway.downloadContent.bind(gateway);
+      const spy = vi.spyOn(gateway, 'downloadContent').mockImplementationOnce(async (...args) => {
+        clock.advance(MEDIA_CONTENT_CALL_WORST_MS); // the original took its worst case
+        return download(...args);
+      });
+
+      expect(await run({ messageId: m.id }, ctx)).toEqual(ok({ status: 'ready' }));
+
+      const after = await reload(m.id);
+      expect(after.previewUrl).toBe(after.mediaUrl);
+      expect(spy).toHaveBeenCalledTimes(1); // no preview download
     });
   });
 

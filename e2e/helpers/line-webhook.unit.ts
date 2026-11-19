@@ -39,6 +39,7 @@ describe('fixture catalogue', () => {
         'message-file',
         'message-image',
         'message-image-gone',
+        'message-image-photo',
         'message-image-too-large',
         'message-location',
         'message-sticker',
@@ -91,6 +92,7 @@ describe('renderFixture', () => {
       `bigimg${vars.messageId}`,
     );
     expect(render('message-image-gone').events[0]?.message?.id).toBe(`gone${vars.messageId}`);
+    expect(render('message-image-photo').events[0]?.message?.id).toBe(`photo${vars.messageId}`);
   });
 
   it('follows the shapes of section 7.3', () => {
