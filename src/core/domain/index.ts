@@ -3,7 +3,6 @@ export * from './ai-history.logic';
 export * from './ai-prompt.logic';
 export * from './ai-reply.logic';
 export * from './reply-links.logic';
-export * from './canned-reply.model';
 export * from './chat.model';
 export * from './constants';
 export * from './contact.model';

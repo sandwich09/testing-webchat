@@ -1,8 +1,6 @@
 import { testIds } from '@/common/test-ids';
 import { AiSettingsSection } from '@/features/settings/AiSettingsSection';
-import { GuardrailsSection } from '@/features/settings/GuardrailsSection';
 import { GuardSection } from '@/features/settings/GuardSection';
-import { CannedRepliesSection } from '@/features/settings/CannedRepliesSection';
 import { KnowledgeSection } from '@/features/settings/KnowledgeSection';
 import { LineSettingsSection } from '@/features/settings/LineSettingsSection';
 import { copy } from '@/features/settings/settings.constants';
@@ -20,10 +18,8 @@ export function SettingsPage() {
         <h1 className="text-title font-bold">{copy.page.title}</h1>
         <AiSettingsSection />
         <GuardSection />
-        <GuardrailsSection />
         <LineSettingsSection />
         <KnowledgeSection />
-        <CannedRepliesSection />
         <UsageSection />
         <SystemStatusSection />
       </div>

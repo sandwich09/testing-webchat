@@ -1,6 +1,7 @@
 'use client';
 
-import { useId, useState, type SyntheticEvent, type ReactNode } from 'react';
+import { Plus, X } from 'lucide-react';
+import { useEffect, useId, useRef, useState, type SyntheticEvent, type ReactNode } from 'react';
 
 import { errorCodeOf } from '@/common/common.api';
 import { copy as commonCopy } from '@/common/common.constants';
@@ -14,19 +15,17 @@ import { Button } from '@/common/ui/button';
 import { Input } from '@/common/ui/input';
 import { Skeleton } from '@/common/ui/skeleton';
 import { Switch } from '@/common/ui/switch';
-import { Textarea } from '@/common/ui/textarea';
-import { GUARD_MAX_TOPICS, GUARD_REFUSAL_MAX_CHARS, type SettingsDto } from '@/contracts';
+import { GUARD_MAX_TOPICS, type SettingsDto } from '@/contracts';
 
 import { GuardTestBox } from './GuardTestBox';
 import { copy } from './settings.constants';
 import { useUpdateGuardSettings } from './settings.guard.hooks';
 import {
-  countGuardTopicLines,
+  addGuardTopic,
   fillTemplate,
+  focusAfterTopicRemoved,
   guardErrorText,
-  guardTopicsToText,
-  validateGuardRefusal,
-  validateGuardTopicsInput,
+  removeGuardTopic,
 } from './settings.guard.logic';
 import { SettingsRow } from './SettingsRow';
 import { SettingsSection } from './SettingsSection';
@@ -84,7 +83,7 @@ function FieldRow({
   children: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-3 border-b border-line py-3.5">
+    <div className="flex flex-col gap-3 py-3">
       <div>
         <p id={labelId} className="text-body font-bold">
           {label}
@@ -95,27 +94,6 @@ function FieldRow({
       </div>
       <div className="w-full">{children}</div>
     </div>
-  );
-}
-
-function SaveButton({
-  pending,
-  testId,
-  onClick,
-}: {
-  pending: boolean;
-  testId: string;
-  onClick?: () => void;
-}) {
-  return (
-    <Button
-      type={onClick === undefined ? 'submit' : 'button'}
-      onClick={onClick}
-      aria-disabled={pending || undefined}
-      data-testid={testId}
-    >
-      {commonCopy.action.save}
-    </Button>
   );
 }
 
@@ -163,35 +141,66 @@ function GuardSwitchRow({ settings }: { settings: SettingsDto }) {
 
 function TopicsRow({ settings }: { settings: SettingsDto }) {
   const update = useUpdateGuardSettings();
-  const saved = guardTopicsToText(settings.guard.topics);
-  // `null` follows the saved topics; a string is what the admin typed and has not saved yet.
-  const [draft, setDraft] = useState<string | null>(null);
+  const topics = settings.guard.topics;
+  // What is being typed; it stays after a failed save and clears when the topic is saved.
+  const [typed, setTyped] = useState('');
   const [error, setError] = useState<FieldError | null>(null);
-  const ids = { label: useId(), description: useId(), error: useId() };
+  const inputRef = useRef<HTMLInputElement>(null);
+  const removeRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const pendingFocus = useRef<number | 'input' | null>(null);
+  const ids = { label: useId(), description: useId(), error: useId(), counter: useId() };
 
-  const value = draft ?? saved;
-  const dirty = draft !== null;
+  // Focus moves once the list has rendered its new rows.
+  useEffect(() => {
+    const target = pendingFocus.current;
+    if (target === null) return;
+    pendingFocus.current = null;
+    if (target === 'input') inputRef.current?.focus();
+    else removeRefs.current[target]?.focus();
+  }, [topics]);
 
-  const save = () => {
+  const save = (next: string[], onSaved: () => void) => {
+    update.mutate(
+      { guardTopics: next },
+      {
+        onSuccess: () => {
+          onSaved();
+          showToast('success', commonCopy.toast.saved);
+        },
+        onError: (failure) => {
+          setError(saveError(failure));
+          inputRef.current?.focus();
+        },
+      },
+    );
+  };
+
+  const add = (event: SyntheticEvent) => {
+    event.preventDefault();
     if (update.isPending) return;
-    const check = validateGuardTopicsInput(value, settings.guard.enabled);
+    const check = addGuardTopic(topics, typed);
+    if (!check.ok) {
+      setError({ code: check.code, text: guardErrorText(check.code) });
+      inputRef.current?.focus();
+      return;
+    }
+    setError(null);
+    pendingFocus.current = 'input';
+    save(check.topics, () => {
+      setTyped('');
+    });
+  };
+
+  const remove = (index: number) => {
+    if (update.isPending) return;
+    const check = removeGuardTopic(topics, index, settings.guard.enabled);
     if (!check.ok) {
       setError({ code: check.code, text: guardErrorText(check.code) });
       return;
     }
     setError(null);
-    update.mutate(
-      { guardTopics: check.topics },
-      {
-        onSuccess: () => {
-          setDraft(null);
-          showToast('success', commonCopy.toast.saved);
-        },
-        onError: (failure) => {
-          setError(saveError(failure));
-        },
-      },
-    );
+    pendingFocus.current = focusAfterTopicRemoved(topics.length, index) ?? 'input';
+    save(check.topics, () => undefined);
   };
 
   return (
@@ -201,107 +210,84 @@ function TopicsRow({ settings }: { settings: SettingsDto }) {
       labelId={ids.label}
       descriptionId={ids.description}
     >
-      <Textarea
-        value={value}
-        onChange={(event) => {
-          const next = event.target.value;
-          setDraft(next === saved ? null : next);
-          setError(null);
-        }}
-        placeholder={copy.guard.topicsPlaceholder}
-        aria-labelledby={ids.label}
-        aria-describedby={error === null ? ids.description : `${ids.description} ${ids.error}`}
-        aria-invalid={error !== null || undefined}
-        data-testid={testIds.guardTopics}
-        className="max-h-[18.5rem] min-h-[7.5rem] overflow-y-auto"
-      />
-      <div className="mt-2 flex items-center justify-between gap-3">
-        <span
-          data-testid={testIds.guardTopicsCounter}
-          className="text-meta text-muted tabular-nums"
-        >
-          {fillTemplate(copy.guard.topicsCounter, {
-            n: countGuardTopicLines(value),
-            max: GUARD_MAX_TOPICS,
-          })}
-        </span>
-        {dirty ? (
-          <SaveButton pending={update.isPending} testId={testIds.guardTopicsSave} onClick={save} />
-        ) : null}
-      </div>
-      <FieldErrorText id={ids.error} testId={testIds.guardTopicsError} error={error} />
-    </FieldRow>
-  );
-}
-
-function RefusalRow({ settings }: { settings: SettingsDto }) {
-  const update = useUpdateGuardSettings();
-  const saved = settings.guard.refusalText;
-  const [draft, setDraft] = useState<string | null>(null);
-  const [error, setError] = useState<FieldError | null>(null);
-  const ids = { label: useId(), description: useId(), error: useId() };
-
-  const value = draft ?? saved;
-  const dirty = draft !== null;
-
-  const save = (event: SyntheticEvent) => {
-    event.preventDefault();
-    if (update.isPending || !dirty) return;
-    const check = validateGuardRefusal(value);
-    if (!check.ok) {
-      setError({ code: check.code, text: guardErrorText(check.code) });
-      return;
-    }
-    setError(null);
-    update.mutate(
-      { guardRefusalText: value.trim() },
-      {
-        onSuccess: () => {
-          setDraft(null);
-          showToast('success', commonCopy.toast.saved);
-        },
-        onError: (failure) => {
-          setError(saveError(failure));
-        },
-      },
-    );
-  };
-
-  return (
-    <FieldRow
-      label={copy.guard.refusal}
-      description={copy.guard.refusalDesc}
-      labelId={ids.label}
-      descriptionId={ids.description}
-    >
-      <form onSubmit={save} noValidate>
+      <form onSubmit={add} noValidate className="flex items-start gap-2">
         <Input
+          ref={inputRef}
           type="text"
-          value={value}
+          value={typed}
           onChange={(event) => {
-            const next = event.target.value;
-            setDraft(next === saved ? null : next);
+            setTyped(event.target.value);
             setError(null);
           }}
-          aria-labelledby={ids.label}
-          aria-describedby={error === null ? ids.description : `${ids.description} ${ids.error}`}
+          placeholder={copy.guard.topicsPlaceholder}
+          aria-label={copy.guard.topicInput}
+          aria-describedby={
+            error === null
+              ? `${ids.description} ${ids.counter}`
+              : `${ids.error} ${ids.description} ${ids.counter}`
+          }
           aria-invalid={error !== null || undefined}
-          data-testid={testIds.guardRefusal}
-          className="medium:h-11"
+          autoComplete="off"
+          data-testid={testIds.guardTopicInput}
+          className="min-w-0 flex-1"
         />
-        <div className="mt-2 flex items-center justify-between gap-3">
-          <span className="text-meta text-muted tabular-nums">
-            {fillTemplate(copy.guard.refusalCounter, {
-              n: value.length,
-              max: GUARD_REFUSAL_MAX_CHARS,
-            })}
-          </span>
-          {dirty ? (
-            <SaveButton pending={update.isPending} testId={testIds.guardRefusalSave} />
-          ) : null}
-        </div>
-        <FieldErrorText id={ids.error} testId={testIds.guardRefusalError} error={error} />
+        <Button
+          type="submit"
+          aria-disabled={update.isPending || undefined}
+          data-testid={testIds.guardTopicAdd}
+          className="medium:h-10"
+        >
+          <Plus aria-hidden="true" />
+          {copy.guard.topicAdd}
+        </Button>
       </form>
+      <FieldErrorText id={ids.error} testId={testIds.guardTopicsError} error={error} />
+      {topics.length === 0 ? (
+        <p className="mt-3 text-sub text-muted">{copy.guard.topicsEmpty}</p>
+      ) : (
+        <ul
+          aria-labelledby={ids.label}
+          data-testid={testIds.guardTopics}
+          className="mt-3 flex flex-col gap-1.5"
+        >
+          {topics.map((topic, index) => (
+            <li
+              key={topic}
+              data-testid={testIds.guardTopic}
+              data-topic={topic}
+              className="flex min-h-11 items-center gap-2 rounded-[13px] bg-rail py-1 pr-1 pl-3.5 medium:min-h-10"
+            >
+              <span className="min-w-0 flex-1 py-0.5 text-body break-words">{topic}</span>
+              <Button
+                ref={(node: HTMLButtonElement | null) => {
+                  removeRefs.current[index] = node;
+                }}
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-label={fillTemplate(copy.guard.topicRemoveAria, { topic })}
+                aria-disabled={update.isPending || undefined}
+                data-testid={testIds.guardTopicRemove}
+                onClick={() => {
+                  remove(index);
+                }}
+              >
+                <X aria-hidden="true" />
+                <span aria-hidden="true" className="hidden medium:inline">
+                  {copy.guard.topicRemove}
+                </span>
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p
+        id={ids.counter}
+        data-testid={testIds.guardTopicsCounter}
+        className="mt-2 text-meta text-muted tabular-nums"
+      >
+        {fillTemplate(copy.guard.topicsCounter, { n: topics.length, max: GUARD_MAX_TOPICS })}
+      </p>
     </FieldRow>
   );
 }
@@ -349,7 +335,6 @@ export function GuardSection() {
         <>
           <GuardSwitchRow settings={settings} />
           <TopicsRow settings={settings} />
-          <RefusalRow settings={settings} />
           <GuardTestRow settings={settings} />
           <p
             data-testid={testIds.guardBlockedToday}

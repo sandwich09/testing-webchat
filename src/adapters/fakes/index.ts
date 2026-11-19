@@ -32,8 +32,6 @@ export * from './fake-knowledge-repository';
 export * from './suites/knowledge-repository.suite';
 export * from './fake-usage-repository';
 export * from './suites/usage-repository.suite';
-export * from './fake-canned-reply-repository';
-export * from './suites/canned-reply-repository.suite';
 export * from './fake-webhook-event-repository';
 export * from './suites/webhook-event-repository.suite';
 export * from './fake-rate-limit-repository';

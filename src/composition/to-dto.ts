@@ -1,6 +1,5 @@
 import type {
   AiUsageRecord,
-  CannedReply,
   Contact,
   ErrorCode,
   KbDocument,
@@ -24,7 +23,6 @@ import type {
   UsageReport,
 } from '@/core/use-cases';
 import type {
-  CannedReplyDto,
   ContactDetailDto,
   ContactDto,
   ContactUsageResponse,
@@ -32,7 +30,6 @@ import type {
   DocumentDto,
   GetMessagesResponse,
   GuardrailStatsDto,
-  ListCannedRepliesResponse,
   ListContactsResponse,
   ListDocumentsResponse,
   MessageDto,
@@ -78,9 +75,10 @@ export const toContactDto = (c: Contact): ContactDto => ({
   aiReplying: c.aiState === 'replying',
   unreadCount: c.unreadCount,
   lastMessage:
-    c.lastMessageAt !== null && c.lastMessageBy !== null && c.lastMessageType !== null
+    c.lastMessageBy !== null && c.lastMessageType !== null
       ? {
-          at: iso(c.lastMessageAt),
+          // The list's sort time: the latest inbound message, else when the contact was created.
+          at: iso(c.lastMessageAt ?? c.createdAt),
           by: c.lastMessageBy,
           type: c.lastMessageType,
           text: c.lastMessagePreview,
@@ -175,7 +173,6 @@ export const toSettingsDto = (o: GetSettingsOutput): SettingsDto => {
     guard: {
       enabled: s.guardEnabled,
       topics: [...s.guardTopics],
-      refusalText: s.guardRefusalText,
       blockedToday: o.guardBlockedToday,
     },
     line: {
@@ -259,20 +256,8 @@ export const toListDocumentsResponse = (o: ListDocumentsOutput): ListDocumentsRe
 });
 
 // ---------------------------------------------------------------------------
-// Canned replies, uploads, usage
+// Uploads, usage
 // ---------------------------------------------------------------------------
-
-export const toCannedReplyDto = (r: CannedReply): CannedReplyDto => ({
-  id: r.id,
-  title: r.title,
-  text: r.text,
-  sortOrder: r.sortOrder,
-  updatedAt: iso(r.updatedAt),
-});
-
-export const toListCannedRepliesResponse = (
-  replies: readonly CannedReply[],
-): ListCannedRepliesResponse => ({ cannedReplies: replies.map(toCannedReplyDto) });
 
 /** The storage key stays on the server; the browser gets only what it needs to upload. */
 export const toUploadTargetDto = (t: UploadTarget): UploadTargetDto =>

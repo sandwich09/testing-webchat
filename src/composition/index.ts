@@ -67,9 +67,6 @@ export const extractDocument = forwardTo('extractDocument');
 export const deleteDocument = forwardTo('deleteDocument');
 export const listDocuments = forwardTo('listDocuments');
 export const getDocument = forwardTo('getDocument');
-export const saveCannedReply = forwardTo('saveCannedReply');
-export const deleteCannedReply = forwardTo('deleteCannedReply');
-export const listCannedReplies = forwardTo('listCannedReplies');
 export const getUsageReport = forwardTo('getUsageReport');
 export const getContactUsage = forwardTo('getContactUsage');
 export const getSystemStatus = forwardTo('getSystemStatus');
@@ -159,18 +156,15 @@ export {
   readWebhookBody,
 } from './http-request';
 export {
-  asCannedReplyId,
   asContactId,
   asDocumentId,
   asMessageId,
   asUploadId,
-  toCreateCannedReplyInput,
   toGetMessagesInput,
   toListContactsInput,
   toLocalStorageKey,
   toSendAdminMessageInput,
   toSetLineCredentialsInput,
-  toUpdateCannedReplyInput,
   toUpdateSettingsInput,
 } from './from-request';
 export * from './to-dto';

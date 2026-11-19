@@ -77,7 +77,4 @@ export const ERROR_CODES = [
   'knowledge.extract_empty',
   'knowledge.extract_refused',
   'knowledge.extract_interrupted',
-  // Canned replies
-  'canned_reply.not_found',
-  'canned_reply.limit_reached',
 ] as const;

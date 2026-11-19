@@ -10,7 +10,6 @@ export type UpdateSettingsInput = Partial<{
   aiInstructions: string;
   guardEnabled: boolean;
   guardTopics: string[];
-  guardRefusalText: string;
 }>;
 
 export type UpdateSettingsOutput = Settings;
@@ -46,9 +45,6 @@ export const makeUpdateSettings: (
       const topics = patch.guardTopics ?? current.guardTopics;
       if (enabled && topics.length === 0) return err('settings.guard_topics_required');
     }
-
-    if (patch.guardRefusalText !== undefined)
-      patch.guardRefusalText = patch.guardRefusalText.trim();
 
     const updated = await settings.update(patch);
     logger.log('info', 'settings.values.updated', {

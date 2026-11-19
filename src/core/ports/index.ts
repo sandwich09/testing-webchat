@@ -1,5 +1,4 @@
 export * from './access-token-signer.port';
-export * from './canned-reply.repository.port';
 export * from './chat-model.port';
 export * from './clock.port';
 export * from './contact.repository.port';

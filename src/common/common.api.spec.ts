@@ -8,7 +8,6 @@ import {
   errorCodeOf,
   getSettings,
   isClientError,
-  listCannedReplies,
   listContacts,
   lock,
   setUnauthorizedHandler,
@@ -50,7 +49,7 @@ const settings = {
     politeParticle: 'ค่ะ',
     instructions: '',
   },
-  guard: { enabled: false, topics: [], refusalText: 'คุยได้เฉพาะหัวข้อที่กำหนดไว้นะคะ', blockedToday: 0 },
+  guard: { enabled: false, topics: [], blockedToday: 0 },
   line: {
     configured: true,
     status: 'connected',
@@ -286,19 +285,6 @@ describe('shared endpoints', () => {
   it('getSettings rejects a body that leaks a field the contract does not have', async () => {
     fetchMock.mockResolvedValue(json({ ...settings, line: { ...settings.line, secret: 's' } }));
     await expect(getSettings()).rejects.toMatchObject({ code: 'internal.unexpected' });
-  });
-
-  it('listCannedReplies returns the array', async () => {
-    const reply = {
-      id: 'c1',
-      title: 'ราคา',
-      text: 'ราคา 100 บาท',
-      sortOrder: 0,
-      updatedAt: '2026-11-18T07:00:00.000Z',
-    };
-    fetchMock.mockResolvedValue(json({ cannedReplies: [reply] }));
-    await expect(listCannedReplies()).resolves.toEqual([reply]);
-    expect(call().url).toBe('/api/canned-replies');
   });
 
   it('listContacts in page mode sends filter, q and before, and leaves out an empty q', async () => {

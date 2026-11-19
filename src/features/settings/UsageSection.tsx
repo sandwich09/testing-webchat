@@ -4,11 +4,12 @@ import { useMemo, useState, type ReactNode } from 'react';
 
 import { copy as commonCopy } from '@/common/common.constants';
 import { useHydrated } from '@/common/common.hooks';
-import { formatInt, formatUsdForScreen } from '@/common/common.logic';
+import { formatDateKey, formatInt, formatUsdForScreen } from '@/common/common.logic';
 import { ContactAvatar } from '@/common/ContactAvatar';
 import { EmptyState } from '@/common/EmptyState';
 import { ErrorState } from '@/common/ErrorState';
 import { testIds } from '@/common/test-ids';
+import { Select } from '@/common/ui/select';
 import { Skeleton } from '@/common/ui/skeleton';
 import {
   Table,
@@ -33,9 +34,6 @@ const DASH = '—';
 
 type DetailTarget = { id: string; displayName: string };
 
-const SELECT_CLASS =
-  'h-11 w-full rounded-[13px] border border-line bg-surface px-3 text-[16px] text-fg outline-none medium:h-10 medium:w-auto medium:text-[15px] focus-visible:border-accent-strong focus-visible:ring-[3px] focus-visible:ring-accent-strong/30';
-
 const NUM_HEAD = 'text-right text-sub font-normal text-muted';
 
 function Report({
@@ -50,7 +48,7 @@ function Report({
     contacts.length === 0 && ingest.count === 0 && guard.count === 0 && report.replyCount === 0;
   const disclaimer = (
     <p data-testid={testIds.usageDisclaimer} className="text-sub text-muted">
-      {copy.usage.disclaimer.replace('{date}', report.priceTableDate)}
+      {copy.usage.disclaimer.replace('{date}', formatDateKey(report.priceTableDate))}
     </p>
   );
 
@@ -202,7 +200,7 @@ function Report({
 /** AI cost section: month picker, per-customer table, file reading and screening rows, totals (ui-screens 9.9). */
 export function UsageSection() {
   // The months come from the browser's clock, so they render after hydration (the server's clock
-  // can be in another month); until then the select is empty and the report shows its skeleton.
+  // can be in another month); until then the select has no options and the report shows its skeleton.
   const hydrated = useHydrated();
   const options = useMemo(() => (hydrated ? monthOptions(new Date()) : []), [hydrated]);
   const [picked, setMonth] = useState<string | null>(null);
@@ -242,21 +240,15 @@ export function UsageSection() {
       }}
     >
       <SettingsRow>
-        <select
+        <Select
           aria-label={copy.usage.monthLabel}
-          value={month}
-          onChange={(event) => {
-            setMonth(event.target.value);
-          }}
-          data-testid={testIds.usageMonth}
-          className={SELECT_CLASS}
-        >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+          options={options}
+          value={month === '' ? null : month}
+          onValueChange={setMonth}
+          testId={testIds.usageMonth}
+          optionTestId={testIds.usageMonthOption}
+          className="medium:w-[160px]"
+        />
       </SettingsRow>
       {body}
       <UsageDetailDialog

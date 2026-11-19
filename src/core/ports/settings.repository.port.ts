@@ -4,7 +4,7 @@ export interface SettingsRepository {
   /**
    * Single row. Created with the defaults when missing: aiEnabled false, DEFAULT_AI_MODEL,
    * DEFAULT_AI_DAILY_BUDGET_USD, DEFAULT_POLITE_PARTICLE, empty instructions, guardEnabled false,
-   * no guard topics, DEFAULT_GUARD_REFUSAL_TEXT.
+   * no guard topics.
    */
   get(): Promise<Settings>;
   update(
@@ -18,7 +18,6 @@ export interface SettingsRepository {
         | 'aiInstructions'
         | 'guardEnabled'
         | 'guardTopics'
-        | 'guardRefusalText'
       >
     >,
   ): Promise<Settings>;

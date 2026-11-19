@@ -389,6 +389,7 @@ Helper อื่นใน `e2e/helpers/`:
 | `copy.ts` | `uiCopy(key, vars?)`: ถ้อยคำตาม key ของ [ui-copy](../specs/ui-copy.md) อ่านจากตารางในเอกสารนั้น เพราะกฎ boundary ของ lint ไม่ให้ `e2e/` import `src/features/*/*.constants.ts` และ `src/common/*.constants.ts` ข้อความที่มาจาก domain (`handoffText`, `DEFAULT_GUARD_REFUSAL_TEXT`) import จาก `src/core/domain` |
 | `inbox.ts` | `row`, `bubbles`, `bubbleBlock` (ฟองพร้อมผู้ส่ง เวลา และบรรทัดสถานะการส่ง), `systemLine`, `openChat`, `backToList`, `showInfoPanel`, `hideInfoPanel`, `sendText`, `toastWith(page, text, tone?)` (toast ที่มี `data-testid="toast"` และข้อความนั้น `tone` กรองด้วย `data-type` ตาม [ui-screens](../specs/ui-screens.md#10-toast)), `uniqueSuffix` |
 | `settings.ts` | `getSettings`, `patchSettings`, `listKbDocuments`, `deleteKbDocument` ผ่าน API ใช้เฉพาะอ่านค่าเดิมและคืนค่ารวมของระบบใน `afterEach` และ `finally` ของไฟล์ serial |
+| `layout.ts` | `expectDocumentNotScrollable(page)`: เลื่อนทุกกล่องที่เลื่อนได้จนสุด หมุนล้อเมาส์กลางหน้า กด End แล้วตรวจว่า document ไม่เลื่อนและไม่สูงกว่าหน้าต่าง ([ui-screens ข้อ 1.4](../specs/ui-screens.md#14-ช่วงความกว้างจอ)) |
 
 ## 8. ไฟล์สื่อและ PDF สำหรับทดสอบ
 
@@ -457,6 +458,14 @@ Helper อื่นใน `e2e/helpers/`:
 | 2.9 | พิมพ์ข้อความแล้วกด Shift+Enter | ช่องพิมพ์มีสองบรรทัด ยังไม่ส่ง |
 | 2.10 | `postLineWebhook("unfollow.json", v)` | `composer-disabled-reason` มองเห็น, `composer-input` disabled, `row(name)` มี `data-follow="unfollowed"` |
 
+Test ที่สองในไฟล์เดียวกัน (ลำดับของรายชื่อ ตรวจแค่ลำดับของสองแถวนี้ เพราะเส้นอื่นเพิ่มลูกค้าพร้อมกัน):
+
+| ขั้น | ทำ | ตรวจ |
+| --- | --- | --- |
+| 2.11 | `createContactWithMessage` ลูกค้า A แล้วลูกค้า B เปิดแชทของ A | |
+| 2.12 | แอดมินตอบ A แล้วกลับไปรายชื่อ | `row(A)` มีข้อความที่ตอบ และ `row(B)` ยังอยู่เหนือ `row(A)` |
+| 2.13 | ลูกค้า A ส่งข้อความใหม่ (`postLineWebhook("message-text.json", nextEventVars(vA))`) | `row(A)` มีข้อความใหม่ และขึ้นเหนือ `row(B)` โดยไม่โหลดหน้าใหม่ |
+
 ### เส้นที่ 3: AI ตอบแทน
 
 `test.describe("เส้นที่ 3")` ในไฟล์ `e2e/global-state.serial.spec.ts` project `serial-desktop` และ `serial-mobile` (ต้องการ kill switch เปิด)
@@ -483,8 +492,9 @@ Helper อื่นใน `e2e/helpers/`:
 | ขั้น | ทำ | ตรวจ |
 | --- | --- | --- |
 | 4.1 | สร้างลูกค้า เปิดสวิตช์ AI ของลูกค้า | `thread-ai-switch` `aria-checked="true"` |
-| 4.2 | เปิด `/settings` กด `settings-kill-switch` | `aria-checked="false"` และ toast `settings.ai.killSwitchOffToast` |
-| 4.3 | เปิดแชทของลูกค้า | `thread-ai-switch` disabled และ `aria-checked="false"`, `thread-ai-label` เป็น `inbox.ai.labelKilled`, `info-ai-switch` disabled, `info-ai-note` เป็น `inbox.ai.noteKilled` |
+| 4.2a | เปิด `/settings` focus `settings-model` กด Enter แล้ว End แล้ว Escape จากนั้นคลิก `usage-month` แล้วคลิก `usage-month-option` ตัวที่สอง และเรียก `expectDocumentNotScrollable` | listbox เปิดพร้อม `settings-model-option` สามตัว ตัวที่ `aria-selected="true"` คือค่าที่บันทึก, End ทำให้ตัวสุดท้ายมี `data-active` และเป็น `aria-activedescendant`, Escape ปิด listbox `aria-expanded="false"` focus อยู่ที่ปุ่ม และ `data-value` ไม่เปลี่ยน, `usage-month` มี `data-value` ของเดือนที่เลือกและ listbox ปิด, document ไม่เลื่อน |
+| 4.2 | กด `settings-kill-switch` | `aria-checked="false"` และ toast `settings.ai.killSwitchOffToast` |
+| 4.3 | เปิด `/chats` แล้วแชทของลูกค้า เรียก `expectDocumentNotScrollable` ทั้งสองหน้า (project desktop ตรวจที่ 1535×920 อีกครั้ง) | `thread-ai-switch` disabled และ `aria-checked="false"`, `thread-ai-label` เป็น `inbox.ai.labelKilled`, `info-ai-switch` disabled, `info-ai-note` เป็น `inbox.ai.noteKilled` |
 | 4.4 | ลูกค้าส่ง `q` แล้ว `waitAiIdle` | `stubClaudeRequests({ match: q })` ว่าง |
 | 4.5 | กลับหน้าตั้งค่า เปิด `settings-kill-switch` | |
 | 4.6 | เปิดแชทเดิม | `thread-ai-switch` enabled และ `aria-checked="true"` (ค่าเดิมกลับมา) |
@@ -564,17 +574,17 @@ Helper อื่นใน `e2e/helpers/`:
 
 ### เส้นที่ 9: ขอบเขตหัวข้อ
 
-`test.describe("เส้นที่ 9")` ในไฟล์ `e2e/global-state.serial.spec.ts` project `serial-desktop` และ `serial-mobile` (แตะค่ารวมของระบบ ต้องการ kill switch เปิด) ข้อความปฏิเสธใช้ค่าที่บันทึกไว้ (seed ใช้ค่าเริ่มต้น `DEFAULT_GUARD_REFUSAL_TEXT`)
+`test.describe("เส้นที่ 9")` ในไฟล์ `e2e/global-state.serial.spec.ts` project `serial-desktop` และ `serial-mobile` (แตะค่ารวมของระบบ ต้องการ kill switch เปิด) ข้อความปฏิเสธที่คาดคือ `guardRefusalText(คำลงท้ายที่บันทึกไว้)` (seed ใช้ `ค่ะ`)
 
 | ขั้น | ทำ | ตรวจ |
 | --- | --- | --- |
-| 9.1 | เปิด `/settings` อ่านค่าเดิมของ `guard-topics` และ `guard-blocked-today` เก็บเป็น `before` (ค่าอาจไม่เป็น 0 เพราะ project อื่นรันก่อน) | `settings-section-guard` อยู่ถัดจาก `settings-section-ai` |
-| 9.2 | กรอก `guard-topics` เป็นสองบรรทัด `มุกตลกไทย` และ `มุกจากภาพยนตร์` กด `guard-topics-save` แล้วกด `guard-switch` | `guard-topics-counter` แสดง 2 และ `guard-switch` มี `aria-checked="true"` |
+| 9.1 | เปิด `/settings` อ่าน `guard-blocked-today` เก็บเป็น `before` (ค่าอาจไม่เป็น 0 เพราะ project อื่นรันก่อน) | `settings-section-guard` อยู่ถัดจาก `settings-section-ai` และ `guard-topics-counter` แสดงจำนวนหัวข้อเดิม |
+| 9.2 | กด `guard-topic-remove` ของหัวข้อแรกจนรายการว่าง พิมพ์ `มุกตลกไทย` ใน `guard-topic-input` กด Enter แล้วพิมพ์ ` มุกจากภาพยนตร์ ` กด `guard-topic-add` จากนั้นพิมพ์ `มุกตลกไทย` ซ้ำแล้วกด Enter และล้างช่อง แล้วกด `guard-switch` | หลังเพิ่มแต่ละครั้ง `guard-topic-input` ว่างและมี focus, `guard-topic` สองแถวตามลำดับ (`data-topic`), `guard-topics-counter` แสดง 2, หัวข้อซ้ำได้ `guard-topics-error` `data-code="duplicate_topic"` โดยข้อความในช่องยังอยู่และ `GET /api/settings` มีสองหัวข้อ, `guard-switch` มี `aria-checked="true"` |
 | 9.3 | `createContactWithMessage` เปิดสวิตช์ AI ของลูกค้า แล้ว `stubClaudeNextReply({ match: qa, kind: "guard", json: { allowed: true, matchedTopic: "มุกตลกไทย" } })` และ `stubClaudeNextReply({ match: qa, kind: "reply", json: { reply: "มุกทดสอบ " + suffix, needsAdmin: false, handoffReason: null } })` โดย `qa = "เล่ามุกหน่อย " + suffix` | |
 | 9.4 | ส่ง `qa` | `message-bubble[data-author="ai"]` มี `"มุกทดสอบ " + suffix`, `stubClaudeRequests({ match: qa, purpose: "guard" })` มีหนึ่งคำขอที่ `body.model` เป็น `GUARD_MODEL` และ `stubClaudeRequests({ match: qa, purpose: "reply" })` มีหนึ่งคำขอที่ `system[0].text` มี `<topic_guard>` |
-| 9.5 | `stubClaudeNextReply({ match: qb, json: { allowed: false, matchedTopic: null } })` โดย `qb = "ร้านเปิดกี่โมง " + suffix` แล้วส่ง `qb` | `stubLineRequests` ของ `reply` หรือ `push` ถึง `v.userId` มีข้อความเท่ากับข้อความปฏิเสธที่บันทึกไว้, `message-bubble[data-author="ai"]` ใหม่มีข้อความนั้นและ `message-sender` เป็น `inbox.message.senderAi`, `system-line[data-event-code="guard.blocked"]` มองเห็นใต้ฟองนั้น |
+| 9.5 | `stubClaudeNextReply({ match: qb, json: { allowed: false, matchedTopic: null } })` โดย `qb = "ร้านเปิดกี่โมง " + suffix` แล้วส่ง `qb` | `stubLineRequests` ของ `reply` หรือ `push` ถึง `v.userId` มีข้อความเท่ากับ `guardRefusalText(คำลงท้ายที่บันทึกไว้)`, `message-bubble[data-author="ai"]` ใหม่มีข้อความนั้นและ `message-sender` เป็น `inbox.message.senderAi`, `system-line[data-event-code="guard.blocked"]` มองเห็นใต้ฟองนั้น |
 | 9.6 | `waitAiIdle` | `stubClaudeRequests({ match: qb, purpose: "reply" })` ว่าง, `row(name)` มี `data-needs-admin="false"` และ `thread-ai-switch` ยังเป็น `aria-checked="true"` |
 | 9.7 | เปิด `/settings` | `guard-blocked-today` แสดงค่า `before` + 1 |
-| 9.8 | finally: ปิด `guard-switch` และคืน `guard-topics` เป็นค่าเดิมแล้วบันทึก | `guard-switch` `aria-checked="false"` ขอบเขตหัวข้อปิดก่อนเส้นอื่นของไฟล์นี้ |
+| 9.8 | finally: ปิด `guard-switch` ทางหน้าจอ และคืนหัวข้อเดิมด้วย `patchSettings` | `guard-switch` `aria-checked="false"` ขอบเขตหัวข้อปิดก่อนเส้นอื่นของไฟล์นี้ |
 
 ข้อ 9.7 ตรวจ "เพิ่มขึ้นหนึ่ง" แทน "เป็น 1" เพราะตัวนับเป็นยอดของทั้งวันและเส้นนี้รันทั้งใน `serial-desktop` และ `serial-mobile`

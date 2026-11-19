@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { unlockBodySchema } from './access.contract';
-import {
-  createCannedReplyBodySchema,
-  updateCannedReplyBodySchema,
-} from './canned-replies.contract';
-import { CANNED_TEXT_MAX_CHARS, CANNED_TITLE_MAX_CHARS } from './limits.contract';
 import { documentParamsSchema, knowledgeFilePartSchema } from './knowledge.contract';
 import { localStorageParamsSchema, writeLocalUploadQuerySchema } from './local-storage.contract';
 import { discardUploadParamsSchema, issueUploadBodySchema } from './uploads.contract';
@@ -20,40 +15,6 @@ describe('unlockBodySchema', () => {
     expect(unlockBodySchema.safeParse({ code: '   ' }).success).toBe(false);
     expect(unlockBodySchema.safeParse({ code: 'x'.repeat(201) }).success).toBe(false);
     expect(unlockBodySchema.safeParse({ code: 'a', extra: 1 }).success).toBe(false);
-  });
-});
-
-describe('canned reply bodies', () => {
-  it('validates create', () => {
-    expect(createCannedReplyBodySchema.safeParse({ title: 'Hi', text: 'Hello' }).success).toBe(
-      true,
-    );
-    expect(createCannedReplyBodySchema.safeParse({ title: ' ', text: 'Hello' }).success).toBe(
-      false,
-    );
-    expect(createCannedReplyBodySchema.safeParse({ title: 'Hi' }).success).toBe(false);
-    expect(
-      createCannedReplyBodySchema.safeParse({
-        title: 'x'.repeat(CANNED_TITLE_MAX_CHARS + 1),
-        text: 'a',
-      }).success,
-    ).toBe(false);
-    expect(
-      createCannedReplyBodySchema.safeParse({
-        title: 'a',
-        text: 'x'.repeat(CANNED_TEXT_MAX_CHARS + 1),
-      }).success,
-    ).toBe(false);
-  });
-
-  it('validates update: at least one field, sortOrder 0 to 10000', () => {
-    expect(updateCannedReplyBodySchema.safeParse({ sortOrder: 0 }).success).toBe(true);
-    expect(updateCannedReplyBodySchema.safeParse({ sortOrder: 10_000 }).success).toBe(true);
-    expect(updateCannedReplyBodySchema.safeParse({ sortOrder: 10_001 }).success).toBe(false);
-    expect(updateCannedReplyBodySchema.safeParse({ sortOrder: -1 }).success).toBe(false);
-    expect(updateCannedReplyBodySchema.safeParse({ sortOrder: 1.5 }).success).toBe(false);
-    expect(updateCannedReplyBodySchema.safeParse({}).success).toBe(false);
-    expect(updateCannedReplyBodySchema.safeParse({ title: 'a', extra: 1 }).success).toBe(false);
   });
 });
 
@@ -241,7 +202,6 @@ describe('index', () => {
   it('re-exports the topic guard limits and normalizeGuardTopics', () => {
     expect(contracts.GUARD_MAX_TOPICS).toBe(20);
     expect(contracts.GUARD_TOPIC_MAX_CHARS).toBe(80);
-    expect(contracts.GUARD_REFUSAL_MAX_CHARS).toBe(300);
     expect(contracts.GUARD_TEST_MAX_CHARS).toBe(1000);
     expect(contracts.GUARD_MODEL).toBe('claude-haiku-5-5');
     expect(contracts.GUARD_MAX_TOKENS).toBe(2000);

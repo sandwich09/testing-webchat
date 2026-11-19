@@ -393,7 +393,7 @@ export type AiReplyRunOutcome =
     - `settings.recordAiError({ code: o.error, at: now })`
     - `raiseHandoff(c2, o.handoff)` คืน `handoff` ไม่ส่งอะไรให้ลูกค้า
 14. ข้อความที่จะส่ง: `ok` ใช้ `text` จากข้อ 10, `handoff` ใช้ `handoffText(s2.aiPoliteParticle)` เสมอ ไม่ส่ง `reply` ของโมเดล ([ai-prompt ข้อ 5.4](../specs/ai-prompt.md#54-จากผลไปสู่การกระทำ))
-15. `id = ids.messageId()`, `messages.insertOutboundIfAbsent({ id, author: "ai", type: "text", text, deliveryStatus: "pending", retryKey: id, createdAt: now, ... })`, `contacts.recordOutbound(contactId, { at: now, preview, by: "ai" })`
+15. `id = ids.messageId()`, `messages.insertOutboundIfAbsent({ id, author: "ai", type: "text", text, deliveryStatus: "pending", retryKey: id, createdAt: now, ... })`, `contacts.recordOutbound(contactId, { preview, by: "ai" })` (ไม่แก้ `lastMessageAt` ลำดับของรายชื่อจึงไม่เปลี่ยน)
 16. `usage.insert({ ..., messageId: id, outcome: o.outcome, error: null })`
 17. `sent = deliverOutbound(message, c2, access, "auto")`
 18. ถ้า `sent.deliveryStatus = failed`: `raiseHandoff(c2, "ai_failed")` คืน `handoff`
@@ -405,7 +405,7 @@ export type AiReplyRunOutcome =
 `draft` คือแถว AiUsage ฉบับร่างของการเรียกที่ตัดสินว่ากัน (`kind: "guard"` จากข้อ 4.3 หรือ `kind: "reply"` จากข้อ 9) และ `by` เป็น `"classifier"` หรือ `"chat_model"` ใช้เป็น `reason` ของ log
 
 1. ตรวจซ้ำก่อนส่งเหมือนข้อ 12: `s2 = settings.get()`, `c2 = contacts.findById(contactId)` ถ้า kill switch ปิด, AI ตอบแทนของลูกค้าปิด หรือเลิกติดตาม: `usage.insert({ ...draft, messageId: null, outcome: "cancelled", error: null })`, log `ai.reply.cancelled` คืน `cancelled`
-2. `id = ids.messageId()`, `messages.insertOutboundIfAbsent({ id, author: "ai", type: "text", text: s2.guardRefusalText, deliveryStatus: "pending", retryKey: id, createdAt: now, ... })`, `contacts.recordOutbound(contactId, { at: now, preview, by: "ai" })`
+2. `id = ids.messageId()`, `messages.insertOutboundIfAbsent({ id, author: "ai", type: "text", text: guardRefusalText(s2.aiPoliteParticle), deliveryStatus: "pending", retryKey: id, createdAt: now, ... })`, `contacts.recordOutbound(contactId, { preview, by: "ai" })` (ไม่แก้ `lastMessageAt` ลำดับของรายชื่อจึงไม่เปลี่ยน)
 3. `messages.insertEvent` ชนิด event, author system, direction internal, `eventCode = guard.blocked`
 4. `usage.insert({ ...draft, messageId: id, outcome: "blocked", error: null })`
 5. log `guard.blocked` พร้อม `reason: by`
@@ -440,7 +440,7 @@ Test (ทุกข้อใช้ Clock ปลอม และ adapter ปลอ
 - kill switch ปิด → `skipped: kill_switch_off` ไม่เรียก `TopicGuard`
 - ผ่าน (`allowed: true`) → เรียก `TopicGuard` หนึ่งครั้งก่อน `KnowledgeSource` และ `ChatModel`, AiUsage kind guard outcome ok แล้ว AiUsage kind reply ตามปกติ, คำสั่งระบบที่โมเดลได้รับลงท้ายด้วยผลของ `buildGuardRulesBlock(topics)`
 - คำขอที่ `TopicGuard` ได้รับ: `model` เป็น `GUARD_MODEL` แม้ตั้งโมเดลตอบแชทเป็น Opus, `maxTokens` เป็น `GUARD_MAX_TOKENS`, `timeoutMs` เป็น `GUARD_TIMEOUT_MS`, `topics` ตามที่บันทึก, `message` เป็น turn สุดท้ายของลูกค้า (ข้อความรัวสามข้อความรวมเป็นหนึ่ง) และ `context` ไม่เกิน `GUARD_CONTEXT_TURNS` turn ก่อนหน้า
-- ถูกกัน (`allowed: false`) → `blocked`, ไม่เรียก `KnowledgeSource` และ `ChatModel`, ลูกค้าได้ `guardRefusalText` ผ่าน reply token, ข้อความผู้ส่ง ai, บรรทัด `guard.blocked`, AiUsage kind guard outcome blocked พร้อม messageId ของข้อความปฏิเสธ, `needsAdmin` ไม่เปลี่ยน และ `aiEnabled` ยังเป็น true
+- ถูกกัน (`allowed: false`) → `blocked`, ไม่เรียก `KnowledgeSource` และ `ChatModel`, ลูกค้าได้ `guardRefusalText(aiPoliteParticle)` ผ่าน reply token, ข้อความผู้ส่ง ai, บรรทัด `guard.blocked`, AiUsage kind guard outcome blocked พร้อม messageId ของข้อความปฏิเสธ, `needsAdmin` ไม่เปลี่ยน และ `aiEnabled` ยังเป็น true
 - ถูกกันขณะ reply token หมดอายุ → ส่งข้อความปฏิเสธด้วย push พร้อม retryKey เท่ากับ id ของข้อความ
 - ถูกกันแล้วส่งไม่สำเร็จ (`line.unavailable`) → ข้อความ failed และขึ้นรอแอดมิน `ai_failed`
 - kill switch ถูกปิดระหว่างการคัดกรองที่ได้ผลกัน → `cancelled` ไม่ส่งข้อความปฏิเสธ, AiUsage kind guard outcome cancelled, ไม่มีบรรทัดเหตุการณ์
@@ -450,7 +450,8 @@ Test (ทุกข้อใช้ Clock ปลอม และ adapter ปลอ
 - `stop = truncated` → AiUsage outcome failed error `ai.truncated`, `ai_failed`
 - `verdict = null` (ไม่ตรง schema) → AiUsage outcome failed error `ai.invalid_output`, `ai_failed`
 - `allowed: true` แต่ `matchedTopic` ไม่อยู่ในรายการหัวข้อ → ยังผ่าน และถือ `matchedTopic` เป็น null
-- ผ่านการคัดกรอง แต่โมเดลตอบแชทคืน `needsAdmin` true เหตุผล `unsafe_or_offtopic` → ส่ง `guardRefusalText` ไม่ใช่ `handoffText`, บรรทัด `guard.blocked`, AiUsage kind reply outcome blocked, ไม่ขึ้นรอแอดมิน
+- ถูกกันหลังเปลี่ยนคำลงท้ายเป็น "ครับ" → ข้อความปฏิเสธของครั้งนั้นลงท้าย "นะครับ" (อ่านคำลงท้ายตอนส่ง)
+- ผ่านการคัดกรอง แต่โมเดลตอบแชทคืน `needsAdmin` true เหตุผล `unsafe_or_offtopic` → ส่ง `guardRefusalText(aiPoliteParticle)` ไม่ใช่ `handoffText`, บรรทัด `guard.blocked`, AiUsage kind reply outcome blocked, ไม่ขึ้นรอแอดมิน
 - ขอบเขตหัวข้อปิด และโมเดลคืน `unsafe_or_offtopic` → ขึ้นรอแอดมิน `ai_unsafe_or_offtopic` ตามเดิม
 - ต้นทุนของการคัดกรองเมื่อเช้านับรวมใน `todayCost` ของข้อความถัดไป (งบเต็มเพราะการคัดกรองแล้ว → `budget_reached`)
 - log ของการคัดกรองไม่มีข้อความของลูกค้า หัวข้อ หรือข้อความปฏิเสธ
@@ -526,7 +527,7 @@ Test (ทุกข้อใช้ Clock ปลอม และ adapter ปลอ
    3. `orig = storage.inspect(keys.original)` ได้ `upload.not_found` คืนต่อ, `sizeBytes > rule.maxBytes` คืน `upload.too_large`, `sniffContentType(orig.leadingBytes) !== contentType` คืน `upload.content_mismatch`
    4. `prev = storage.inspect(keys.preview)` ไม่พบคืน `upload.not_found`, ไม่ใช่ JPEG คืน `upload.content_mismatch`, เกิน `PREVIEW_MAX_BYTES` คืน `upload.too_large`
 6. `{ inserted, message } = messages.insertOutboundIfAbsent({ id: messageId, contactId, direction: "outbound", author: "admin", type, text, mediaUrl: orig.publicUrl, previewUrl: prev.publicUrl, mediaStatus: media ? "ready" : null, deliveryStatus: "pending", retryKey: messageId, createdAt: now, ... })` ถ้า `inserted` เป็น false (คำขอซ้ำที่มาพร้อมกัน) ทำตามข้อ 1 กับแถวที่ได้
-7. `contacts.recordOutbound(contactId, { at: now, preview: previewOf(message), by: "admin" })`
+7. `contacts.recordOutbound(contactId, { preview: previewOf(message), by: "admin" })` (ไม่แก้ `lastMessageAt` ลำดับของรายชื่อจึงไม่เปลี่ยน)
 8. ถ้า `c.aiEnabled` เป็น true: `contacts.setAiEnabled(contactId, false)` และ `messages.insertEvent` ด้วย `eventCode = ai.turned_off_by_admin` ตาม [ai-reply](../specs/ai-reply.md#เมื่อแอดมินตอบเอง) ไม่มีการหยุดแบบมีเวลา AI กลับมาเมื่อแอดมินเปิดสวิตช์เองเท่านั้น
 9. ถ้า `c.needsAdmin` เป็น true: `contacts.clearNeedsAdmin(contactId)` เพราะแอดมินตอบแล้ว
 10. `final = deliverOutbound(message, c, access, "auto")` คืน `ok(final)`
@@ -682,7 +683,7 @@ Test: ไฟล์มีอยู่ → stream พร้อมชนิด, key
 
 ## ShowTypingToCustomer
 
-**หน้าที่:** ขอให้ LINE แสดง loading ในแอปของลูกค้าเมื่อแอดมินเริ่มพิมพ์ ตาม [webchat-inbox](../specs/webchat-inbox.md#ช่องตอบ) ข้อ 9
+**หน้าที่:** ขอให้ LINE แสดง loading ในแอปของลูกค้าเมื่อแอดมินเริ่มพิมพ์ ตาม [webchat-inbox](../specs/webchat-inbox.md#ช่องตอบ) ข้อ 8
 
 | | |
 | --- | --- |
@@ -762,7 +763,7 @@ Test: unreadCount 3 → 0 และ updatedSeq เพิ่ม, ไม่มี�
 
 Use case นี้แก้ข้อมูลในข้อ 1 เพราะ [ai-reply](../specs/ai-reply.md#งานที่ค้าง) กำหนดให้รอบ polling ของรายชื่อเป็นผู้คืนสภาพ
 
-Test: งานที่ค้างเกินเวลา → แชทรอแอดมินเหตุผล `ai_timeout`, aiState idle และมีบรรทัด `handoff.ai_timeout` หนึ่งบรรทัด, งานที่ยังไม่เกินเวลา → ไม่ถูกแตะ, ตัวกรอง unread และ needs_admin, ค้นหาไม่สนตัวพิมพ์, การแบ่งหน้าด้วย cursor ไม่ข้ามหรือซ้ำแถวที่ sortAt เท่ากัน, โหมด changes คืนเฉพาะแถวที่ updatedSeq มากกว่า cursor, highWater ของหน้าแรกอ่านก่อน list
+Test: งานที่ค้างเกินเวลา → แชทรอแอดมินเหตุผล `ai_timeout`, aiState idle และมีบรรทัด `handoff.ai_timeout` หนึ่งบรรทัด, งานที่ยังไม่เกินเวลา → ไม่ถูกแตะ, ตัวกรอง unread และ needs_admin, ค้นหาไม่สนตัวพิมพ์, การแบ่งหน้าด้วย cursor ไม่ข้ามหรือซ้ำแถวที่ sortAt เท่ากัน, ข้อความของแอดมินหรือ AI ไม่เปลี่ยนลำดับ (sortAt คือข้อความล่าสุดของลูกค้า), โหมด changes คืนเฉพาะแถวที่ updatedSeq มากกว่า cursor, highWater ของหน้าแรกอ่านก่อน list
 
 ## GetContact
 
@@ -809,25 +810,24 @@ Test: latest คืน 50 แถวล่าสุดเรียงเก่า
 
 `line.status` ของ DTO คำนวณใน route จาก `lineConfigured` และ `lastLineError` ตาม [api-contract](api-contract.md#dto-ร่วม)
 
-Test: ไม่มีแถว → ได้ค่าเริ่มต้นตาม [project-setup](project-setup.md#101-แกนกลาง) (kill switch ปิด, ขอบเขตหัวข้อปิด, หัวข้อว่าง, ข้อความปฏิเสธเป็น `DEFAULT_GUARD_REFUSAL_TEXT`), webhookUrl ไม่มี `//`, todayCost ไม่รวมเมื่อวานตามเวลาไทย, guardBlockedToday นับเฉพาะ kind guard outcome blocked ของวันนี้ตามเวลาไทย (แถว ok, failed และ kind reply outcome blocked ไม่นับ), pollIntervalMs เท่ากับ config
+Test: ไม่มีแถว → ได้ค่าเริ่มต้นตาม [project-setup](project-setup.md#101-แกนกลาง) (kill switch ปิด, ขอบเขตหัวข้อปิด, หัวข้อว่าง), webhookUrl ไม่มี `//`, todayCost ไม่รวมเมื่อวานตามเวลาไทย, guardBlockedToday นับเฉพาะ kind guard outcome blocked ของวันนี้ตามเวลาไทย (แถว ok, failed และ kind reply outcome blocked ไม่นับ), pollIntervalMs เท่ากับ config
 
 ## UpdateSettings
 
 | | |
 | --- | --- |
-| Input | `Partial<{ aiEnabled: boolean; aiModel: AiModelId; aiDailyBudget: NanoUsd; aiPoliteParticle: PoliteParticle; aiInstructions: string; guardEnabled: boolean; guardTopics: string[]; guardRefusalText: string }>` (route ตรวจรูปแบบแล้วตาม [api-contract](api-contract.md#patch-apisettings) และต้องมีอย่างน้อยหนึ่ง field) |
+| Input | `Partial<{ aiEnabled: boolean; aiModel: AiModelId; aiDailyBudget: NanoUsd; aiPoliteParticle: PoliteParticle; aiInstructions: string; guardEnabled: boolean; guardTopics: string[] }>` (field อื่นไม่มี ข้อความปฏิเสธคงที่ใน `guardRefusalText`) (route ตรวจรูปแบบแล้วตาม [api-contract](api-contract.md#patch-apisettings) และต้องมีอย่างน้อยหนึ่ง field) |
 | Output | `Settings` |
 | Port | `SettingsRepository`, `Logger` |
 | Error | `settings.guard_topics_required` |
 
 1. ถ้า patch มี `guardTopics`: `n = normalizeGuardTopics(patch.guardTopics)` ใช้ `n.topics` แทนค่าที่ส่งมา (`issue` ไม่เป็น null ไม่เกิดเพราะ route ตรวจแล้ว ถ้าเกิดเป็น bug ให้ throw)
 2. ถ้า patch มี `guardEnabled` หรือ `guardTopics`: `current = settings.get()`, `enabled = patch.guardEnabled ?? current.guardEnabled`, `topics = n.topics ?? current.guardTopics` ถ้า `enabled` เป็น true และ `topics` ว่าง คืน `settings.guard_topics_required` ไม่บันทึก field ใดเลย
-3. `guardRefusalText` ตัดช่องว่างหัวท้ายแล้ว (route ตรวจความยาว)
-4. `settings.update(patch)` 5. log `settings.values.updated` 6. คืนค่าใหม่
+3. `settings.update(patch)` 4. log `settings.values.updated` 5. คืนค่าใหม่
 
 การปิด kill switch มีผลกับงานที่กำลังประมวลผลผ่านการตรวจซ้ำใน `GenerateAiReply` ข้อ 9 จึงไม่ต้องทำอะไรเพิ่มที่นี่
 
-Test: แก้ field เดียวไม่กระทบ field อื่น, ปิด kill switch แล้วงานที่รอโมเดลอยู่คืน cancelled (test ร่วมกับ GenerateAiReply), เปิดขอบเขตหัวข้อขณะรายการว่าง → `settings.guard_topics_required` และไม่มีการเขียน, เปิดพร้อมส่งสองหัวข้อใน patch เดียว → สำเร็จ, เปิดอยู่แล้วส่ง `guardTopics: []` → `settings.guard_topics_required`, ปิดแล้วส่ง `guardTopics: []` → สำเร็จ, หัวข้อมีช่องว่างหัวท้าย → บันทึกแบบตัดแล้ว, แก้ `guardRefusalText` อย่างเดียวไม่กระทบหัวข้อ
+Test: แก้ field เดียวไม่กระทบ field อื่น, ปิด kill switch แล้วงานที่รอโมเดลอยู่คืน cancelled (test ร่วมกับ GenerateAiReply), เปิดขอบเขตหัวข้อขณะรายการว่าง → `settings.guard_topics_required` และไม่มีการเขียน, เปิดพร้อมส่งสองหัวข้อใน patch เดียว → สำเร็จ, เปิดอยู่แล้วส่ง `guardTopics: []` → `settings.guard_topics_required`, ปิดแล้วส่ง `guardTopics: []` → สำเร็จ, หัวข้อมีช่องว่างหัวท้าย → บันทึกแบบตัดแล้ว
 
 ## TestTopicGuard
 
@@ -855,7 +855,7 @@ Test: kill switch ปิด → `ai.disabled_globally` ไม่เรียก 
 
 ## GetGuardrailStats
 
-**หน้าที่:** ตัวเลขของวันนี้ (เวลาไทย) สำหรับส่วน Guardrails ในหน้าตั้งค่า อ่านอย่างเดียว ทุกค่ามาจากข้อมูลที่ระบบเก็บอยู่แล้ว ([ai-guardrails](../security/ai-guardrails.md))
+**หน้าที่:** ตัวเลขของวันนี้ (เวลาไทย) ของ `GET /api/system/guardrails` ซึ่งไม่มีหน้าจอแสดง ([ADR 0024](../adr/0024-scope-reductions.md)) อ่านอย่างเดียว ทุกค่ามาจากข้อมูลที่ระบบเก็บอยู่แล้ว ([ai-guardrails](../security/ai-guardrails.md))
 
 | | |
 | --- | --- |
@@ -1016,26 +1016,6 @@ Test: ลบแถว ready → หายจากรายการและย
 | `GetDocument` | `{ documentId }` | `KbDocumentWithText` จาก `knowledge.getWithText(id)` | `knowledge.not_found` เมื่อได้ null |
 
 Port: `KnowledgeRepository` (และ `Clock`, `Logger` สำหรับ `ListDocuments`) Test: usedTokens นับเฉพาะ ready, GetDocument ของแถวที่ไม่มี → `knowledge.not_found`, ไฟล์ที่ processing นานกว่า `KNOWLEDGE_STUCK_AFTER_MS` เป็น failed ด้วย `knowledge.extract_interrupted` และสองคำขอพร้อมกัน log ครั้งเดียว
-
-## SaveCannedReply, DeleteCannedReply และ ListCannedReplies
-
-| Use case | Input | Output | Error |
-| --- | --- | --- | --- |
-| `SaveCannedReply` | `{ id: null; title; text } \| { id: CannedReplyId; title?; text?; sortOrder? }` | `CannedReply` | `canned_reply.not_found`, `canned_reply.limit_reached` |
-| `DeleteCannedReply` | `{ id }` | `void` | `canned_reply.not_found` |
-| `ListCannedReplies` | `{}` | `CannedReply[]` | ไม่มี |
-
-Port: `CannedReplyRepository`, `IdGenerator`, `Clock`, `Logger`
-
-`SaveCannedReply`:
-
-1. สร้างใหม่ (`id` เป็น null): `count() >= CANNED_REPLY_MAX_COUNT` คืน `canned_reply.limit_reached` ไม่เช่นนั้น `create({ id: ids.cannedReplyId(), sortOrder: maxSortOrder() + 1, createdAt: now, updatedAt: now })`
-2. แก้: `update(id, patch)` ได้ null คืน `canned_reply.not_found`
-3. log `canned_reply.item.saved`
-
-`DeleteCannedReply`: `delete(id)` ได้ false คืน `canned_reply.not_found` ไม่เช่นนั้น log `canned_reply.item.deleted`
-
-Test: สร้างรายการแรก sortOrder 1, รายการที่สอง sortOrder 2, สร้างเมื่อครบ `CANNED_REPLY_MAX_COUNT` → `canned_reply.limit_reached`, แก้เฉพาะ title ไม่กระทบ text, แก้ id ที่ไม่มี → `canned_reply.not_found`, ลบแล้วรายการหาย, ลบ id ที่ไม่มี → `canned_reply.not_found`
 
 ## GetUsageReport และ GetContactUsage
 

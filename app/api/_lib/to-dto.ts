@@ -3,7 +3,6 @@
 // src/** only; routes import these functions from '@/composition'.
 export {
   stickerImageUrl,
-  toCannedReplyDto,
   toContactDetailDto,
   toContactDto,
   toContactUsageResponse,
@@ -11,7 +10,6 @@ export {
   toDocumentDto,
   toGetMessagesResponse,
   toGuardrailStatsDto,
-  toListCannedRepliesResponse,
   toListContactsResponse,
   toListDocumentsResponse,
   toMessageDto,

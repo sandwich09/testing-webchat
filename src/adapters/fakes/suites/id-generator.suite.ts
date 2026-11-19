@@ -9,7 +9,6 @@ const uuidMakers: [string, (g: IdGenerator) => string][] = [
   ['messageId', (g) => g.messageId()],
   ['documentId', (g) => g.documentId()],
   ['usageId', (g) => g.usageId()],
-  ['cannedReplyId', (g) => g.cannedReplyId()],
 ];
 
 /** Runs every row of the IdGenerator contract in domain-and-ports against the subject. */

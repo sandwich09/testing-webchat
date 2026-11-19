@@ -108,7 +108,7 @@ export const createLocalFileStorage = (config: LocalFileStorageConfig): FileStor
     let handle: FileHandle | undefined;
     const reader = body.getReader();
     try {
-      handle = await open(tmpPath, 'wx');
+      handle = await open(/* turbopackIgnore: true */ tmpPath, 'wx');
       let total = 0;
       for (;;) {
         const { done, value } = await reader.read();
@@ -162,7 +162,9 @@ export const createLocalFileStorage = (config: LocalFileStorageConfig): FileStor
     const metaPath = pathFor(metaDir, key, '.json');
     if (metaPath === null) return null;
     try {
-      const parsed: unknown = JSON.parse(await readFile(metaPath, 'utf8'));
+      const parsed: unknown = JSON.parse(
+        await readFile(/* turbopackIgnore: true */ metaPath, 'utf8'),
+      );
       if (typeof parsed === 'object' && parsed !== null && 'contentType' in parsed) {
         return typeof parsed.contentType === 'string' ? parsed.contentType : null;
       }
@@ -198,9 +200,9 @@ export const createLocalFileStorage = (config: LocalFileStorageConfig): FileStor
       if (objectPath === null) return err('upload.not_found');
       let handle: FileHandle | undefined;
       try {
-        const info = await stat(objectPath);
+        const info = await stat(/* turbopackIgnore: true */ objectPath);
         if (!info.isFile()) return err('upload.not_found');
-        handle = await open(objectPath, 'r');
+        handle = await open(/* turbopackIgnore: true */ objectPath, 'r');
         const buffer = new Uint8Array(Math.min(LEADING_BYTES, info.size));
         const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
         return ok({
@@ -220,11 +222,13 @@ export const createLocalFileStorage = (config: LocalFileStorageConfig): FileStor
       const objectPath = pathFor(objectsDir, key);
       if (objectPath === null) return err('media.not_found');
       try {
-        const info = await stat(objectPath);
+        const info = await stat(/* turbopackIgnore: true */ objectPath);
         if (!info.isFile()) return err('media.not_found');
         const contentType = (await readContentType(key)) ?? DEFAULT_CONTENT_TYPE;
         // Readable.toWeb is typed with a wider chunk type than the port's Uint8Array stream.
-        const stream = Readable.toWeb(createReadStream(objectPath)) as ReadableStream<Uint8Array>;
+        const stream = Readable.toWeb(
+          createReadStream(/* turbopackIgnore: true */ objectPath),
+        ) as ReadableStream<Uint8Array>;
         return ok({ stream, contentType, sizeBytes: info.size });
       } catch (e) {
         return isNotFound(e) ? err('media.not_found') : err('storage.unavailable', errorCode(e));

@@ -25,6 +25,7 @@ import {
   buildGuardRulesBlock,
   err,
   formatKnowledgeBase,
+  guardRefusalText,
   handoffText,
   ok,
 } from '@/core/domain';
@@ -54,7 +55,8 @@ import type { UseCaseConfig } from './types';
 const T0 = new Date('2026-11-18T03:00:00.000Z');
 const DEBOUNCE_MS = 2000;
 const TOPICS = ['มุกตลกไทย', 'มีมจากละครและซีรีส์'];
-const REFUSAL = 'คุยได้เฉพาะเรื่องมุกตลกเท่านั้นนะคะ';
+/** The refusal for the default particle ค่ะ. */
+const REFUSAL = guardRefusalText('ค่ะ');
 const CUSTOMER_NAME = 'คุณสมหญิง ใจดี';
 const LINE_USER = 'U-secret-line-user' as LineUserId; // brand: test id
 const REPLY_TOKEN = 'reply-token-1';
@@ -255,7 +257,7 @@ describe('GenerateAiReply', () => {
       { botName: 'ร้านขนม', basicId: '@shop' },
       { channelId: '1000000001', secretVerifiedAt: null },
     );
-    await settings.update({ aiEnabled: true, guardRefusalText: REFUSAL });
+    await settings.update({ aiEnabled: true });
     ({ contact } = await contacts.ensure({
       id: ids.contactId(),
       lineUserId: LINE_USER,
@@ -568,6 +570,7 @@ describe('GenerateAiReply', () => {
     it('blocked: refusal by reply token, guard.blocked line, guard usage blocked, no handoff', async () => {
       const m = await customerSays('ร้านเปิดกี่โมงคะ');
       topicGuard.enqueueBlocked();
+      clock.advance(1_000);
 
       const outcome = await run(m.id);
 
@@ -594,6 +597,8 @@ describe('GenerateAiReply', () => {
       expect(after.needsAdmin).toBe(false);
       expect(after.aiEnabled).toBe(true);
       expect(after.lastMessageBy).toBe('ai');
+      // The AI reply and the event line keep the contact at the customer's time in the list.
+      expect(after.lastMessageAt).toEqual(m.createdAt);
       expect(logger.entries).toContainEqual(
         expect.objectContaining({
           event: 'guard.blocked',
@@ -605,6 +610,20 @@ describe('GenerateAiReply', () => {
         expect.objectContaining({ event: 'guard.checked', outcome: 'blocked' }),
       );
       await expectUnlocked();
+    });
+
+    it('blocked after the particle changed: the next refusal ends with the new particle', async () => {
+      await settings.update({ aiPoliteParticle: 'ครับ' });
+      const m = await customerSays('ร้านเปิดกี่โมงครับ');
+      topicGuard.enqueueBlocked();
+
+      await run(m.id);
+
+      const [refusal] = await aiMessages();
+      expect(refusal?.text).toBe(guardRefusalText('ครับ'));
+      expect(gateway.replies[0]?.parts).toEqual([
+        { type: 'text', text: 'คุยได้เฉพาะหัวข้อที่กำหนดไว้นะครับ' },
+      ]);
     });
 
     it('blocked while the reply token has expired: refusal pushed with retryKey = message id', async () => {

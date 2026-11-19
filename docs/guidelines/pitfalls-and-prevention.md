@@ -253,6 +253,20 @@
 - **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว [`app/globals.css`](../../app/globals.css) ใช้ `@import 'tailwindcss' source(none)` ร่วมกับ `@source '.'` และ `@source '../src'` (path สัมพันธ์กับไฟล์ CSS) Tailwind จึงอ่านเฉพาะ `app/` และ `src/` ไม่ว่ามีโฟลเดอร์ใดอยู่ที่ราก และ `.gitignore` ยังยกเว้น `.next/`, `.data/`, `coverage/`, `test-results/` และ `playwright-report/` โค้ดที่มี class ของ Tailwind ต้องอยู่ใน `app/` หรือ `src/` เท่านั้น ถ้าเพิ่มที่อื่นต้องเพิ่ม `@source` ของที่นั้น
 - **วิธีแก้เมื่อเกิด:** หาโฟลเดอร์ที่ไม่ถูก ignore ด้วย `git status --ignored` เพิ่มเข้า `.gitignore` ลบทิ้ง แล้ว build ใหม่
 
+### F5. ทั้งหน้าเลื่อนทะลุโครงของแอป
+
+- **อาการ:** เลื่อนลงสุดแล้วทั้งหน้าเลื่อนต่อ เมนูซ้ายและคอลัมน์จบกลางจอ ข้างล่างเป็นพื้นเทาว่าง และ screenshot แบบเต็มหน้าสูงเท่าเนื้อหาของกล่องด้านใน
+- **สาเหตุ:** Element ที่วางแบบ absolute (เช่น `sr-only` ในแถวของรายการ) ที่อยู่ในกล่องที่เลื่อนได้ แต่ containing block ของมันคือบรรพบุรุษที่อยู่นอกกล่องนั้น กล่องที่เลื่อนจึงไม่ตัดมัน และมันขยายพื้นที่เลื่อนของ document ตามตำแหน่งของแถวล่างสุด
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้ว กล่องนอกสุดของ [`AppShell`](../../src/common/AppShell.tsx) สูงเท่าหน้าต่าง (`100dvh` มี `100vh` สำรอง) เป็น `relative` และ `overflow-hidden` จึงเป็น containing block และตัดส่วนเกินของทุกหน้าหลังเข้าระบบ ([ui-screens ข้อ 1.4](../specs/ui-screens.md#14-ช่วงความกว้างจอ)) E2E เส้นที่ 4 ตรวจด้วย `expectDocumentNotScrollable` ที่ 390, 1280 และ 1535×920
+- **วิธีแก้เมื่อเกิด:** วัด `document.scrollingElement.scrollHeight` เทียบ `innerHeight` แล้วหา element ที่ `position` ไม่ใช่ `static` และขอบล่างเลยหน้าต่าง ดู `offsetParent` ของมัน แก้ที่โครงหน้า ไม่ซ่อนอาการด้วย `overflow: hidden` บน `body`
+
+### F6. Dropdown ไม่ตามธีม
+
+- **อาการ:** รายการตัวเลือกเปิดเป็น popup ของระบบปฏิบัติการ (สีพื้นเข้ม แถบเลือกสีน้ำเงิน ฟอนต์ของระบบ) ไม่ตรงกับหน้าจออื่น
+- **สาเหตุ:** ใช้ `<select>`, `<datalist>` หรือ `<input type="date|month|time|color">` ซึ่ง browser วาด popup เองนอก CSS ของหน้า
+- **การป้องกันในโปรเจกต์นี้:** ป้องกันแล้วบางส่วน ทุก dropdown ใช้ `Select` ใน `src/common/ui/select.tsx` ([frontend](../architecture/frontend.md#popup-และ-dropdown)) ไม่มี lint ที่ห้าม element เหล่านี้ ตรวจด้วย review และรายการตรวจก่อนเปิด PR
+- **วิธีแก้เมื่อเกิด:** แทนด้วย `Select` และเปิดดูใน browser จริงที่ 390 และ 1280 ทั้งตอนปิดและตอนเปิด
+
 ## 8. การอัปโหลดและที่เก็บไฟล์
 
 ### U1. ไฟล์ปลอมชนิดหรือใหญ่เกิน
@@ -374,6 +388,7 @@
 - [ ] กฎใหม่ของ repository มี test ใน suite ของ port ซึ่งรันกับตัวจริงด้วย ([D4](#d4-ตัวปลอมทำงานไม่เหมือนฐานข้อมูลจริง))
 - [ ] Test ใหม่เคยแดงเมื่อ bug ยังอยู่ และ fixture ร่วมที่เพิ่มถูกห่อด้วย `deepFreeze` ([Q3](#q3-state-รั่วระหว่าง-test), [Q4](#q4-test-ผ่านด้วยเหตุผลผิด))
 - [ ] หน้าใหม่ไม่ถูก prerender และไม่มี console error หรือ CSP violation ที่ 390 และ 1280 ([S5](#s5-csp-บล็อก-script-ของหน้าที่ถูก-prerender), [F2](#f2-hydration-ไม่ตรงกัน))
+- [ ] ไม่มี control ที่ browser วาด popup เอง (`<select>`, `<datalist>`, `<input type="date|month|time|color">`) dropdown ใช้ `Select` และ document ไม่เลื่อนบนหน้าหลังเข้าระบบ ([F5](#f5-ทั้งหน้าเลื่อนทะลุโครงของแอป), [F6](#f6-dropdown-ไม่ตามธีม))
 - [ ] Log ใหม่ใช้ field ที่มีใน `LogFields` เท่านั้น ([S4](#s4-ความลับหรือข้อมูลลูกค้าใน-log-และ-url))
 - [ ] Diff มีเฉพาะไฟล์ของงานนี้ (stage ด้วย path) เอกสารกับ comment ที่เกี่ยวข้องถูกแก้ด้วย และ `pnpm docs:check` ผ่าน ([P1](#p1-เอกสารหรือ-comment-ไม่ตรงกับโค้ด), [P2](#p2-หลายคนหรือหลาย-agent-แก้-working-tree-เดียวกัน))
 

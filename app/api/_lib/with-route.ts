@@ -72,7 +72,7 @@
  * - PATCH /api/settings: `toUpdateSettingsInput(body)` returns a Result too.
  * - Usage: `month: usageMonth(query.month)`.
  * - Empty-body POSTs (read, typing, retry, line/test, lock) declare no `body` schema.
- * - Path ids: `asContactId`, `asMessageId`, `asDocumentId`, `asCannedReplyId`, `asUploadId`.
+ * - Path ids: `asContactId`, `asMessageId`, `asDocumentId`, `asUploadId`.
  */
 export {
   accessClearedResponse,

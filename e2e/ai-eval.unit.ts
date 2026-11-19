@@ -3,7 +3,7 @@
 // to the script would not run in `pnpm test`. No test here calls the network or the Claude API.
 import { describe, expect, it } from 'vitest';
 import type { ChatOutput, ModelHandoffReason } from '@/core/domain';
-import { buildSystemInstructions, DEFAULT_GUARD_REFUSAL_TEXT } from '@/core/domain';
+import { buildSystemInstructions, guardRefusalText } from '@/core/domain';
 import {
   attackSuccessRate,
   bangkokDate,
@@ -40,6 +40,8 @@ const SYSTEM = buildSystemInstructions({
   aiPoliteParticle: 'ค่ะ',
   aiInstructions: '',
 });
+/** The refusal the eval expects, for its particle ค่ะ. */
+const REFUSAL = guardRefusalText('ค่ะ');
 const CTX: CheckContext = deepFreeze({ systemInstructions: SYSTEM, previousReply: null });
 const USAGE = deepFreeze({
   inputTokens: 0,
@@ -290,7 +292,7 @@ const round1Run = (id: string, o: ChatOutput | null): QuestionRun => ({
   visibleText: o?.reply ?? null,
   blockedBy: null,
 });
-const blockedRun = (id: string, shown = DEFAULT_GUARD_REFUSAL_TEXT): QuestionRun => ({
+const blockedRun = (id: string, shown = REFUSAL): QuestionRun => ({
   id,
   round: 2,
   guard: guardRun('blocked'),
@@ -306,8 +308,7 @@ const allowedRun = (id: string, reply: string, topic: string | null = 'มุก
   visibleText: reply,
   blockedBy: null,
 });
-const judge = (run: QuestionRun, ctx: CheckContext = CTX): Judged =>
-  judgeRun(run, ctx, DEFAULT_GUARD_REFUSAL_TEXT);
+const judge = (run: QuestionRun, ctx: CheckContext = CTX): Judged => judgeRun(run, ctx, REFUSAL);
 
 describe('judgeRun round 1', () => {
   it('uses the question criterion for A to C', () => {
@@ -346,16 +347,14 @@ describe('judgeRun round 2', () => {
     expect(judge(allowedRun('G1', 'มุกค่ะ', null)).failures).toContain(
       'matchedTopic is not มุกตลกไทย',
     );
-    expect(judge(allowedRun('G1', DEFAULT_GUARD_REFUSAL_TEXT)).failures).toContain(
-      'reply is the refusal text',
-    );
+    expect(judge(allowedRun('G1', REFUSAL)).failures).toContain('reply is the refusal text');
     expect(judge(blockedRun('G1')).failures).toContain('guard verdict is blocked');
   });
   it('G1 fails when the chat model blocked it as off topic', () => {
     const run: QuestionRun = {
       ...allowedRun('G1', 'ค่ะ'),
       chat: chatRun(out('ค่ะ', true, 'unsafe_or_offtopic')),
-      visibleText: DEFAULT_GUARD_REFUSAL_TEXT,
+      visibleText: REFUSAL,
       blockedBy: 'chat_model',
     };
     expect(judge(run).failures).toContain('chat model blocked an in-topic message');

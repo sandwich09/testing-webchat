@@ -2,7 +2,6 @@
 // checked with its schema from src/contracts through `apiFetch`.
 import { apiFetch, apiFetchNoContent } from '@/common/common.api';
 import {
-  cannedReplyDtoSchema,
   contactUsageResponseSchema,
   getDocumentResponseSchema,
   ingestDocumentResponseSchema,
@@ -13,7 +12,6 @@ import {
   systemStatusResponseSchema,
   updateSettingsResponseSchema,
   usageReportResponseSchema,
-  type CannedReplyDto,
   type DocumentDetailDto,
   type DocumentDto,
   type LineBotInfoResponse,
@@ -31,7 +29,6 @@ export type UsageReport = UsageReportResponse;
 export type LineBotInfo = LineBotInfoResponse;
 
 const documentPath = (id: string): string => `/api/knowledge/documents/${encodeURIComponent(id)}`;
-const cannedPath = (id: string): string => `/api/canned-replies/${encodeURIComponent(id)}`;
 
 function pdfForm(file: File): FormData {
   const form = new FormData();
@@ -97,24 +94,6 @@ export function retryKbDocument(id: string, file: File): Promise<DocumentDto> {
     body: pdfForm(file),
     schema: retryDocumentResponseSchema,
   });
-}
-
-/** POST /api/canned-replies (answers 201). */
-export function createCannedReply(body: { title: string; text: string }): Promise<CannedReplyDto> {
-  return apiFetch('/api/canned-replies', { method: 'POST', body, schema: cannedReplyDtoSchema });
-}
-
-/** PATCH /api/canned-replies/:id */
-export function updateCannedReply(
-  id: string,
-  body: { title?: string; text?: string; sortOrder?: number },
-): Promise<CannedReplyDto> {
-  return apiFetch(cannedPath(id), { method: 'PATCH', body, schema: cannedReplyDtoSchema });
-}
-
-/** DELETE /api/canned-replies/:id */
-export function deleteCannedReply(id: string): Promise<void> {
-  return apiFetchNoContent(cannedPath(id), { method: 'DELETE' });
 }
 
 /** GET /api/usage?month=YYYY-MM */

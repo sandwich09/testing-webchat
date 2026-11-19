@@ -58,7 +58,6 @@ export type ContactId = Brand<string, "ContactId">;         // UUIDv7
 export type MessageId = Brand<string, "MessageId">;         // UUIDv7 (ขาออกของแอดมินสร้างที่หน้าเว็บ)
 export type DocumentId = Brand<string, "DocumentId">;       // UUIDv7
 export type UsageId = Brand<string, "UsageId">;             // UUIDv7
-export type CannedReplyId = Brand<string, "CannedReplyId">; // UUIDv7
 export type LineUserId = Brand<string, "LineUserId">;       // userId ของ LINE
 export type LineMessageId = Brand<string, "LineMessageId">; // message.id ของ LINE
 export type WebhookEventId = Brand<string, "WebhookEventId">;
@@ -138,7 +137,7 @@ export interface Contact {
   aiState: AiState;
   aiStateAt: Date | null;
   unreadCount: number;
-  lastMessageAt: Date | null;
+  lastMessageAt: Date | null;       // เวลาข้อความขาเข้าล่าสุดของลูกค้า: ค่าที่รายชื่อใช้เรียง null ก่อนข้อความแรก
   lastMessagePreview: string | null; // ข้อความตัวอักษรไม่เกิน PREVIEW_TEXT_MAX_CHARS หรือ null เมื่อเป็นสื่อ
   lastMessageBy: "customer" | "admin" | "ai" | null;
   lastMessageType: Exclude<MessageType, "event"> | null;
@@ -182,7 +181,6 @@ export interface Settings {
   aiInstructions: string;
   guardEnabled: boolean;            // ขอบเขตหัวข้อ ดู specs/topic-guard.md
   guardTopics: string[];            // 0 ถึง GUARD_MAX_TOPICS หัวข้อ ตัดช่องว่างแล้ว ไม่ซ้ำ (เปิดอยู่ต้องมีอย่างน้อย 1)
-  guardRefusalText: string;         // 1 ถึง GUARD_REFUSAL_MAX_CHARS ตัว
   lineConfigured: boolean;          // มี credential ที่เข้ารหัสไว้ทั้งสองค่า
   lineBotName: string | null;
   lineBasicId: string | null;
@@ -243,14 +241,6 @@ export interface AiUsageRecord {
   createdAt: Date;
 }
 
-export interface CannedReply {
-  id: CannedReplyId;
-  title: string;                    // 1 ถึง CANNED_TITLE_MAX_CHARS ตัว
-  text: string;                     // 1 ถึง CANNED_TEXT_MAX_CHARS ตัว
-  sortOrder: number;
-  createdAt: Date;
-  updatedAt: Date;
-}
 ```
 
 ### Event ของ LINE หลังแปลง
@@ -293,7 +283,7 @@ export type OutboundLinePart =
 
 ค่าทั้งหมดอยู่ใน `src/core/domain/constants.ts` ค่าของแต่ละตัวอยู่ในตาราง [ค่าคงที่ของระบบ](project-setup.md#10-ค่าคงที่ของระบบ) ที่เดียว ไฟล์นี้อ้างด้วยชื่อเท่านั้น ค่าที่มาจาก environment variable (`AI_DEBOUNCE_MS`, `AI_STUCK_AFTER_MS` ส่งผ่าน config, `RATE_LIMIT_SCALE`) ถูกส่งเข้ามาผ่าน `UseCaseConfig` ดู [use-cases](use-cases.md#การประกอบ)
 
-ชื่อที่แกนกลางใช้: `POLL_OVERLAP_SEQ`, `POLL_PAGE_LIMIT`, `AI_HISTORY_LIMIT`, `AI_REPLY_MAX_CHARS`, `AI_MAX_ROUNDS_PER_RUN`, `AI_STUCK_AFTER_MS`, `AI_MAX_TOKENS`, `AI_EXTRACT_MAX_TOKENS`, `LINE_LOADING_SECONDS`, `KNOWLEDGE_CAPACITY_TOKENS`, `PDF_MAX_BYTES`, `PDF_MAX_PAGES`, `IMAGE_MAX_BYTES`, `VIDEO_MAX_BYTES`, `PREVIEW_MAX_BYTES`, `UPLOAD_TICKET_TTL_MS`, `LINE_TEXT_MAX_CHARS`, `LINE_MAX_PARTS_PER_REQUEST`, `REPLY_TOKEN_USABLE_MS`, `LINE_RETRY_KEY_WINDOW_MS`, `LINE_CHANNEL_ID_MAX_CHARS`, `MEDIA_JOB_BUDGET_MS`, `MEDIA_CONTENT_CALL_WORST_MS`, `MEDIA_STATUS_CALL_WORST_MS`, `MEDIA_NOT_READY_POLL_MS`, `ADMIN_TEXT_MAX_CHARS`, `PREVIEW_TEXT_MAX_CHARS`, `MESSAGE_PAGE_LIMIT`, `CONTACT_PAGE_LIMIT`, `CONTACT_SEARCH_MAX_CHARS`, `CANNED_REPLY_MAX_COUNT`, `CANNED_TITLE_MAX_CHARS`, `CANNED_TEXT_MAX_CHARS`, `AI_INSTRUCTIONS_MAX_CHARS`, `AI_DAILY_BUDGET_MAX_USD`, `ACCESS_COOKIE_TTL_MS`, `WEBHOOK_MAX_BODY_BYTES`, `JSON_MAX_BODY_BYTES`, `DEFAULT_AI_MODEL`, `DEFAULT_AI_DAILY_BUDGET_USD`, `DEFAULT_POLITE_PARTICLE`, ค่าของขอบเขตหัวข้อ `GUARD_MAX_TOPICS`, `GUARD_TOPIC_MAX_CHARS`, `GUARD_REFUSAL_MAX_CHARS`, `GUARD_TEST_MAX_CHARS`, `GUARD_MODEL`, `GUARD_MAX_TOKENS`, `GUARD_TIMEOUT_MS`, `GUARD_CONTEXT_TURNS`, `DEFAULT_GUARD_REFUSAL_TEXT` และค่าจำกัดความถี่ `RATE_LIMIT_UNLOCK`, `RATE_LIMIT_SEND_MESSAGE`, `RATE_LIMIT_UPLOAD_TICKET`, `RATE_LIMIT_PDF_INGEST`, `RATE_LIMIT_TYPING`, `RATE_LIMIT_GUARD_TEST`
+ชื่อที่แกนกลางใช้: `POLL_OVERLAP_SEQ`, `POLL_PAGE_LIMIT`, `AI_HISTORY_LIMIT`, `AI_REPLY_MAX_CHARS`, `AI_MAX_ROUNDS_PER_RUN`, `AI_STUCK_AFTER_MS`, `AI_MAX_TOKENS`, `AI_EXTRACT_MAX_TOKENS`, `LINE_LOADING_SECONDS`, `KNOWLEDGE_CAPACITY_TOKENS`, `PDF_MAX_BYTES`, `PDF_MAX_PAGES`, `IMAGE_MAX_BYTES`, `VIDEO_MAX_BYTES`, `PREVIEW_MAX_BYTES`, `UPLOAD_TICKET_TTL_MS`, `LINE_TEXT_MAX_CHARS`, `LINE_MAX_PARTS_PER_REQUEST`, `REPLY_TOKEN_USABLE_MS`, `LINE_RETRY_KEY_WINDOW_MS`, `LINE_CHANNEL_ID_MAX_CHARS`, `MEDIA_JOB_BUDGET_MS`, `MEDIA_CONTENT_CALL_WORST_MS`, `MEDIA_STATUS_CALL_WORST_MS`, `MEDIA_NOT_READY_POLL_MS`, `ADMIN_TEXT_MAX_CHARS`, `PREVIEW_TEXT_MAX_CHARS`, `MESSAGE_PAGE_LIMIT`, `CONTACT_PAGE_LIMIT`, `CONTACT_SEARCH_MAX_CHARS`, `AI_INSTRUCTIONS_MAX_CHARS`, `AI_DAILY_BUDGET_MAX_USD`, `ACCESS_COOKIE_TTL_MS`, `WEBHOOK_MAX_BODY_BYTES`, `JSON_MAX_BODY_BYTES`, `DEFAULT_AI_MODEL`, `DEFAULT_AI_DAILY_BUDGET_USD`, `DEFAULT_POLITE_PARTICLE`, ค่าของขอบเขตหัวข้อ `GUARD_MAX_TOPICS`, `GUARD_TOPIC_MAX_CHARS`, `GUARD_TEST_MAX_CHARS`, `GUARD_MODEL`, `GUARD_MAX_TOKENS`, `GUARD_TIMEOUT_MS`, `GUARD_CONTEXT_TURNS` และค่าจำกัดความถี่ `RATE_LIMIT_UNLOCK`, `RATE_LIMIT_SEND_MESSAGE`, `RATE_LIMIT_UPLOAD_TICKET`, `RATE_LIMIT_PDF_INGEST`, `RATE_LIMIT_TYPING`, `RATE_LIMIT_GUARD_TEST`
 
 ค่าจำกัดความถี่ประกาศเป็น `RATE_LIMIT_RULES: Record<RateLimitAction, { limit: number; windowMs: number; scaled: boolean }>` ซึ่งอ่านค่าจาก constant ข้างบน `scaled` เป็น false เฉพาะ `unlock`
 
@@ -425,6 +415,7 @@ export type GuardTopicsIssue = "too_many" | "too_long" | "duplicate";
 
 | ฟังก์ชัน | ลายเซ็น | กฎ |
 | --- | --- | --- |
+| `guardRefusalText` | `(particle: PoliteParticle) => string` | ข้อความที่ลูกค้าได้เมื่อขอบเขตหัวข้อกัน คืน `คุยได้เฉพาะหัวข้อที่กำหนดไว้นะ{p}` โดย `{p}` ตามกฎเดียวกับ `handoffText` (`ค่ะ` → `คะ`, `ครับ` → `ครับ`) ประโยคคงที่ ไม่ตั้งค่าได้ ([ADR 0024](../adr/0024-scope-reductions.md)) |
 | `normalizeGuardTopics` | `(raw: readonly string[]) => { topics: string[]; issue: GuardTopicsIssue \| null }` | ตัดช่องว่างหัวท้ายของแต่ละรายการ ทิ้งรายการว่าง คงลำดับเดิม แล้วตรวจตามลำดับ: เกิน `GUARD_MAX_TOPICS` รายการ → `too_many`, รายการใดยาวเกิน `GUARD_TOPIC_MAX_CHARS` ตัว → `too_long`, มีสองรายการเท่ากันทุกตัวอักษร → `duplicate` นอกนั้น `issue` เป็น null ไม่ตัดรายการทิ้งเอง contract ของ `PATCH /api/settings` และหน้าตั้งค่าใช้ฟังก์ชันนี้ผ่าน `src/contracts/` |
 | `guardContextTurns` | `(history: ChatTurn[], n = GUARD_CONTEXT_TURNS) => { message: string; context: ChatTurn[] }` | `history` มาจาก `toHistoryTurns` จึงจบด้วย `customer` เสมอ: `message` คือ `text` ของ turn สุดท้าย และ `context` คือ turn ก่อนหน้าไม่เกิน `n` turn ตามลำดับเดิม history ว่างหรือไม่จบด้วย `customer` เป็น bug ให้ throw |
 | `buildGuardRulesBlock` | `(topics: string[]) => string` | บล็อก `<topic_guard>` ที่ต่อท้ายคำสั่งระบบของการตอบแชทเมื่อขอบเขตหัวข้อเปิด ตาม [ai-prompt ข้อ 9.5](../specs/ai-prompt.md#95-บล็อกที่ต่อท้ายคำสั่งระบบของการตอบแชท) แทน `<` และ `>` ในหัวข้อด้วย `‹` และ `›` ผลเหมือนเดิมทุกไบต์เมื่อ input เดิม |
@@ -716,14 +707,14 @@ export interface ContactRepository {
   updateProfile(id: ContactId, p: { displayName: string | null; pictureUrl: string | null }): Promise<void>;
   setFollowStatus(id: ContactId, status: FollowStatus, at: Date): Promise<void>;
 
-  /** หลังบันทึกข้อความขาเข้าใหม่: unreadCount + 1, ข้อความล่าสุด, reply token ถ้า expiresAt ใหม่กว่าของเดิม */
+  /** หลังบันทึกข้อความขาเข้าใหม่: unreadCount + 1, lastMessageAt และข้อความล่าสุด (เมื่อไม่เก่ากว่า lastMessageAt เดิม), reply token ถ้า expiresAt ใหม่กว่าของเดิม */
   recordInbound(id: ContactId, i: {
     at: Date; preview: ReturnType<typeof previewOf>;
     replyToken: string | null; replyTokenExpiresAt: Date | null;
   }): Promise<void>;
 
-  /** หลังบันทึกข้อความขาออก: ข้อความล่าสุด ไม่แตะ unreadCount */
-  recordOutbound(id: ContactId, o: { at: Date; preview: ReturnType<typeof previewOf>; by: "admin" | "ai" }): Promise<void>;
+  /** หลังบันทึกข้อความขาออก: ข้อความล่าสุดและผู้ส่งเท่านั้น ไม่แตะ lastMessageAt (ลำดับของรายชื่อตามลูกค้า) และ unreadCount */
+  recordOutbound(id: ContactId, o: { preview: ReturnType<typeof previewOf>; by: "admin" | "ai" }): Promise<void>;
 
   /** compare-and-clear: ล้าง token เฉพาะเมื่อยังเป็นค่าเดิม คืน true เมื่อผู้เรียกได้สิทธิ์ใช้ token */
   consumeReplyToken(id: ContactId, replyToken: string): Promise<boolean>;
@@ -753,10 +744,11 @@ export interface ContactRepository {
 | `ensure` | ปลอดภัยเมื่อเรียกพร้อมกันด้วย `lineUserId` เดียวกัน: ได้แถวเดียว และมีผู้เรียกได้ `created: true` คนเดียว |
 | `setFollowStatus` | `following` ตั้ง `followedAt = at`, `unfollowed` ล้าง `replyToken` และ `replyTokenExpiresAt` |
 | `recordInbound` | `lastMessageAt` ไม่ถอยหลัง ถ้า `at` เก่ากว่าค่าเดิม ไม่แก้ข้อความล่าสุด แต่ยังเพิ่ม unreadCount |
+| `recordOutbound` | แก้ข้อความล่าสุดและผู้ส่ง ไม่แก้ `lastMessageAt` และ unreadCount ลำดับของ `list` จึงไม่เปลี่ยน |
 | `consumeReplyToken` | สองผู้เรียกพร้อมกันด้วย token เดียวกัน ได้ true คนเดียว |
 | `tryAcquireAiLock` | สองผู้เรียกพร้อมกัน ได้ true คนเดียว ไม่ยึดล็อกที่ค้างแทน การคืนสภาพทำโดย `recoverStuckAiStates` เท่านั้น |
 | `releaseAiLock` | ตั้ง idle และ aiStateAt เป็น null ถ้าเป็น idle อยู่แล้วไม่ผิด |
-| `list` | เรียง `coalesce(lastMessageAt, createdAt)` ใหม่ไปเก่า แล้ว id ใหม่ไปเก่า `search` เทียบ displayName แบบ contains ไม่สนตัวพิมพ์ `filter`: unread คือ unreadCount > 0, needs_admin คือ needsAdmin true |
+| `list` | เรียง `coalesce(lastMessageAt, createdAt)` (ข้อความล่าสุดของลูกค้า) ใหม่ไปเก่า แล้ว id ใหม่ไปเก่า cursor ข้ามแถวที่ค่าเท่ากันได้ถูกต้องด้วย id `search` เทียบ displayName แบบ contains ไม่สนตัวพิมพ์ `filter`: unread คือ unreadCount > 0, needs_admin คือ needsAdmin true |
 | `listChangedAfter` | `updatedSeq > after` เรียงจากน้อยไปมาก ไม่กรอง |
 | ไม่พบ | `findById` คืน null ส่วน method ที่แก้แถวซึ่งไม่มีอยู่ไม่ทำอะไรและไม่ throw |
 
@@ -821,11 +813,11 @@ export interface MessageRepository {
 
 ```ts
 export interface SettingsRepository {
-  /** แถวเดียว ถ้ายังไม่มีสร้างด้วยค่าเริ่มต้น: aiEnabled false, DEFAULT_AI_MODEL, DEFAULT_AI_DAILY_BUDGET_USD, DEFAULT_POLITE_PARTICLE, คำแนะนำว่าง, guardEnabled false, guardTopics ว่าง, DEFAULT_GUARD_REFUSAL_TEXT */
+  /** แถวเดียว ถ้ายังไม่มีสร้างด้วยค่าเริ่มต้น: aiEnabled false, DEFAULT_AI_MODEL, DEFAULT_AI_DAILY_BUDGET_USD, DEFAULT_POLITE_PARTICLE, คำแนะนำว่าง, guardEnabled false, guardTopics ว่าง */
   get(): Promise<Settings>;
   update(patch: Partial<Pick<Settings,
     "aiEnabled" | "aiModel" | "aiDailyBudget" | "aiPoliteParticle" | "aiInstructions"
-    | "guardEnabled" | "guardTopics" | "guardRefusalText">>): Promise<Settings>;
+    | "guardEnabled" | "guardTopics">>): Promise<Settings>;
   getEncryptedLineCredentials(): Promise<EncryptedLineCredentials | null>;
   saveLineCredentials(c: EncryptedLineCredentials, bot: { botName: string; basicId: string },
     channel: { channelId: string; secretVerifiedAt: Date | null }): Promise<void>;
@@ -903,20 +895,6 @@ export interface UsageRepository {
 - `sumCost` รวมทุก kind และทุก outcome ใน `[from, to)` ตาม `createdAt` ไม่มีแถวคืน `0n`
 - `reportByContact` รวมเฉพาะแถว kind = reply (แถว guard แยกไปที่ `guardSummary`) เรียง cost มากไปน้อย, `listForContact` คืนทุก kind ของลูกค้านั้น เรียง createdAt ใหม่ไปเก่า
 - `guardSummary`, `ingestSummary`, `countSafetyOutcomes` และ `countNoResponse` ไม่มีแถวคืนศูนย์ทุกค่า
-
-#### CannedReplyRepository
-
-```ts
-export interface CannedReplyRepository {
-  list(): Promise<CannedReply[]>;                 // เรียง sortOrder แล้ว createdAt
-  findById(id: CannedReplyId): Promise<CannedReply | null>;
-  count(): Promise<number>;
-  maxSortOrder(): Promise<number>;                // ว่างคืน 0
-  create(c: CannedReply): Promise<void>;
-  update(id: CannedReplyId, p: Partial<Pick<CannedReply, "title" | "text" | "sortOrder">> & { now: Date }): Promise<CannedReply | null>;
-  delete(id: CannedReplyId): Promise<boolean>;
-}
-```
 
 #### WebhookEventRepository
 
@@ -1006,7 +984,6 @@ export interface IdGenerator {
   messageId(): MessageId;
   documentId(): DocumentId;
   usageId(): UsageId;
-  cannedReplyId(): CannedReplyId;
   requestId(): string;
   /** ค่าสุ่ม 128 bit จาก CSPRNG แบบ base64url ใช้กับชื่อไฟล์ที่ต้องเดาไม่ได้ */
   randomToken(): string;
@@ -1026,7 +1003,6 @@ export interface LogFields {
   messageId?: MessageId;
   documentId?: DocumentId;
   usageId?: UsageId;
-  cannedReplyId?: CannedReplyId;
   route?: string;              // แม่แบบของ path เช่น "/api/contacts/:id/messages" ไม่ใช่ path จริง
   method?: string;
   httpStatus?: number;
@@ -1123,10 +1099,8 @@ export type LogEvent =
   | "knowledge.ingest.failed"       // errorCode
   | "knowledge.ingest.stuck_recovered" // warn: count (knowledge.extract_interrupted)
   | "knowledge.document.deleted"
-  // ตั้งค่าและข้อความสำเร็จรูป
-  | "settings.values.updated"
-  | "canned_reply.item.saved"
-  | "canned_reply.item.deleted";
+  // ตั้งค่า
+  | "settings.values.updated";
 ```
 
 ## Adapter ของ Claude

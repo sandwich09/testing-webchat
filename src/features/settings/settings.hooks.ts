@@ -1,7 +1,7 @@
 'use client';
 
-// Data hooks of the settings page (ui-screens 7.1 and 7.7). `useSettings` and `useCannedReplies`
-// are shared with the chat page and live in src/common/common.hooks.ts.
+// Data hooks of the settings page (ui-screens 7.1 and 7.7). `useSettings` is shared with the chat
+// page and lives in src/common/common.hooks.ts.
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import { nextPollDelay } from '@/common/common.logic';
@@ -10,8 +10,6 @@ import { qk, qkAll } from '@/common/query-keys';
 import type { SettingsDto } from '@/contracts';
 
 import {
-  createCannedReply,
-  deleteCannedReply,
   deleteKbDocument,
   getKbDocument,
   getSystemStatus,
@@ -21,7 +19,6 @@ import {
   retryKbDocument,
   saveLineCredentials,
   testLineConnection,
-  updateCannedReply,
   updateSettings,
   uploadKbDocument,
   type KbDocumentsList,
@@ -72,12 +69,11 @@ export function useUpdateSettings() {
 
 /**
  * After a PATCH /api/settings (ui-screens 7.7): the answer replaces `qk.settings()`, and the
- * system status and the Guardrails panel load again because both show settings values.
+ * system status loads again because it shows settings values.
  */
 export function applySavedSettings(client: QueryClient, settings: SettingsDto): void {
   client.setQueryData(qk.settings(), settings);
   void client.invalidateQueries({ queryKey: qk.systemStatus() });
-  void client.invalidateQueries({ queryKey: qk.guardrails() });
 }
 
 /** PUT /api/settings/line-credentials. Settings and system status load again afterwards. */
@@ -153,36 +149,6 @@ export function useRetryKbDocument() {
 /** DELETE /api/knowledge/documents/:id */
 export function useDeleteKbDocument() {
   return useKnowledgeMutation((id: string) => deleteKbDocument(id));
-}
-
-// ---------------------------------------------------------------------------
-// Canned replies (ui-screens 9.8); the list itself is `useCannedReplies` in common.hooks.ts
-// ---------------------------------------------------------------------------
-
-function useCannedMutation<V, R>(mutationFn: (variables: V) => Promise<R>) {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn,
-    onSettled: () => invalidate(client, qk.cannedReplies()),
-  });
-}
-
-/** POST /api/canned-replies */
-export function useCreateCannedReply() {
-  return useCannedMutation((body: { title: string; text: string }) => createCannedReply(body));
-}
-
-/** PATCH /api/canned-replies/:id */
-export function useUpdateCannedReply() {
-  return useCannedMutation(
-    ({ id, ...body }: { id: string; title?: string; text?: string; sortOrder?: number }) =>
-      updateCannedReply(id, body),
-  );
-}
-
-/** DELETE /api/canned-replies/:id */
-export function useDeleteCannedReply() {
-  return useCannedMutation((id: string) => deleteCannedReply(id));
 }
 
 // ---------------------------------------------------------------------------

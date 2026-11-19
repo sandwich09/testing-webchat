@@ -10,7 +10,6 @@ const LOG_FIELD_KEYS: Record<keyof LogFields, true> = {
   messageId: true,
   documentId: true,
   usageId: true,
-  cannedReplyId: true,
   route: true,
   method: true,
   httpStatus: true,

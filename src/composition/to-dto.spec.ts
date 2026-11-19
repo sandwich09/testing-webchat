@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type {
   AiUsageRecord,
-  CannedReply,
-  CannedReplyId,
   Contact,
   ContactId,
   DocumentId,
@@ -18,7 +16,6 @@ import type {
   UsageId,
 } from '@/core/domain';
 import {
-  cannedReplyDtoSchema,
   contactDetailDtoSchema,
   contactDtoSchema,
   contactUsageResponseSchema,
@@ -26,7 +23,6 @@ import {
   documentDtoSchema,
   getMessagesResponseSchema,
   guardrailStatsDtoSchema,
-  listCannedRepliesResponseSchema,
   listContactsResponseSchema,
   listDocumentsResponseSchema,
   messageDtoSchema,
@@ -39,7 +35,6 @@ import {
 import { decodeContactCursor } from './http-request';
 import {
   stickerImageUrl,
-  toCannedReplyDto,
   toContactDetailDto,
   toContactDto,
   toContactUsageResponse,
@@ -47,7 +42,6 @@ import {
   toDocumentDto,
   toGetMessagesResponse,
   toGuardrailStatsDto,
-  toListCannedRepliesResponse,
   toListContactsResponse,
   toListDocumentsResponse,
   toMessageDto,
@@ -123,7 +117,6 @@ const settings = (over: Partial<Settings> = {}): Settings => ({
   aiInstructions: '',
   guardEnabled: true,
   guardTopics: ['เมนู', 'เวลาเปิด'],
-  guardRefusalText: 'คุยได้เฉพาะหัวข้อที่กำหนดไว้นะคะ',
   lineConfigured: true,
   lineBotName: 'Shop',
   lineBasicId: '@shop',
@@ -319,7 +312,6 @@ describe('settings and system', () => {
     expect(dto.guard).toEqual({
       enabled: true,
       topics: ['เมนู', 'เวลาเปิด'],
-      refusalText: 'คุยได้เฉพาะหัวข้อที่กำหนดไว้นะคะ',
       blockedToday: 3,
     });
     expect(dto.client).toEqual({ pollIntervalMs: 2000 });
@@ -385,7 +377,7 @@ describe('settings and system', () => {
   });
 });
 
-describe('knowledge, canned replies, uploads and usage', () => {
+describe('knowledge, uploads and usage', () => {
   const doc: KbDocumentWithText = {
     id: 'd1' as DocumentId,
     fileName: 'menu.pdf',
@@ -412,21 +404,6 @@ describe('knowledge, canned replies, uploads and usage', () => {
       listDocumentsResponseSchema.parse(
         toListDocumentsResponse({ documents: [doc], usedTokens: 10, capacityTokens: 50_000 }),
       ).documents,
-    ).toHaveLength(1);
-  });
-
-  it('maps canned replies', () => {
-    const reply: CannedReply = {
-      id: 'c1' as CannedReplyId,
-      title: 't',
-      text: 'x',
-      sortOrder: 0,
-      createdAt: T,
-      updatedAt: T2,
-    };
-    expect(cannedReplyDtoSchema.parse(toCannedReplyDto(reply))).not.toHaveProperty('createdAt');
-    expect(
-      listCannedRepliesResponseSchema.parse(toListCannedRepliesResponse([reply])).cannedReplies,
     ).toHaveLength(1);
   });
 

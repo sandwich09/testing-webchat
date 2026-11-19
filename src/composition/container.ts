@@ -10,7 +10,6 @@ import { createLineMessagingGateway } from '@/adapters/line';
 import { createLocalFileStorage } from '@/adapters/local-storage';
 import { createVercelBlobStorage } from '@/adapters/blob';
 import {
-  createCannedReplyRepository,
   createContactRepository,
   createKnowledgeRepository,
   createKnowledgeSource,
@@ -31,7 +30,6 @@ import {
 } from '@/adapters/system';
 import {
   makeCheckHealth,
-  makeDeleteCannedReply,
   makeDeleteDocument,
   makeDiscardUpload,
   makeExtractDocument,
@@ -46,13 +44,11 @@ import {
   makeGetUsageReport,
   makeIngestDocument,
   makeIssueUpload,
-  makeListCannedReplies,
   makeListContacts,
   makeListDocuments,
   makeMarkContactRead,
   makeReceiveLineEvents,
   makeRetryMessage,
-  makeSaveCannedReply,
   makeSendAdminMessage,
   makeServeLocalMedia,
   makeSetContactAi,
@@ -139,7 +135,6 @@ export const realPortFactories = (env: AppEnv): PortFactories => {
     settings: (ports) => createSettingsRepository(prisma(), { clock: ports.clock }),
     knowledge: () => createKnowledgeRepository(prisma()),
     usage: () => createUsageRepository(prisma()),
-    cannedReplies: () => createCannedReplyRepository(prisma()),
     webhookEvents: () => createWebhookEventRepository(prisma()),
     rateLimits: () => createRateLimitRepository(prisma()),
     knowledgeSource: () => createKnowledgeSource(prisma()),
@@ -217,9 +212,6 @@ export const assembleUseCases = (
     deleteDocument: lazy(() => makeDeleteDocument(ports, config)),
     listDocuments: lazy(() => makeListDocuments(ports, config)),
     getDocument: lazy(() => makeGetDocument(ports, config)),
-    saveCannedReply: lazy(() => makeSaveCannedReply(ports, config)),
-    deleteCannedReply: lazy(() => makeDeleteCannedReply(ports, config)),
-    listCannedReplies: lazy(() => makeListCannedReplies(ports, config)),
     getUsageReport: lazy(() => makeGetUsageReport(ports, config)),
     getContactUsage: lazy(() => makeGetContactUsage(ports, config)),
     getSystemStatus: lazy(() => makeGetSystemStatus(ports, config)),

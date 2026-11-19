@@ -53,7 +53,7 @@ describe('Prisma ContactRepository', () => {
       now: new Date('2026-11-18T01:00:00Z'),
     });
     const at = new Date('2026-11-18T02:00:00Z');
-    await repo.recordOutbound(id(1), { at, preview: { type: 'text', text: 'a' }, by: 'admin' });
+    await repo.recordOutbound(id(1), { preview: { type: 'text', text: 'a' }, by: 'admin' });
     await repo.recordInbound(id(1), {
       at,
       preview: { type: 'sticker', text: null },

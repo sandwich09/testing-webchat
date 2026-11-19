@@ -3,7 +3,6 @@ import { AI_STUCK_AFTER_MS, PRICE_TABLE, type StorageKey } from '@/core/domain';
 import type { AllPorts } from '@/core/use-cases';
 import {
   FakeAccessTokenSigner,
-  FakeCannedReplyRepository,
   FakeChatModel,
   FakeClock,
   FakeContactRepository,
@@ -75,7 +74,6 @@ const fakeFactories = (): Factories => {
     settings: () => new FakeSettingsRepository(),
     knowledge: () => new FakeKnowledgeRepository(),
     usage: () => new FakeUsageRepository({ contacts }),
-    cannedReplies: () => new FakeCannedReplyRepository(),
     webhookEvents: () => new FakeWebhookEventRepository(),
     rateLimits: () => new FakeRateLimitRepository(),
   };
@@ -159,9 +157,6 @@ describe('assembleUseCases', () => {
     'deleteDocument',
     'listDocuments',
     'getDocument',
-    'saveCannedReply',
-    'deleteCannedReply',
-    'listCannedReplies',
     'getUsageReport',
     'getContactUsage',
     'getSystemStatus',
@@ -185,7 +180,10 @@ describe('assembleUseCases', () => {
       ok: false,
       error: { code: 'access.unauthorized' },
     });
-    expect(await useCases.listCannedReplies({}, ctx)).toEqual({ ok: true, value: [] });
+    expect(await useCases.listDocuments({}, ctx)).toMatchObject({
+      ok: true,
+      value: { documents: [] },
+    });
   });
 
   it('answers media.not_found for both local storage use cases unless FILE_STORAGE is local', async () => {

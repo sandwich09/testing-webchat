@@ -33,7 +33,11 @@ export interface ContactRepository {
   ): Promise<void>;
   setFollowStatus(id: ContactId, status: FollowStatus, at: Date): Promise<void>;
 
-  /** After a new inbound message: unreadCount + 1, last message, reply token if its expiresAt is newer. */
+  /**
+   * After a new inbound message: unreadCount + 1, the latest inbound time (`lastMessageAt`, the sort
+   * key of the list) and the preview when the message is not older, reply token if its expiresAt
+   * is newer.
+   */
   recordInbound(
     id: ContactId,
     i: {
@@ -44,11 +48,11 @@ export interface ContactRepository {
     },
   ): Promise<void>;
 
-  /** After an outbound message: last message. Does not touch unreadCount. */
-  recordOutbound(
-    id: ContactId,
-    o: { at: Date; preview: MessagePreview; by: 'admin' | 'ai' },
-  ): Promise<void>;
+  /**
+   * After an outbound message: the preview and its author only. The order of the list follows
+   * the customer's messages, so neither `lastMessageAt` nor unreadCount changes.
+   */
+  recordOutbound(id: ContactId, o: { preview: MessagePreview; by: 'admin' | 'ai' }): Promise<void>;
 
   /** Compare-and-clear: clears the token only if it is still the same. true means the caller may use it. */
   consumeReplyToken(id: ContactId, replyToken: string): Promise<boolean>;

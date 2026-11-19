@@ -3,13 +3,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { useSyncExternalStore } from 'react';
 
-import { getSettings, listCannedReplies } from '@/common/common.api';
+import { getSettings } from '@/common/common.api';
 import { qk } from '@/common/query-keys';
 
 /** `settings` stays fresh this long (ui-screens 7.1). */
 export const SETTINGS_STALE_MS = 30_000;
-/** `canned-replies` stays fresh this long (ui-screens 7.1). */
-export const CANNED_REPLIES_STALE_MS = 60_000;
 
 /**
  * GET /api/settings, shared by the shell, the chat page and the settings page. Not polled; it is
@@ -22,15 +20,6 @@ export function useSettings() {
     queryFn: ({ signal }) => getSettings(signal),
     staleTime: SETTINGS_STALE_MS,
     refetchOnWindowFocus: true,
-  });
-}
-
-/** GET /api/canned-replies, shared by the composer picker and the settings section. */
-export function useCannedReplies() {
-  return useQuery({
-    queryKey: qk.cannedReplies(),
-    queryFn: ({ signal }) => listCannedReplies(signal),
-    staleTime: CANNED_REPLIES_STALE_MS,
   });
 }
 

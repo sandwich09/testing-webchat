@@ -118,7 +118,6 @@ model Settings {
   aiInstructions       String         @default("")
   guardEnabled         Boolean        @default(false)
   guardTopics          String[]       @default([])
-  guardRefusalText     String         @default("คุยได้เฉพาะหัวข้อที่กำหนดไว้นะคะ")
   lastWebhookAt        DateTime?      @db.Timestamptz(3)
   lastLineError        String?
   lastLineErrorAt      DateTime?      @db.Timestamptz(3)
@@ -240,17 +239,6 @@ model AiUsage {
 
   @@index([createdAt])
   @@index([contactId, createdAt])
-}
-
-model CannedReply {
-  id        String   @id @db.Uuid
-  title     String
-  text      String
-  sortOrder Int
-  createdAt DateTime @db.Timestamptz(3)
-  updatedAt DateTime @db.Timestamptz(3)
-
-  @@index([sortOrder])
 }
 
 model RateLimitBucket {

@@ -72,8 +72,6 @@ const CATALOG = [
   'knowledge.extract_empty',
   'knowledge.extract_refused',
   'knowledge.extract_interrupted',
-  'canned_reply.not_found',
-  'canned_reply.limit_reached',
 ];
 
 describe('ERROR_CODES', () => {

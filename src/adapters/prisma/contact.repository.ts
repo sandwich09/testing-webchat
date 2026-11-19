@@ -58,8 +58,9 @@ export function createContactRepository(client: PrismaClient): ContactRepository
   };
 
   const recordInbound: ContactRepository['recordInbound'] = async (id, i) => {
-    // One statement (rule 4). Every CASE reads the old row, so the last message moves only when the
-    // new one is not older, and the reply token only when its expiry is later.
+    // One statement (rule 4). Every CASE reads the old row, so the last inbound time (the list's
+    // sort key) and the preview move only when the new message is not older than the latest
+    // inbound one, and the reply token only when its expiry is later.
     const isLatest = Prisma.sql`("lastMessageAt" IS NULL OR "lastMessageAt" <= ${i.at}::timestamptz)`;
     const tokenIsNewer = Prisma.sql`(${i.replyToken}::text IS NOT NULL
       AND ${i.replyTokenExpiresAt}::timestamptz IS NOT NULL
@@ -79,8 +80,9 @@ export function createContactRepository(client: PrismaClient): ContactRepository
   const recordOutbound: ContactRepository['recordOutbound'] = async (id, o) => {
     await client.contact.updateMany({
       where: { id },
+      // The preview follows every message; `lastMessageAt` is the latest inbound time and the
+      // sort key of the list, so a reply from the shop does not move the chat (rule 4).
       data: {
-        lastMessageAt: o.at,
         lastMessagePreview: o.preview.text,
         lastMessageType: o.preview.type,
         lastMessageBy: o.by,

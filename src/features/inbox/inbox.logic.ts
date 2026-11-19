@@ -13,7 +13,6 @@ import { eventCodeText } from '@/common/error-messages';
 import {
   IMAGE_MAX_BYTES,
   VIDEO_MAX_BYTES,
-  type CannedReplyDto,
   type ContactDetailDto,
   type ContactDto,
   type ContactFilter,
@@ -200,7 +199,10 @@ export function matchesContactFilter(c: ContactDto, filter: ContactFilter, q: st
   return (c.displayName ?? '').toLowerCase().includes(needle);
 }
 
-/** Newest first by last message (or creation), then by id, as `GET /api/contacts` orders. */
+/**
+ * Newest first by `lastMessage.at` (the customer's latest message, or creation), then by id, as
+ * `GET /api/contacts` orders.
+ */
 export function compareContacts(a: ContactDto, b: ContactDto): number {
   const x = Date.parse(a.lastMessage?.at ?? a.createdAt);
   const y = Date.parse(b.lastMessage?.at ?? b.createdAt);
@@ -346,17 +348,6 @@ export function canSend(draft: string, attachment: AttachmentState, block: Compo
   }
 }
 
-/** Inserts text at the selection and returns the new value and caret position. */
-export function insertAtCaret(
-  value: string,
-  sel: { start: number; end: number },
-  text: string,
-): { value: string; caret: number } {
-  const start = Math.max(0, Math.min(sel.start, sel.end, value.length));
-  const end = Math.min(value.length, Math.max(sel.start, sel.end));
-  return { value: value.slice(0, start) + text + value.slice(end), caret: start + text.length };
-}
-
 /** Whether a typing ping is due. */
 export function shouldSendTypingPing(
   lastSentAt: number | null,
@@ -364,22 +355,6 @@ export function shouldSendTypingPing(
   intervalMs: number,
 ): boolean {
   return lastSentAt === null || nowMs - lastSentAt >= intervalMs;
-}
-
-/** Canned replies matching a query in title or text, in `sortOrder`. */
-export function filterCannedReplies(
-  items: readonly CannedReplyDto[],
-  query: string,
-): CannedReplyDto[] {
-  const needle = query.trim().toLowerCase();
-  return items
-    .filter(
-      (item) =>
-        needle === '' ||
-        item.title.toLowerCase().includes(needle) ||
-        item.text.toLowerCase().includes(needle),
-    )
-    .sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
 export type Segment = { kind: 'text'; text: string } | { kind: 'link'; text: string; href: string };

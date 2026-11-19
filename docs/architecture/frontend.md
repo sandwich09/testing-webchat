@@ -7,7 +7,7 @@
 | หัวข้อ | เลือก |
 | --- | --- |
 | Styling | Tailwind CSS 4 |
-| Component | แบบ shadcn/ui เฉพาะตัวที่ใช้: button, input, textarea, switch, dialog, sonner (toast), table, skeleton, tooltip เขียนเองใน `src/common/ui/` ตามแบบของ shadcn ไม่ได้ใช้ CLI ของ shadcn รายการและ package อยู่ใน [project-setup](project-setup.md#shadcnui) |
+| Component | แบบ shadcn/ui เฉพาะตัวที่ใช้: button, input, textarea, switch, dialog, sonner (toast), table, skeleton, tooltip และ select (เขียนเองทั้งหมดไม่มี package เพิ่ม) เขียนเองใน `src/common/ui/` ตามแบบของ shadcn ไม่ได้ใช้ CLI ของ shadcn รายการและ package อยู่ใน [project-setup](project-setup.md#shadcnui) |
 | ไอคอน | lucide-react |
 | การดึงข้อมูล | TanStack Query |
 | State รวม | ไม่มี store กลาง ข้อมูลจาก server อยู่ใน cache ของ TanStack Query |
@@ -23,7 +23,7 @@
 | --- | --- |
 | หน้ายินดีต้อนรับ | แสดงเมื่อยังไม่มี cookie ของรหัสเข้าใช้ ดู [access-gate](../specs/access-gate.md) |
 | แชท | รายชื่อลูกค้า, ห้องแชท, แผงข้อมูลลูกค้า ดู [webchat-inbox](../specs/webchat-inbox.md) |
-| ตั้งค่า | AI ตอบแทน, LINE Official Account, คลังความรู้, ค่าใช้จ่าย AI, สถานะระบบ ดู [admin-backoffice](../specs/admin-backoffice.md) |
+| ตั้งค่า | AI ตอบแทน, ขอบเขตหัวข้อ, LINE Official Account, คลังความรู้, ค่าใช้จ่าย AI, สถานะระบบ ดู [admin-backoffice](../specs/admin-backoffice.md) |
 
 ทุกหน้าหลังเข้าระบบมีแถบเมนูซ้ายที่พับได้: แชท (พร้อมจำนวนยังไม่อ่าน), ตั้งค่า, ออกจากระบบ และปุ่มพับเมนู
 
@@ -34,6 +34,8 @@
 - แคบกว่า 720px: เมนูเป็นแถบด้านบน และแสดงรายชื่อหรือห้องแชททีละอย่าง
 
 URL บอกว่าเปิดแชทของลูกค้าคนไหน จึง refresh แล้วอยู่ที่เดิม
+
+โครงหน้าสูงเท่าหน้าต่างพอดี document ไม่เลื่อน เฉพาะคอลัมน์ด้านใน (รายชื่อ แชท แผงข้อมูล คอลัมน์ตั้งค่า) เลื่อนเอง ([ui-screens ข้อ 1.4](../specs/ui-screens.md#14-ช่วงความกว้างจอ))
 
 ## โฟลเดอร์
 
@@ -57,8 +59,8 @@ src/features/
       ThreadPlaceholder.tsx  InfoPanel.tsx  MediaLightbox.tsx
       inbox.thread.logic.ts
       inbox.thread.hooks.ts         useContactDetail, useSetContactAi, useThread
-    composer/                       ช่องตอบ ไฟล์แนบ ข้อความสำเร็จรูป และ ping การพิมพ์
-      Composer.tsx  AttachmentTray.tsx  CannedReplyPicker.tsx
+    composer/                       ช่องตอบ ไฟล์แนบ และ ping การพิมพ์
+      Composer.tsx  AttachmentTray.tsx
       inbox.attachment.logic.ts     state machine ของไฟล์แนบ และสิ่งที่ tray แสดง (ฟังก์ชันล้วน)
       inbox.attachment.controller.ts  ขั้นตอนแนบไฟล์ผ่านฟังก์ชันของ browser และ API ที่ส่งเข้ามา
       inbox.typing.controller.ts    ตัวจำกัดความถี่ของ ping การพิมพ์
@@ -66,9 +68,10 @@ src/features/
       inbox.composer.hooks.ts       useDraft, useAttachment, useReleaseSentPreviews, useTypingPing
   settings/                         ชั้นเดียว ทุกส่วนใช้ SettingsSection และ settings.hooks.ts ร่วมกัน
     settings.api.ts  settings.logic.ts  settings.hooks.ts  settings.constants.ts
-    settings.guard.api.ts  settings.guard.logic.ts  settings.guard.hooks.ts   ส่วนขอบเขตหัวข้อและ Guardrails
+    settings.guard.api.ts  settings.guard.logic.ts  settings.guard.hooks.ts   ส่วนขอบเขตหัวข้อ
     SettingsPage.tsx  *Section.tsx ...
 src/common/                         ของที่ใช้มากกว่าหนึ่ง feature
+  ui/                               component แบบ shadcn/ui ที่เขียนเอง รวม select.tsx (ตัวเลือกค่าในธีม)
 ```
 
 ไฟล์ใน `app/` ทำหน้าที่แค่ import component ของ feature
@@ -138,6 +141,12 @@ Feature แบ่งตามพื้นที่ของหน้าจอ �
 - แผงใช้เส้นคั่นบาง ไม่ใช้การ์ดซ้อนการ์ด
 - ฟองข้อความโค้ง 17px มุมที่ชี้ไปหาผู้ส่งโค้งน้อยกว่า และข้อความที่ส่งติดกันจัดเป็นกลุ่ม
 - เวลาอยู่ข้างฟองข้อความ พร้อมผู้ส่งฝั่งร้าน: "คุณ" หรือ "AI"
+
+### Popup และ dropdown
+
+- แอปไม่ใช้ control ที่ browser หรือระบบปฏิบัติการวาด popup เอง (`<select>`, `<datalist>`, `<input type="date">`, `month`, `time`, `color`) เพราะสี ตัวอักษร และพื้นของ popup นั้นไม่ตามธีม ทุก dropdown ใช้ `Select` ใน `src/common/ui/select.tsx` ([ui-screens ข้อ 1.8](../specs/ui-screens.md#18-select))
+- popup ใช้พื้น `surface` ขอบ 1px `line` มุม 14px และเงา token `shadow-popover` (`0 12px 32px` สี `fg` ความทึบ 14% ประกาศใน `app/globals.css`) แถวที่ชี้หรือเลือกด้วยคีย์บอร์ดพื้น `selected` ค่าที่เลือกเป็นสี `accent-strong` พร้อมไอคอนถูก
+- `<input type="file">` ยังใช้ได้ เพราะเปิดหน้าต่างเลือกไฟล์ของระบบ ไม่ใช่ popup ในหน้า และ `title` ใช้เฉพาะเป็นคำอธิบายของข้อความที่ถูกตัด ไม่ใช้เป็นเมนู
 
 ### สถานะของทุกหน้า
 

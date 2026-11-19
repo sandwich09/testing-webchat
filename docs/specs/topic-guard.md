@@ -1,6 +1,6 @@
 # ขอบเขตหัวข้อ
 
-> สถานะ: สร้างแล้ว · อัปเดตล่าสุด: 2026-11-18
+> สถานะ: สร้างแล้ว · อัปเดตล่าสุด: 2026-11-19
 
 ## เป้าหมาย
 
@@ -14,7 +14,7 @@
 4. ลำดับการตรวจของ AI ตอบแทน: kill switch → AI ตอบแทนของลูกค้า → การติดตาม → ชนิดข้อความ → งบต่อวัน → รวมข้อความรัวและล็อก → ขอบเขตหัวข้อ → คลังความรู้และโมเดลตอบแชท การคัดกรองทำก่อนโหลดคลังความรู้และก่อนเรียกโมเดลตอบแชท ขั้นตอนอยู่ใน [use-cases](../architecture/use-cases.md#generateaireply)
 5. ตัวคัดกรองได้รายการหัวข้อ ข้อความล่าสุดของลูกค้า (ข้อความรัวที่รวมแล้ว) และบริบทไม่เกิน `GUARD_CONTEXT_TURNS` turn ก่อนหน้า เพื่อตัดสินข้อความต่อเนื่อง เช่น "ขออีกมุก" ได้ถูกต้อง
 6. ผ่าน: บันทึกต้นทุนของการคัดกรอง แล้วตอบตามปกติ คำสั่งระบบของการตอบได้บล็อกรายการหัวข้อและกฎ "ตอบเฉพาะหัวข้อเหล่านี้" เพิ่มเป็นชั้นที่สอง ([ai-prompt ข้อ 9.5](ai-prompt.md#95-บล็อกที่ต่อท้ายคำสั่งระบบของการตอบแชท))
-7. ถูกกัน: ไม่เรียกโมเดลตอบแชท ส่งข้อความปฏิเสธที่ตั้งไว้ให้ลูกค้าตามกฎการส่งปกติ (reply token ก่อน แล้ว push) ข้อความนี้เป็นข้อความของ AI ในแชท มีบรรทัดเหตุการณ์ `guard.blocked` แชทไม่ขึ้นรอแอดมิน และ AI ตอบแทนของลูกค้ายังเปิด
+7. ถูกกัน: ไม่เรียกโมเดลตอบแชท ส่งข้อความปฏิเสธให้ลูกค้าตามกฎการส่งปกติ (reply token ก่อน แล้ว push) ข้อความนี้เป็นข้อความของ AI ในแชท มีบรรทัดเหตุการณ์ `guard.blocked` แชทไม่ขึ้นรอแอดมิน และ AI ตอบแทนของลูกค้ายังเปิด
 8. ชั้นที่สอง: ถ้าผ่านการคัดกรองแล้วโมเดลตอบแชทยังตัดสินว่านอกเรื่อง (เหตุผล `unsafe_or_offtopic`) ขณะขอบเขตหัวข้อเปิด ระบบทำเหมือนถูกกันในข้อ 7 ทุกอย่าง
 9. ต้นทุนของการคัดกรองนับรวมในงบต่อวัน และงบถูกตรวจก่อนการคัดกรอง ([usage-cost](usage-cost.md#งบต่อวัน))
 10. Kill switch ถูกตรวจซ้ำก่อนส่งข้อความปฏิเสธ เหมือนก่อนส่งคำตอบปกติ
@@ -26,9 +26,10 @@
 | --- | --- |
 | เปิดใช้ | boolean ค่าเริ่มต้นปิด เปิดได้เมื่อมีหัวข้ออย่างน้อยหนึ่งหัวข้อ ไม่เช่นนั้นได้ `settings.guard_topics_required` |
 | หัวข้อ | 1 ถึง `GUARD_MAX_TOPICS` หัวข้อเมื่อเปิด แต่ละหัวข้อ 1 ถึง `GUARD_TOPIC_MAX_CHARS` ตัวหลังตัดช่องว่าง ห้ามซ้ำ |
-| ข้อความปฏิเสธ | 1 ถึง `GUARD_REFUSAL_MAX_CHARS` ตัว ค่าเริ่มต้น `DEFAULT_GUARD_REFUSAL_TEXT` |
 
-ค่าของ constant ทุกตัวอยู่ใน [project-setup](../architecture/project-setup.md#101-แกนกลาง)
+ค่าของ constant ทุกตัวอยู่ใน [project-setup](../architecture/project-setup.md#101-แกนกลาง) หน้าตั้งค่าแก้รายการหัวข้อทีละหัวข้อ (เพิ่มหรือลบแล้วบันทึกทันที) แต่ API ยังรับรายการทั้งชุดใน `guardTopics` ([ui-screens ข้อ 9.13](ui-screens.md#913-ส่วนขอบเขตหัวข้อ))
+
+ข้อความปฏิเสธไม่ใช่ค่าที่ตั้งได้ เป็นประโยคคงที่ `guardRefusalText(aiPoliteParticle)` = "คุยได้เฉพาะหัวข้อที่กำหนดไว้นะคะ" เมื่อคำลงท้ายเป็น "ค่ะ" และ "คุยได้เฉพาะหัวข้อที่กำหนดไว้นะครับ" เมื่อเป็น "ครับ" (กฎเดียวกับ `handoffText`) ระบบอ่านคำลงท้ายตอนส่งทุกครั้ง การเปลี่ยนคำลงท้ายจึงมีผลกับข้อความที่ถูกกันครั้งถัดไป ([ADR 0024](../adr/0024-scope-reductions.md))
 
 ### การทดลองในหน้าตั้งค่า
 
@@ -61,9 +62,9 @@
 - ขั้นตอน: [GenerateAiReply](../architecture/use-cases.md#generateaireply), [UpdateSettings](../architecture/use-cases.md#updatesettings), [TestTopicGuard](../architecture/use-cases.md#testtopicguard), [GetSettings](../architecture/use-cases.md#getsettings)
 - HTTP: `SettingsDto.guard`, `PATCH /api/settings`, `POST /api/settings/guard/test` ใน [api-contract](../architecture/api-contract.md)
 - Prompt ของตัวคัดกรองและบล็อกของคำสั่งระบบ: [ai-prompt ข้อ 9](ai-prompt.md#9-prompt-ของขอบเขตหัวข้อ)
-- ตาราง: คอลัมน์ `guardEnabled`, `guardTopics`, `guardRefusalText` ของ Settings และค่า enum `guard`, `blocked` ของ AiUsage ใน [data-model](../architecture/data-model.md#migration-ที่สอง-ขอบเขตหัวข้อ)
+- ตาราง: คอลัมน์ `guardEnabled`, `guardTopics` ของ Settings (คอลัมน์ `guardRefusalText` ถูกลบใน [migration ที่ห้า](../architecture/data-model.md#migration-ที่ห้า-ลบตารางและคอลัมน์ที่ไม่ใช้แล้ว)) และค่า enum `guard`, `blocked` ของ AiUsage ใน [data-model](../architecture/data-model.md#migration-ที่สอง-ขอบเขตหัวข้อ)
 - หน้าจอ: [ui-screens ข้อ 9.13](ui-screens.md#913-ส่วนขอบเขตหัวข้อ), ถ้อยคำใน [ui-copy](ui-copy.md#ขอบเขตหัวข้อ)
-- ตัวเลขของ guardrail ทุกชั้น: [ai-guardrails](../security/ai-guardrails.md)
+- ตัวเลขของ guardrail ทุกชั้น: `GET /api/system/guardrails` ไม่มีหน้าจอแสดง ([ai-guardrails](../security/ai-guardrails.md))
 
 ## สิ่งที่ไม่ทำและข้อจำกัด
 

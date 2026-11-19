@@ -550,8 +550,9 @@ describe('SendAdminMessage', () => {
     });
   });
 
-  it('makes this message the last one in the contact list, by admin, without touching unreadCount', async () => {
+  it('shows this message as the preview, by admin, without moving the contact or touching unreadCount', async () => {
     const c = await givenContact({ replyToken: 'rt-1' });
+    const inboundAt = clock.now();
     await contacts.recordInbound(c.id, {
       at: clock.now(),
       preview: { type: 'text', text: 'again' },
@@ -564,7 +565,8 @@ describe('SendAdminMessage', () => {
 
     expect(await fresh(c.id)).toMatchObject({
       unreadCount: 2,
-      lastMessageAt: clock.now(),
+      // The sort key of the list stays the customer's message.
+      lastMessageAt: inboundAt,
       lastMessagePreview: 'ตอบกลับ',
       lastMessageType: 'text',
       lastMessageBy: 'admin',

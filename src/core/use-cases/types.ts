@@ -1,7 +1,6 @@
 import type { ErrorCode, PriceTable, Result } from '@/core/domain';
 import type {
   AccessTokenSigner,
-  CannedReplyRepository,
   ChatModel,
   Clock,
   ContactRepository,
@@ -61,7 +60,6 @@ export interface AllPorts {
   settings: SettingsRepository;
   knowledge: KnowledgeRepository;
   usage: UsageRepository;
-  cannedReplies: CannedReplyRepository;
   webhookEvents: WebhookEventRepository;
   rateLimits: RateLimitRepository;
   cipher: SecretCipher;

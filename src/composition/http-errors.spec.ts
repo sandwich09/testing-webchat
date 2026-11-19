@@ -77,8 +77,6 @@ const CATALOG: Record<ErrorCode, number | null> = {
   'knowledge.extract_empty': null,
   'knowledge.extract_refused': null,
   'knowledge.extract_interrupted': null,
-  'canned_reply.not_found': 404,
-  'canned_reply.limit_reached': 409,
 };
 
 describe('ERROR_HTTP', () => {

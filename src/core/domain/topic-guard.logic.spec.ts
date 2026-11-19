@@ -5,11 +5,9 @@ import {
   GUARD_MAX_TOKENS,
   GUARD_MAX_TOPICS,
   GUARD_MODEL,
-  GUARD_REFUSAL_MAX_CHARS,
   GUARD_TEST_MAX_CHARS,
   GUARD_TIMEOUT_MS,
   GUARD_TOPIC_MAX_CHARS,
-  DEFAULT_GUARD_REFUSAL_TEXT,
   RATE_LIMIT_GUARD_TEST,
   RATE_LIMIT_RULES,
 } from './constants';
@@ -17,6 +15,7 @@ import {
   buildGuardClassifierPrompt,
   buildGuardRulesBlock,
   guardContextTurns,
+  guardRefusalText,
   guardVerdictOf,
   normalizeGuardTopics,
 } from './topic-guard.logic';
@@ -61,29 +60,32 @@ describe('topic guard constants (project-setup 10.1 and 10.2)', () => {
     expect({
       GUARD_MAX_TOPICS,
       GUARD_TOPIC_MAX_CHARS,
-      GUARD_REFUSAL_MAX_CHARS,
       GUARD_TEST_MAX_CHARS,
       GUARD_MODEL,
       GUARD_MAX_TOKENS,
       GUARD_TIMEOUT_MS,
       GUARD_CONTEXT_TURNS,
-      DEFAULT_GUARD_REFUSAL_TEXT,
     }).toEqual({
       GUARD_MAX_TOPICS: 20,
       GUARD_TOPIC_MAX_CHARS: 80,
-      GUARD_REFUSAL_MAX_CHARS: 300,
       GUARD_TEST_MAX_CHARS: 1000,
       GUARD_MODEL: 'claude-haiku-5-5',
       GUARD_MAX_TOKENS: 2000,
       GUARD_TIMEOUT_MS: 10_000,
       GUARD_CONTEXT_TURNS: 4,
-      DEFAULT_GUARD_REFUSAL_TEXT: 'คุยได้เฉพาะหัวข้อที่กำหนดไว้นะคะ',
     });
   });
 
   it('limits guard_test to 10 per 60 seconds, scaled', () => {
     expect(RATE_LIMIT_GUARD_TEST).toEqual({ limit: 10, windowMs: 60_000 });
     expect(RATE_LIMIT_RULES.guard_test).toEqual({ limit: 10, windowMs: 60_000, scaled: true });
+  });
+});
+
+describe('guardRefusalText', () => {
+  it('ends with นะคะ for ค่ะ and นะครับ for ครับ, like handoffText', () => {
+    expect(guardRefusalText('ค่ะ')).toBe('คุยได้เฉพาะหัวข้อที่กำหนดไว้นะคะ');
+    expect(guardRefusalText('ครับ')).toBe('คุยได้เฉพาะหัวข้อที่กำหนดไว้นะครับ');
   });
 });
 

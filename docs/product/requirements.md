@@ -31,14 +31,14 @@ Webchat คือหน้าจอของแอดมินร้าน ล�
 | E2 | รับรูป วิดีโอ และสติกเกอร์จากลูกค้า และแอดมินส่งรูปกับวิดีโอกลับได้ | [line-messaging](../specs/line-messaging.md) |
 | E3 | สถานะการส่ง (กำลังส่ง ส่งแล้ว ส่งไม่สำเร็จ) และส่งซ้ำได้ | [webchat-inbox](../specs/webchat-inbox.md) |
 | E4 | หลังบ้านสำหรับตั้งค่า LINE OA | [admin-backoffice](../specs/admin-backoffice.md) |
-| E11 | ข้อความสำเร็จรูป และแสดง loading ฝั่ง LINE ขณะแอดมินพิมพ์ | [webchat-inbox](../specs/webchat-inbox.md) |
+| E11 | แสดง loading ฝั่ง LINE ขณะแอดมินพิมพ์ (ข้อความสำเร็จรูปถูกตัดออก [ADR 0024](../adr/0024-scope-reductions.md)) | [webchat-inbox](../specs/webchat-inbox.md) |
 | E5 | AI ตอบแทนรายลูกค้า อ่านประวัติแชทเป็นบริบท | [ai-reply](../specs/ai-reply.md) |
 | E6 | สวิตช์ปิด AI ทั้งระบบ ซึ่งทำให้สวิตช์รายลูกค้ากดไม่ได้ | [ai-reply](../specs/ai-reply.md) |
 | E7 | คลังความรู้จาก PDF ที่ AI ใช้ตอบคำถามทั่วไปของร้าน | [knowledge-base](../specs/knowledge-base.md) |
 | E8 | เลือกโมเดล และผู้ให้บริการ AI เปลี่ยนได้โดยไม่แตะแกนกลาง | [ai-reply](../specs/ai-reply.md) |
 | E9 | Token และค่าใช้จ่ายโดยประมาณต่อข้อความและต่อลูกค้า แสดงเฉพาะหลังบ้าน | [usage-cost](../specs/usage-cost.md) |
 | E10 | รันทั้งระบบในเครื่องได้ด้วย Docker คำสั่งเดียว | [infrastructure](../architecture/infrastructure.md) |
-| E12 | ขอบเขตหัวข้อ: เมื่อเปิด AI คุยได้เฉพาะหัวข้อที่เจ้าของร้านกำหนด ตรวจด้วยการเรียกโมเดลแยกก่อนการตอบ และอยู่เหนือคำแนะนำของร้านกับคลังความรู้ พร้อมส่วน Guardrails ในหน้าตั้งค่า | [topic-guard](../specs/topic-guard.md), [ai-guardrails](../security/ai-guardrails.md) |
+| E12 | ขอบเขตหัวข้อ: เมื่อเปิด AI คุยได้เฉพาะหัวข้อที่เจ้าของร้านกำหนด ตรวจด้วยการเรียกโมเดลแยกก่อนการตอบ และอยู่เหนือคำแนะนำของร้านกับคลังความรู้ ตัวเลขของ guardrail ทุกชั้นอ่านได้จาก API ไม่แสดงบนหน้าจอ ([ADR 0024](../adr/0024-scope-reductions.md)) | [topic-guard](../specs/topic-guard.md), [ai-guardrails](../security/ai-guardrails.md) |
 
 ## สิ่งที่ไม่ทำ
 
@@ -51,6 +51,7 @@ Webchat คือหน้าจอของแอดมินร้าน ล�
 - การแปลงไฟล์วิดีโอ (รับเฉพาะ MP4)
 - ปุ่มลบข้อมูลลูกค้าในหน้าเว็บ (ทำด้วยขั้นตอนใน runbook)
 - ระบบแจ้งเตือนเมื่อระบบขัดข้อง
+- ข้อความสำเร็จรูป, แผงตัวเลข Guardrails บนหน้าจอ และข้อความปฏิเสธที่ตั้งเองของขอบเขตหัวข้อ ([ADR 0024](../adr/0024-scope-reductions.md))
 
 ## ตารางไล่ requirement
 

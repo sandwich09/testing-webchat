@@ -14,6 +14,7 @@ import { testIds } from '@/common/test-ids';
 import { showToast } from '@/common/toast';
 import { Button } from '@/common/ui/button';
 import { Input } from '@/common/ui/input';
+import { Select } from '@/common/ui/select';
 import { Skeleton } from '@/common/ui/skeleton';
 import { Switch } from '@/common/ui/switch';
 import { Textarea } from '@/common/ui/textarea';
@@ -139,8 +140,7 @@ function FieldError({ id, message }: { id: string; message: string | null }) {
   );
 }
 
-const selectClass =
-  'h-11 w-[220px] max-w-full rounded-[13px] border border-line bg-surface px-3.5 text-[16px] leading-normal text-fg outline-none medium:h-10 medium:text-[15px] focus-visible:border-accent-strong focus-visible:ring-[3px] focus-visible:ring-accent-strong/30 aria-invalid:border-danger';
+const modelOptions = AI_MODEL_IDS.map((id) => ({ value: id, label: copy.ai.modelOption[id] }));
 
 function KillSwitchRow({ settings }: { settings: SettingsDto }) {
   const mutation = useUpdateSettings();
@@ -173,6 +173,7 @@ function KillSwitchRow({ settings }: { settings: SettingsDto }) {
 
 function ModelRow({ settings }: { settings: SettingsDto }) {
   const mutation = useUpdateSettings();
+  const labelId = useId();
   const errorId = useId();
   // While saving, show the chosen model; on failure the saved one comes back.
   const shown: AiModelId =
@@ -180,19 +181,25 @@ function ModelRow({ settings }: { settings: SettingsDto }) {
       ? mutation.variables.aiModel
       : settings.ai.model;
   return (
-    <SettingsRow label={copy.ai.model} description={copy.ai.modelDesc} wideControl>
+    <SettingsRow
+      label={copy.ai.model}
+      labelId={labelId}
+      description={copy.ai.modelDesc}
+      wideControl
+    >
       <div className="flex flex-col items-start gap-1 medium:items-end">
-        <select
-          aria-label={copy.ai.model}
-          aria-invalid={mutation.isError || undefined}
+        <Select
+          aria-labelledby={labelId}
+          aria-invalid={mutation.isError}
           aria-describedby={mutation.isError ? errorId : undefined}
-          aria-busy={mutation.isPending || undefined}
-          data-testid={testIds.settingsModel}
-          className={selectClass}
+          pending={mutation.isPending}
+          testId={testIds.settingsModel}
+          optionTestId={testIds.settingsModelOption}
+          className="w-full medium:w-[220px]"
+          options={modelOptions}
           value={shown}
-          onChange={(event) => {
-            const next = AI_MODEL_IDS.find((id) => id === event.target.value);
-            if (next === undefined || mutation.isPending) return;
+          onValueChange={(next) => {
+            if (mutation.isPending) return;
             mutation.mutate(
               { aiModel: next },
               {
@@ -202,13 +209,7 @@ function ModelRow({ settings }: { settings: SettingsDto }) {
               },
             );
           }}
-        >
-          {AI_MODEL_IDS.map((id) => (
-            <option key={id} value={id}>
-              {copy.ai.modelOption[id]}
-            </option>
-          ))}
-        </select>
+        />
         <FieldError
           id={errorId}
           message={mutation.isError ? saveFailureText(mutation.error) : null}
@@ -471,10 +472,7 @@ function AiSkeleton() {
         {commonCopy.loading}
       </span>
       {[0, 1, 2, 3, 4].map((row) => (
-        <div
-          key={row}
-          className="flex min-h-16 items-center gap-6 border-b border-line py-3.5 last:border-b-0"
-        >
+        <div key={row} className="flex min-h-16 items-center gap-6 py-3">
           <div className="flex-1 space-y-2">
             <Skeleton className="h-4 w-40" />
             <Skeleton className="h-3.5 w-64 max-w-full" />

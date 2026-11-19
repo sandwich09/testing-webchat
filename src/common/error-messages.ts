@@ -118,7 +118,7 @@ const ERROR_MESSAGES: Record<ErrorMessageCode, MessageEntry> = {
   'ai.auth_failed': 'API key ของ AI ใช้ไม่ได้ ตรวจค่า ANTHROPIC_API_KEY บน Vercel',
   'ai.bad_request': 'ผู้ให้บริการ AI ไม่รับคำขอของระบบ แจ้งผู้พัฒนา',
   'ai.no_response': 'เรียก AI ไม่สำเร็จ ส่งคำขอแล้วแต่ไม่ได้คำตอบในเวลาที่กำหนด ระบบจะลองอีกครั้งเมื่อมีข้อความใหม่',
-  'ai.link_not_allowed': 'คำตอบของ AI มีลิงก์ที่ไม่อยู่ในคลังความรู้หรือคำแนะนำของร้าน จึงไม่ได้ส่ง',
+  'ai.link_not_allowed': 'คำตอบของ AI มีลิงก์ที่ไม่อยู่ในคลังความรู้หรือคำแนะนำสำหรับ AI จึงไม่ได้ส่ง',
 
   // Settings
   'settings.guard_topics_required': 'ใส่หัวข้ออย่างน้อยหนึ่งหัวข้อแล้วบันทึกก่อน จึงจะเปิดหรือทดลองขอบเขตหัวข้อได้',
@@ -138,10 +138,6 @@ const ERROR_MESSAGES: Record<ErrorMessageCode, MessageEntry> = {
   'knowledge.extract_refused': 'AI ไม่แปลงไฟล์นี้ ตรวจเนื้อหาของไฟล์แล้วลองไฟล์อื่น',
   'knowledge.extract_interrupted':
     'แปลงไฟล์ไม่เสร็จเพราะระบบหยุดทำงานกลางคัน กด "ลองใหม่" แล้วเลือกไฟล์อีกครั้ง',
-
-  // Canned replies
-  'canned_reply.not_found': 'ไม่พบข้อความสำเร็จรูปนี้ โหลดหน้าใหม่',
-  'canned_reply.limit_reached': 'ข้อความสำเร็จรูปครบ {max} รายการแล้ว ลบรายการที่ไม่ใช้ก่อน',
 
   // Client side
   // Created by the browser when the server gave no answer. Not part of `ERROR_CODES`.

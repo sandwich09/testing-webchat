@@ -146,7 +146,7 @@ function StatusRow({ line, now }: { line: SettingsDto['line']; now: Date }) {
   const view = lineStatusView(line.status);
   const account = lineAccountText(line);
   return (
-    <div className="flex min-h-16 items-center gap-6 border-b border-line py-3.5">
+    <div className="flex min-h-16 items-center gap-6 py-3">
       <div className="min-w-0 flex-1">
         <p className="text-body font-bold">{copy.line.status}</p>
         {account !== null ? (
@@ -227,7 +227,7 @@ function WebhookRow({ url }: { url: string }) {
 
 function SetupSteps() {
   return (
-    <div data-testid={testIds.lineSetupSteps} className="border-b border-line py-3.5">
+    <div data-testid={testIds.lineSetupSteps} className="py-3">
       <p className="text-body font-bold">{copy.line.setupTitle}</p>
       <ol className="mt-2 list-decimal space-y-1 pl-6 text-sub text-muted">
         <li>{copy.line.setupStep1}</li>
@@ -506,10 +506,7 @@ function LineSkeleton() {
         {commonCopy.loading}
       </span>
       {[0, 1, 2, 3, 4, 5].map((row) => (
-        <div
-          key={row}
-          className="flex min-h-16 items-center gap-6 border-b border-line py-3.5 last:border-b-0"
-        >
+        <div key={row} className="flex min-h-16 items-center gap-6 py-3">
           <div className="flex-1 space-y-2">
             <Skeleton className="h-4 w-40" />
             <Skeleton className="h-3.5 w-64 max-w-full" />

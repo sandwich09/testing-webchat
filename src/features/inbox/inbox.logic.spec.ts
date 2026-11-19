@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { IMAGE_MAX_BYTES, VIDEO_MAX_BYTES } from '@/contracts';
-import type { CannedReplyDto, ContactDetailDto, ContactDto, MessageDto } from '@/contracts';
+import type { ContactDetailDto, ContactDto, MessageDto } from '@/contracts';
 import { copy } from './inbox.constants';
 import {
   aiSwitchView,
@@ -9,11 +9,9 @@ import {
   compareContacts,
   composerDisabledReason,
   computeTargetSize,
-  filterCannedReplies,
   formatDayChip,
   formatListTime,
   groupMessagesForDisplay,
-  insertAtCaret,
   isSubmitKey,
   linkify,
   matchesContactFilter,
@@ -307,7 +305,20 @@ describe('matchesContactFilter', () => {
 });
 
 describe('compareContacts', () => {
-  it('orders by last message time then id, newest first', () => {
+  it('keeps a contact in place when only its preview changed to a reply of the shop', () => {
+    // `lastMessage.at` is the customer's latest message time, so an admin reply keeps it.
+    const older = contact({
+      id: 'older',
+      lastMessage: { at: '2026-11-18T07:00:00.000Z', by: 'admin', type: 'text', text: 'ตอบ' },
+    });
+    const newer = contact({
+      id: 'newer',
+      lastMessage: { at: '2026-11-18T07:05:00.000Z', by: 'customer', type: 'text', text: 'ถาม' },
+    });
+    expect([older, newer].sort(compareContacts).map((x) => x.id)).toEqual(['newer', 'older']);
+  });
+
+  it('orders by the sort time then id, newest first', () => {
     const a = contact({
       id: 'a',
       lastMessage: { at: '2026-11-18T07:00:00.000Z', by: 'customer', type: 'text', text: 'x' },
@@ -467,40 +478,10 @@ describe('composer logic', () => {
     expect(canSend('hi', { status: 'rejected' }, null)).toBe(true);
   });
 
-  it('inserts at the caret or over a selection', () => {
-    expect(insertAtCaret('abcd', { start: 2, end: 2 }, 'XY')).toEqual({
-      value: 'abXYcd',
-      caret: 4,
-    });
-    expect(insertAtCaret('abcd', { start: 1, end: 3 }, 'Z')).toEqual({ value: 'aZd', caret: 2 });
-    expect(insertAtCaret('', { start: 0, end: 0 }, 'สวัสดี')).toEqual({ value: 'สวัสดี', caret: 6 });
-    expect(insertAtCaret('ab', { start: 9, end: 9 }, 'c')).toEqual({ value: 'abc', caret: 3 });
-  });
-
   it('pings typing at the interval', () => {
     expect(shouldSendTypingPing(null, 0, 15000)).toBe(true);
     expect(shouldSendTypingPing(1000, 15999, 15000)).toBe(false);
     expect(shouldSendTypingPing(1000, 16000, 15000)).toBe(true);
-  });
-
-  it('filters canned replies in title and text and sorts by sortOrder', () => {
-    const item = (id: string, title: string, text: string, sortOrder: number): CannedReplyDto => ({
-      id,
-      title,
-      text,
-      sortOrder,
-      updatedAt: '2026-11-18T00:00:00.000Z',
-    });
-    const items = [
-      item('3', 'Thanks', 'ขอบคุณค่ะ', 3),
-      item('1', 'Hello', 'Welcome', 1),
-      item('2', 'ราคา', 'THANKS a lot', 2),
-    ];
-    expect(filterCannedReplies(items, '').map((i) => i.id)).toEqual(['1', '2', '3']);
-    expect(filterCannedReplies(items, '  thanks ').map((i) => i.id)).toEqual(['2', '3']);
-    expect(filterCannedReplies(items, 'ขอบคุณ').map((i) => i.id)).toEqual(['3']);
-    expect(filterCannedReplies(items, 'zzz')).toEqual([]);
-    expect(items.map((i) => i.id)).toEqual(['3', '1', '2']); // input not mutated
   });
 });
 

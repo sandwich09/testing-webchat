@@ -17,7 +17,7 @@ export class FakeChangeSequence {
 
 const sortAtOf = (c: Contact): Date => c.lastMessageAt ?? c.createdAt;
 
-/** Newest first by coalesce(lastMessageAt, createdAt), then id newest first. */
+/** Newest first by coalesce(lastMessageAt, createdAt), the latest inbound time, then id. */
 const compareForList = (a: Contact, b: Contact): number => {
   const byTime = sortAtOf(b).getTime() - sortAtOf(a).getTime();
   if (byTime !== 0) return byTime;
@@ -120,7 +120,7 @@ export class FakeContactRepository implements ContactRepository {
   readonly recordInbound: ContactRepository['recordInbound'] = (id, i) => {
     this.write(id, (c) => {
       c.unreadCount += 1;
-      // lastMessageAt never goes backwards when events arrive out of order.
+      // lastMessageAt (the latest inbound time) never goes backwards when events arrive out of order.
       if (c.lastMessageAt === null || c.lastMessageAt.getTime() <= i.at.getTime()) {
         c.lastMessageAt = i.at;
         c.lastMessagePreview = i.preview.text;
@@ -141,8 +141,8 @@ export class FakeContactRepository implements ContactRepository {
   };
 
   readonly recordOutbound: ContactRepository['recordOutbound'] = (id, o) => {
+    // Only the preview: lastMessageAt is the latest inbound time, the sort key of the list.
     this.write(id, (c) => {
-      c.lastMessageAt = o.at;
       c.lastMessagePreview = o.preview.text;
       c.lastMessageType = o.preview.type;
       c.lastMessageBy = o.by;
