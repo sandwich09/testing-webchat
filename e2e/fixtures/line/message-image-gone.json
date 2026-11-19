@@ -1,0 +1,27 @@
+{
+  "destination": "{{destination}}",
+  "events": [
+    {
+      "type": "message",
+      "mode": "active",
+      "timestamp": "{{timestamp}}",
+      "source": {
+        "type": "user",
+        "userId": "{{userId}}"
+      },
+      "webhookEventId": "{{webhookEventId}}",
+      "deliveryContext": {
+        "isRedelivery": false
+      },
+      "replyToken": "{{replyToken}}",
+      "message": {
+        "id": "gone{{messageId}}",
+        "type": "image",
+        "quoteToken": "stub-quote-token",
+        "contentProvider": {
+          "type": "line"
+        }
+      }
+    }
+  ]
+}

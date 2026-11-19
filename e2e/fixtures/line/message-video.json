@@ -1,0 +1,28 @@
+{
+  "destination": "{{destination}}",
+  "events": [
+    {
+      "type": "message",
+      "mode": "active",
+      "timestamp": "{{timestamp}}",
+      "source": {
+        "type": "user",
+        "userId": "{{userId}}"
+      },
+      "webhookEventId": "{{webhookEventId}}",
+      "deliveryContext": {
+        "isRedelivery": false
+      },
+      "replyToken": "{{replyToken}}",
+      "message": {
+        "id": "vid{{messageId}}",
+        "type": "video",
+        "quoteToken": "stub-quote-token",
+        "duration": 3000,
+        "contentProvider": {
+          "type": "line"
+        }
+      }
+    }
+  ]
+}

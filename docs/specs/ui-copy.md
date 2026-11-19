@@ -1,0 +1,540 @@
+# ถ้อยคำบนหน้าจอ
+
+> สถานะ: สร้างแล้ว · อัปเดตล่าสุด: 2026-11-19
+
+รายการข้อความไทยทุกคำที่แอดมินเห็น จัดตามไฟล์ constant ของแต่ละ feature ชื่อ constant เป็น key คงที่ที่โค้ดและ [ui-screens](ui-screens.md) ใช้อ้าง
+
+## กฎของเอกสารนี้
+
+- ถ้อยคำทั้งหมดเป็นไปตาม [ux-writing](../guidelines/ux-writing.md): ใช้คำตามอภิธานศัพท์ ไม่มีคำลงท้าย ปุ่มเป็นคำกริยา หนึ่งความหมายหนึ่งประโยค
+- ข้อความ error ที่มาจาก server ตามรหัส error อยู่ใน [error-catalog](../architecture/error-catalog.md) ไม่ซ้ำที่นี่ เอกสารนี้มีเฉพาะข้อความที่ตรวจในฝั่ง browser และไม่เรียก server
+- `{ชื่อ}` คือค่าที่แทนตอนแสดง ตัวเลขจัดรูปแบบด้วยฟังก์ชันใน [ui-screens](ui-screens.md#8-ฟังก์ชันล้วนฝั่งหน้าจอ) ก่อนแทน `{max}` และ `{maxMb}` มาจาก constant ใน `src/contracts/` ซึ่งค่าอยู่ใน [project-setup](../architecture/project-setup.md#10-ค่าคงที่ของระบบ)
+- ชื่อ key: `<feature>.<พื้นที่>.<ชื่อ>` เป็น camelCase key ใดที่เป็นกลุ่มย่อยใช้จุดคั่นต่อ เช่น `inbox.media.other.audio`
+- กลุ่มข้อความ error ที่ตรวจใน browser ใช้ชื่อตามโค้ด: `error` ใน `access.error.*`, `inbox.attach.error.*`, `settings.ai.error.*`, `settings.line.error.*` และ `errors` (พหูพจน์) ใน `settings.guard.errors.*`, `settings.kb.errors.*`, `settings.canned.errors.*` (ใน `kb` และ `canned` key `error` เป็นข้อความเดี่ยวของการโหลดไม่สำเร็จอยู่แล้ว) ข้อความตามรหัส error ของ server และของรหัส client `client.network` ไม่อยู่ในกลุ่มเหล่านี้ หน้าเว็บได้จาก `errorMessage` ใน `src/common/error-messages.ts` ซึ่งใช้ `common.error.network` เป็นข้อความของ `client.network`
+- ในโค้ด แต่ละไฟล์ export object เดียวชื่อ `copy` เช่น `inbox.constants.ts` export `copy.list.title` ซึ่งตรงกับ key `inbox.list.title`
+- ข้อความใหม่ต้องอยู่ในตารางนี้ก่อนใช้ในโค้ด ถ้าต้องการคำใหม่ที่ไม่อยู่ในอภิธานศัพท์ ให้เพิ่มใน [ux-writing](../guidelines/ux-writing.md#อภิธานศัพท์) ด้วย
+
+## `src/common/common.constants.ts`
+
+### ทั่วไปและเมนู
+
+| Key | ข้อความ | ใช้ที่ |
+| --- | --- | --- |
+| `common.appName` | Test webchat application | `<title>`, ชื่อร้านสำรองในเมนูเมื่อยังไม่ได้เชื่อม LINE OA |
+| `common.skipToContent` | ข้ามไปที่เนื้อหา | ลิงก์ข้ามที่เห็นเมื่อ focus |
+| `common.nav.label` | เมนูหลัก | `aria-label` ของ `<nav>` |
+| `common.nav.inbox` | แชท | เมนู |
+| `common.nav.settings` | ตั้งค่า | เมนู |
+| `common.nav.logout` | ออกจากระบบ | เมนู |
+| `common.nav.collapse` | พับเมนู | ปุ่มพับเมนู |
+| `common.nav.expand` | กางเมนู | ปุ่มเดียวกันเมื่อพับอยู่ |
+| `common.nav.unreadAria` | {n} แชทยังไม่อ่าน | `aria-label` ของตัวเลขในเมนู |
+
+### ปุ่มร่วม
+
+| Key | ข้อความ |
+| --- | --- |
+| `common.action.retry` | ลองอีกครั้ง |
+| `common.action.cancel` | ยกเลิก |
+| `common.action.close` | ปิด |
+| `common.action.save` | บันทึก |
+
+### สถานะและ error ร่วม
+
+| Key | ข้อความ | ใช้ที่ |
+| --- | --- | --- |
+| `common.connection.banner` | การเชื่อมต่อมีปัญหา กำลังลองใหม่ | แถบด้านบนเมื่อ polling ล้มเหลวติดกัน |
+| `common.error.section` | ส่วนนี้แสดงไม่ได้ | error boundary ของแต่ละส่วน |
+| `common.error.network` | เชื่อมต่อระบบไม่ได้ ตรวจอินเทอร์เน็ตแล้วลองอีกครั้ง | รหัส client `client.network` เมื่อคำขอไม่ได้คำตอบ |
+| `common.toast.saved` | บันทึกแล้ว | toast หลังบันทึกค่าที่ไม่มี toast เฉพาะ |
+| `common.loading` | กำลังโหลด | ข้อความซ่อนของ skeleton สำหรับโปรแกรมอ่านจอ |
+
+### เวลา
+
+ชื่อวันย่อ ชื่อเดือนย่อ และปีพุทธศักราชมาจาก `Intl.DateTimeFormat("th-TH", { timeZone: "Asia/Bangkok" })` ไม่เก็บใน constant
+
+| Key | ข้อความ | ใช้ที่ |
+| --- | --- | --- |
+| `common.time.today` | วันนี้ | ป้ายวันที่ในแชท |
+| `common.time.yesterday` | เมื่อวาน | รายชื่อและป้ายวันที่ |
+
+## `src/features/access/access.constants.ts`
+
+| Key | ข้อความ | ใช้ที่ |
+| --- | --- | --- |
+| `access.cover.badge` | ยินดีต้อนรับสู่ | ป้ายบนการ์ด |
+| `access.cover.title` | Test webchat | หัวข้อ |
+| `access.cover.subtitle` | application | บรรทัดเล็กใต้หัวข้อ |
+| `access.form.label` | รหัสเข้าใช้ | `<label>` ที่ซ่อนไว้ |
+| `access.form.placeholder` | รหัสเข้าใช้ | placeholder |
+| `access.form.showCode` | แสดงรหัสเข้าใช้ | `aria-label` ของปุ่มตาเมื่อซ่อนอยู่ |
+| `access.form.hideCode` | ซ่อนรหัสเข้าใช้ | `aria-label` ของปุ่มตาเมื่อแสดงอยู่ |
+| `access.form.submit` | เข้าระบบ | ปุ่ม |
+| `access.form.submitting` | กำลังเข้าระบบ | `aria-label` ของปุ่มขณะส่ง (ข้อความบนปุ่มเป็น spinner) |
+| `access.error.empty` | กรุณาใส่รหัสเข้าใช้ | ช่องว่าง (ไม่เรียก server) ถ้อยคำตาม [access-gate](access-gate.md) |
+
+รหัสผิดและลองถี่เกินมาจาก server: ดูรหัสที่เกี่ยวข้องใน [error-catalog](../architecture/error-catalog.md)
+
+## `src/features/inbox/inbox.constants.ts`
+
+### รายชื่อลูกค้า
+
+| Key | ข้อความ | ใช้ที่ |
+| --- | --- | --- |
+| `inbox.list.title` | แชท | หัวคอลัมน์ |
+| `inbox.list.searchPlaceholder` | ค้นหาชื่อลูกค้า | placeholder และ `aria-label` |
+| `inbox.list.clearSearch` | ล้างคำค้นหา | ปุ่ม X |
+| `inbox.list.tabsLabel` | ตัวกรองแชท | `aria-label` ของ tablist |
+| `inbox.list.tabAll` | ทั้งหมด | แท็บ |
+| `inbox.list.tabUnread` | ยังไม่อ่าน | แท็บ ตามด้วยจำนวน |
+| `inbox.list.tabNeedsAdmin` | รอแอดมิน | แท็บ ตามด้วยจำนวน |
+| `inbox.list.unreadAria` | {n} ข้อความยังไม่อ่าน | ตัวเลขในแถว สำหรับโปรแกรมอ่านจอ |
+| `inbox.list.emptyNoLine.title` | ยังไม่มีลูกค้าทักมา | ไม่มีลูกค้าเลย และยังไม่ได้เชื่อม LINE OA |
+| `inbox.list.emptyNoLine.body` | เชื่อม LINE Official Account ที่หน้าตั้งค่า แล้วเพิ่มเพื่อนจากแอป LINE เพื่อเริ่มแชท | |
+| `inbox.list.goToSettings` | ไปที่ตั้งค่า | ลิงก์ในสถานะว่าง |
+| `inbox.list.empty.title` | ยังไม่มีลูกค้าทักมา | ไม่มีลูกค้าเลย เชื่อม LINE OA แล้ว |
+| `inbox.list.empty.body` | เมื่อลูกค้าเพิ่ม LINE Official Account ของร้านเป็นเพื่อนแล้วทักมา แชทจะขึ้นที่นี่ | |
+| `inbox.list.emptyUnread` | ไม่มีแชทที่ยังไม่อ่าน | แท็บยังไม่อ่านว่าง |
+| `inbox.list.emptyNeedsAdmin` | ไม่มีแชทที่รอแอดมิน | แท็บรอแอดมินว่าง |
+| `inbox.list.emptySearch` | ไม่พบลูกค้าชื่อ “{q}” | ค้นหาไม่พบ |
+| `inbox.list.error` | โหลดรายชื่อลูกค้าไม่สำเร็จ | โหลดครั้งแรกไม่ได้ ตามด้วยปุ่ม `common.action.retry` |
+
+### แถวของลูกค้าและข้อความล่าสุด
+
+| Key | ข้อความ | ใช้ที่ |
+| --- | --- | --- |
+| `inbox.contact.unnamed` | ลูกค้าไม่มีชื่อ | ชื่อว่างเพราะดึงโปรไฟล์ไม่ได้ |
+| `inbox.contact.unfollowed` | เลิกติดตามแล้ว | แถวที่เลิกติดตาม, บรรทัดรองของส่วนหัว, แผงข้อมูล |
+| `inbox.preview.you` | คุณ: | คำนำเมื่อข้อความล่าสุดเป็นของแอดมิน |
+| `inbox.preview.ai` | AI: | คำนำเมื่อข้อความล่าสุดเป็นของ AI |
+| `inbox.preview.needsAdmin` | รอแอดมิน · | คำนำสีส้มเมื่อแชทรอแอดมิน |
+| `inbox.preview.none` | ยังไม่มีข้อความ | ลูกค้าเพิ่มเพื่อนแต่ยังไม่ทัก |
+
+### คำแทนสื่อและข้อความชนิดอื่น
+
+ใช้ทั้งในบรรทัดข้อความล่าสุดของรายชื่อ และในฟองของแชท
+
+| Key | ข้อความ | ใช้ที่ |
+| --- | --- | --- |
+| `inbox.media.image` | รูปภาพ | ข้อความล่าสุด, `alt` ของรูปในฟอง |
+| `inbox.media.video` | วิดีโอ | ข้อความล่าสุด, `aria-label` ของภาพตัวอย่างวิดีโอ |
+| `inbox.media.sticker` | สติกเกอร์ | ข้อความล่าสุด, `alt` ของสติกเกอร์, ข้อความแทนเมื่อโหลดสติกเกอร์ไม่ได้ |
+| `inbox.media.other.audio` | [เสียง] | `otherKind = audio` |
+| `inbox.media.other.file` | [ไฟล์] | `otherKind = file` |
+| `inbox.media.other.location` | [ตำแหน่ง] | `otherKind = location` |
+| `inbox.media.other.unknown` | [ข้อความชนิดอื่น] | ชนิดที่ไม่รู้จัก |
+| `inbox.media.otherHint` | ดูได้ในแอป LINE เท่านั้น | บรรทัดที่สองในฟองของข้อความชนิดอื่น |
+| `inbox.media.loading` | กำลังโหลดรูป | สื่อขาเข้าที่ยังดาวน์โหลดไม่เสร็จ |
+| `inbox.media.imageFailed` | โหลดรูปไม่สำเร็จ | `mediaStatus = failed` ของรูป ถ้อยคำตาม [line-messaging](line-messaging.md) |
+| `inbox.media.videoFailed` | โหลดวิดีโอไม่สำเร็จ | `mediaStatus = failed` ของวิดีโอ |
+| `inbox.media.tooLarge` | ไฟล์ใหญ่เกินกว่าจะเก็บได้ ดูได้ในแอป LINE | `mediaStatus = too_large` |
+| `inbox.media.play` | เล่นวิดีโอ | `aria-label` ของภาพตัวอย่างวิดีโอ |
+| `inbox.media.openImage` | เปิดรูปขนาดเต็ม | `aria-label` ของภาพตัวอย่างรูป |
+
+### ส่วนหัวของแชท
+
+| Key | ข้อความ | ใช้ที่ |
+| --- | --- | --- |
+| `inbox.thread.back` | กลับไปที่รายชื่อ | ปุ่มกลับ (จอแคบ) |
+| `inbox.thread.following` | ติดตามอยู่ | บรรทัดรอง และแผงข้อมูล |
+| `inbox.thread.aiHelping` | AI กำลังช่วยตอบ | บรรทัดรองเมื่อ AI ตอบแทนเปิด |
+| `inbox.thread.needsAdmin` | รอแอดมิน | บรรทัดรองและแผงข้อมูลเมื่อแชทรอแอดมิน |
+| `inbox.thread.showInfo` | แสดงข้อมูลลูกค้า | ปุ่มแผงข้อมูล |
+| `inbox.thread.hideInfo` | ซ่อนข้อมูลลูกค้า | ปุ่มแผงข้อมูลเมื่อเปิดอยู่ |
+
+### สวิตช์ AI ตอบแทน
+
+| Key | ข้อความ | ใช้ที่ |
+| --- | --- | --- |
+| `inbox.ai.label` | AI ตอบแทน | ป้ายสวิตช์ในส่วนหัวและแผงข้อมูล |
+| `inbox.ai.labelKilled` | AI ปิดจากหน้าตั้งค่า | ป้ายในส่วนหัวเมื่อ kill switch ปิด |
+| `inbox.ai.noteOff` | เปิดเพื่อให้ AI ตอบลูกค้าคนนี้จากคลังความรู้ | หมายเหตุในแผงข้อมูล |
+| `inbox.ai.noteOn` | AI ตอบลูกค้าคนนี้ และปิดเองเมื่อคุณส่งข้อความ | |
+| `inbox.ai.noteKilled` | AI ถูกปิดทั้งระบบ เปิดได้ที่ ตั้งค่า › AI ตอบแทน | ถ้อยคำตาม [webchat-inbox](webchat-inbox.md) |
+| `inbox.ai.noteUnfollowed` | ลูกค้าเลิกติดตามแล้ว AI จึงตอบไม่ได้ | |
+
+### พื้นที่ข้อความ
+
+| Key | ข้อความ | ใช้ที่ |
+| --- | --- | --- |
+| `inbox.thread.logLabel` | ข้อความในแชท | `aria-label` ของพื้นที่ข้อความ |
+| `inbox.thread.placeholder` | เลือกแชทจากรายชื่อเพื่อเริ่มตอบ | ยังไม่เลือกลูกค้า |
+| `inbox.thread.empty` | ยังไม่มีข้อความในแชทนี้ | แชทว่าง |
+| `inbox.thread.error` | โหลดข้อความไม่สำเร็จ | ตามด้วยปุ่ม `common.action.retry` |
+| `inbox.thread.notFound` | ไม่พบแชทนี้ | id ใน URL ไม่มีอยู่ |
+| `inbox.thread.backToList` | กลับไปที่รายชื่อ | ลิงก์ในสถานะไม่พบ |
+| `inbox.thread.loadingOlder` | กำลังโหลดข้อความก่อนหน้า | ข้อความซ่อนของ skeleton ด้านบน |
+| `inbox.thread.newMessages` | ข้อความใหม่ | ปุ่มลอยเมื่อมีข้อความใหม่ขณะเลื่อนขึ้นไป |
+| `inbox.message.senderYou` | คุณ | ป้ายผู้ส่งข้างเวลา |
+| `inbox.message.senderAi` | AI | ป้ายผู้ส่งข้างเวลา |
+| `inbox.message.sending` | กำลังส่ง | ใต้ฟองที่กำลังส่ง |
+| `inbox.message.sent` | ส่งแล้ว | ข้อความซ่อนคู่กับไอคอน และ `title` ของไอคอน |
+| `inbox.message.failed` | ส่งไม่สำเร็จ | ใต้ฟอง ตามด้วย ` · ` และเหตุผลจาก error catalog |
+| `inbox.message.retry` | ส่งอีกครั้ง | ปุ่มใต้ฟองที่ส่งไม่สำเร็จ |
+
+### บรรทัดเหตุการณ์และเหตุผลของสถานะรอแอดมิน
+
+ข้อความไทยของทุก `eventCode` และทุก `needsAdminReason` อยู่ใน [error-catalog](../architecture/error-catalog.md#เหตุผลของสถานะรอแอดมิน) ที่เดียว ([บรรทัดเหตุการณ์](../architecture/error-catalog.md#บรรทัดเหตุการณ์)) ไฟล์นี้ไม่มี key ของข้อความเหล่านั้น หน้าเว็บเรียก `handoffReasonText` และ `eventCodeText` จาก `src/common/error-messages.ts`
+
+### ช่องตอบ
+
+| Key | ข้อความ | ใช้ที่ |
+| --- | --- | --- |
+| `inbox.composer.placeholder` | พิมพ์ข้อความ | placeholder และ `aria-label` |
+| `inbox.composer.hint` | Enter ส่ง · Shift+Enter ขึ้นบรรทัดใหม่ | ใต้ช่องพิมพ์ (จอกว้าง) |
+| `inbox.composer.send` | ส่ง | ปุ่มหลัก |
+| `inbox.composer.attach` | แนบรูปหรือวิดีโอ | ปุ่มไอคอน |
+| `inbox.composer.canned` | ข้อความสำเร็จรูป | ปุ่มไอคอน |
+| `inbox.composer.waitUpload` | ส่งได้เมื่ออัปโหลดเสร็จ | แทน hint เมื่อไฟล์แนบยังไม่พร้อม |
+| `inbox.composer.disabled.unfollowed` | ส่งข้อความหาลูกค้าที่เลิกติดตามแล้วไม่ได้ | แทนแถบเครื่องมือ |
+| `inbox.composer.disabled.lineNotConfigured` | เชื่อม LINE Official Account ที่หน้าตั้งค่าก่อนจึงจะส่งข้อความได้ | แทนแถบเครื่องมือ |
+
+### ไฟล์แนบ
+
+| Key | ข้อความ | ใช้ที่ |
+| --- | --- | --- |
+| `inbox.attach.preparing` | กำลังเตรียมไฟล์ | ตรวจและแปลงไฟล์ |
+| `inbox.attach.uploading` | กำลังอัปโหลด {percent}% | ขออัปโหลดและอัปโหลด |
+| `inbox.attach.uploadingNoPercent` | กำลังอัปโหลด | เมื่อวัดความคืบหน้าไม่ได้ |
+| `inbox.attach.ready` | พร้อมส่ง | |
+| `inbox.attach.cancel` | ยกเลิกไฟล์แนบ | ปุ่ม X |
+| `inbox.attach.remove` | นำไฟล์แนบออก | ปุ่ม X เมื่อไฟล์ถูกปฏิเสธ |
+
+ข้อความ error ที่ตรวจใน browser (รหัสจาก `validateAttachment` และขั้นตอนแนบไฟล์) `{maxMb}` มาจาก `IMAGE_MAX_BYTES` หรือ `VIDEO_MAX_BYTES` ใน `src/contracts/` และ `convertFailed` ใช้ทั้งเมื่อแปลง WebP หรือ HEIC/HEIF ไม่สำเร็จ (รวมเมื่อ `heic-to` throw) ตาม [line-messaging](line-messaging.md#สื่อขาออก):
+
+| Key | ข้อความ |
+| --- | --- |
+| `inbox.attach.error.unsupported_type` | รองรับเฉพาะรูป JPEG, PNG, HEIC, WebP และวิดีโอ MP4 |
+| `inbox.attach.error.mov_not_supported` | วิดีโอ MOV ส่งไม่ได้ แปลงเป็น MP4 แล้วแนบใหม่ |
+| `inbox.attach.error.image_too_large` | รูปต้องไม่เกิน {maxMb} MB ไฟล์นี้ {sizeMb} MB |
+| `inbox.attach.error.video_too_large` | วิดีโอต้องไม่เกิน {maxMb} MB ไฟล์นี้ {sizeMb} MB |
+| `inbox.attach.error.empty_file` | ไฟล์นี้ว่างเปล่า เลือกไฟล์อื่น |
+| `inbox.attach.error.convertFailed` | แปลงรูปนี้ไม่ได้ ใช้ไฟล์ JPEG หรือ PNG แทน |
+| `inbox.attach.error.uploadFailed` | อัปโหลดไม่สำเร็จ แนบไฟล์อีกครั้ง |
+
+การขอสิทธิ์อัปโหลดที่ server ปฏิเสธ (ชนิด ขนาด จำกัดความถี่) ใช้ข้อความจาก [error-catalog](../architecture/error-catalog.md)
+
+### รายการข้อความสำเร็จรูปในหน้าแชท
+
+| Key | ข้อความ | ใช้ที่ |
+| --- | --- | --- |
+| `inbox.canned.title` | ข้อความสำเร็จรูป | หัว popover |
+| `inbox.canned.searchPlaceholder` | ค้นหาข้อความสำเร็จรูป | ช่องค้นหา |
+| `inbox.canned.empty` | ยังไม่มีข้อความสำเร็จรูป | ยังไม่มีรายการ |
+| `inbox.canned.goToSettings` | เพิ่มที่หน้าตั้งค่า | ลิงก์ใต้ข้อความว่าง |
+| `inbox.canned.noMatch` | ไม่พบข้อความสำเร็จรูปที่ค้นหา | |
+| `inbox.canned.error` | โหลดข้อความสำเร็จรูปไม่สำเร็จ | ตามด้วยปุ่ม `common.action.retry` |
+
+### แผงข้อมูลลูกค้า
+
+| Key | ข้อความ | ใช้ที่ |
+| --- | --- | --- |
+| `inbox.info.title` | ข้อมูลลูกค้า | หัวแผง |
+| `inbox.info.close` | ปิดข้อมูลลูกค้า | ปุ่ม X |
+| `inbox.info.followedAt` | เพิ่มเพื่อนเมื่อ {date} | ใต้ชื่อ |
+| `inbox.info.status` | สถานะ | ป้ายรายละเอียด |
+| `inbox.info.messageCount` | ข้อความทั้งหมด | ป้ายรายละเอียด |
+| `inbox.info.aiReplyCount` | AI ตอบไปแล้ว | ป้ายรายละเอียด |
+| `inbox.info.timesValue` | {n} ครั้ง | ค่าของ AI ตอบไปแล้ว |
+| `inbox.info.lastContact` | ทักล่าสุด | ป้ายรายละเอียด |
+| `inbox.info.error` | โหลดข้อมูลลูกค้าไม่สำเร็จ | ตามด้วยปุ่ม `common.action.retry` |
+
+### Lightbox
+
+| Key | ข้อความ |
+| --- | --- |
+| `inbox.lightbox.label` | ดูสื่อขนาดเต็ม |
+| `inbox.lightbox.openOriginal` | เปิดไฟล์ในแท็บใหม่ |
+| `inbox.lightbox.close` | ปิด |
+
+## `src/features/settings/settings.constants.ts`
+
+### หน้า
+
+| Key | ข้อความ |
+| --- | --- |
+| `settings.page.title` | ตั้งค่า |
+
+### AI ตอบแทน
+
+| Key | ข้อความ | ใช้ที่ |
+| --- | --- | --- |
+| `settings.ai.title` | AI ตอบแทน | หัวส่วน |
+| `settings.ai.killSwitch` | เปิดใช้ AI ทั้งระบบ | ป้ายแถว |
+| `settings.ai.killSwitchDesc` | ปิดแล้ว AI หยุดตอบลูกค้าทุกคนทันที | คำอธิบาย |
+| `settings.ai.killSwitchOnToast` | เปิดใช้ AI ทั้งระบบแล้ว | toast |
+| `settings.ai.killSwitchOffToast` | ปิด AI ทั้งระบบแล้ว | toast |
+| `settings.ai.model` | โมเดล | ป้ายแถว |
+| `settings.ai.modelDesc` | มีผลกับข้อความถัดไป | คำอธิบาย |
+| `settings.ai.modelOption.claude-opus-5-5` | Claude Opus 5.5 | ตัวเลือก (ค่าเริ่มต้น) |
+| `settings.ai.modelOption.claude-sonnet-5-5` | Claude Sonnet 5.5 | ตัวเลือก |
+| `settings.ai.modelOption.claude-haiku-5-5` | Claude Haiku 5.5 | ตัวเลือก |
+| `settings.ai.budget` | งบต่อวัน | ป้ายแถว |
+| `settings.ai.budgetDesc` | ถึงเพดานแล้ว AI หยุดจนถึงเที่ยงคืนตามเวลาไทย | คำอธิบาย |
+| `settings.ai.budgetToday` | วันนี้ใช้ไป {used} | ใต้ช่องงบ |
+| `settings.ai.particle` | คำลงท้าย | ป้ายแถว |
+| `settings.ai.particleDesc` | คำที่ AI ใช้ลงท้ายประโยคกับลูกค้า | คำอธิบาย |
+| `settings.ai.particleOption.ka` | ค่ะ | ตัวเลือก |
+| `settings.ai.particleOption.krub` | ครับ | ตัวเลือก |
+| `settings.ai.instructions` | คำแนะนำสำหรับ AI | ป้ายแถว |
+| `settings.ai.instructionsDesc` | น้ำเสียงและข้อห้ามที่ร้านอยากให้ AI ทำตาม | คำอธิบาย |
+| `settings.ai.instructionsPlaceholder` | เช่น เรียกลูกค้าว่าคุณลูกค้า และไม่รับจองโต๊ะทางแชท | placeholder |
+| `settings.ai.instructionsCounter` | {n}/{max} | ตัวนับ `{max}` จาก `AI_INSTRUCTIONS_MAX_CHARS` |
+
+ข้อความ error ที่ตรวจใน browser:
+
+| Key | ข้อความ |
+| --- | --- |
+| `settings.ai.error.budget_invalid` | ใส่งบเป็นตัวเลข ทศนิยมไม่เกิน 2 ตำแหน่ง |
+| `settings.ai.error.budget_out_of_range` | งบต่อวันต้องอยู่ระหว่าง 0 ถึง {max} ดอลลาร์ |
+| `settings.ai.error.instructions_too_long` | คำแนะนำยาวเกิน {max} ตัวอักษร |
+
+### ขอบเขตหัวข้อ
+
+พฤติกรรมอยู่ใน [topic-guard](topic-guard.md) ในโค้ด key `settings.guard.*` คือ `copy.guard.*` ของ `settings.constants.ts`
+
+| Key | ข้อความ | ใช้ที่ |
+| --- | --- | --- |
+| `settings.guard.title` | ขอบเขตหัวข้อ | หัวส่วน |
+| `settings.guard.switch` | จำกัดหัวข้อที่ AI คุยได้ | ป้ายแถว |
+| `settings.guard.switchDesc` | เปิดแล้ว AI คุยได้เฉพาะหัวข้อในรายการ รวมถึงเรื่องของร้านที่ไม่อยู่ในรายการก็ไม่ตอบ | คำอธิบาย |
+| `settings.guard.enabledToast` | เปิดขอบเขตหัวข้อแล้ว | toast |
+| `settings.guard.disabledToast` | ปิดขอบเขตหัวข้อแล้ว | toast |
+| `settings.guard.topics` | หัวข้อที่คุยได้ | ป้ายแถว |
+| `settings.guard.topicsDesc` | หนึ่งบรรทัดต่อหนึ่งหัวข้อ | คำอธิบาย |
+| `settings.guard.topicsPlaceholder` | เช่น มุกตลกไทย | placeholder |
+| `settings.guard.topicsCounter` | {n}/{max} หัวข้อ | ตัวนับ `{max}` จาก `GUARD_MAX_TOPICS` |
+| `settings.guard.refusal` | ข้อความเมื่อถูกกัน | ป้ายแถว |
+| `settings.guard.refusalDesc` | AI ส่งข้อความนี้ให้ลูกค้าเมื่อข้อความอยู่นอกหัวข้อ | คำอธิบาย |
+| `settings.guard.refusalCounter` | {n}/{max} | ตัวนับ `{max}` จาก `GUARD_REFUSAL_MAX_CHARS` |
+| `settings.guard.test` | ทดลอง | ป้ายแถว และ `aria-label` ของช่องทดลอง |
+| `settings.guard.testDesc` | ทดลองกับหัวข้อที่บันทึกไว้ มีค่าใช้จ่ายทุกครั้ง | คำอธิบาย |
+| `settings.guard.testPlaceholder` | พิมพ์ข้อความแบบที่ลูกค้าจะพิมพ์ | placeholder |
+| `settings.guard.testSubmit` | ทดสอบ | ปุ่ม |
+| `settings.guard.testing` | กำลังทดสอบ | `aria-label` ของปุ่มขณะทดสอบ |
+| `settings.guard.testAllowed` | ผ่าน: อยู่ในหัวข้อ {topic} | ผลทดลองที่ผ่าน |
+| `settings.guard.testAllowedNoTopic` | ผ่าน: อยู่ในหัวข้อที่กำหนด | ผลทดลองที่ผ่านแต่ไม่ได้ชื่อหัวข้อ |
+| `settings.guard.testBlocked` | ถูกกัน: นอกขอบเขตหัวข้อ | ผลทดลองที่ถูกกัน |
+| `settings.guard.testCost` | ค่าใช้จ่ายโดยประมาณ ${usd} | ใต้ผลทดลอง |
+| `settings.guard.testDisabledKilled` | ทดลองไม่ได้เพราะ AI ถูกปิดทั้งระบบ | เหตุผลข้างปุ่มที่กดไม่ได้ |
+| `settings.guard.testNeedsTopics` | บันทึกหัวข้ออย่างน้อยหนึ่งหัวข้อก่อนจึงจะทดลองได้ | เหตุผลข้างปุ่มที่กดไม่ได้ |
+| `settings.guard.blockedToday` | วันนี้กันไป {n} ข้อความ | บรรทัดท้ายส่วน |
+
+ข้อความ error ที่ตรวจใน browser (รหัสจาก `validateGuardTopicsInput`, `validateGuardRefusal`, `validateGuardTestInput`):
+
+| Key | ข้อความ |
+| --- | --- |
+| `settings.guard.errors.topics_required` | ใส่หัวข้ออย่างน้อยหนึ่งหัวข้อก่อนเปิดขอบเขตหัวข้อ |
+| `settings.guard.errors.too_many_topics` | ใส่ได้ไม่เกิน {max} หัวข้อ |
+| `settings.guard.errors.topic_too_long` | มีหัวข้อที่ยาวเกิน {max} ตัวอักษร |
+| `settings.guard.errors.duplicate_topic` | มีหัวข้อซ้ำกัน ลบบรรทัดที่ซ้ำ |
+| `settings.guard.errors.refusal_required` | ใส่ข้อความเมื่อถูกกัน |
+| `settings.guard.errors.refusal_too_long` | ข้อความยาวเกิน {max} ตัวอักษร |
+| `settings.guard.errors.test_required` | พิมพ์ข้อความที่จะทดลอง |
+| `settings.guard.errors.test_too_long` | ข้อความยาวเกิน {max} ตัวอักษร |
+
+การเปิดโดยไม่มีหัวข้อที่ server ปฏิเสธ การทดลองถี่เกิน และความผิดพลาดของ AI ระหว่างทดลอง ใช้ข้อความจาก [error-catalog](../architecture/error-catalog.md)
+
+### Guardrails
+
+| Key | ข้อความ | ใช้ที่ |
+| --- | --- | --- |
+| `settings.guardrails.title` | Guardrails | หัวส่วน |
+| `settings.guardrails.description` | ตัวเลขของวันนี้ตามเวลาไทย อ่านอย่างเดียว | ใต้หัวส่วน |
+| `settings.guardrails.layer.input` | ชั้นข้อมูลเข้า | คำอธิบายของแถว |
+| `settings.guardrails.layer.output` | ชั้นผลลัพธ์ของ AI | คำอธิบายของแถว |
+| `settings.guardrails.layer.action` | ชั้นการกระทำ | คำอธิบายของแถว |
+| `settings.guardrails.layer.human` | ชั้นส่งต่อให้คน | คำอธิบายของแถว |
+| `settings.guardrails.layer.control` | ชั้นควบคุม | คำอธิบายของแถว |
+| `settings.guardrails.aiSwitch` | เปิดใช้ AI ทั้งระบบ | ป้ายแถว |
+| `settings.guardrails.guard` | ข้อความที่ขอบเขตหัวข้อกัน | ป้ายแถว |
+| `settings.guardrails.guardOn` | เปิด · {n} ข้อความ | ค่าเมื่อขอบเขตหัวข้อเปิด |
+| `settings.guardrails.nonText` | AI หยุดเพราะลูกค้าส่งข้อความที่ไม่ใช่ตัวอักษร | ป้ายแถว |
+| `settings.guardrails.outputRejected` | คำตอบของ AI ที่ไม่ผ่าน schema หรือถูกปฏิเสธ | ป้ายแถว |
+| `settings.guardrails.action` | AI ไม่มีเครื่องมือ ระบบเป็นผู้ส่งทุกข้อความ | ป้ายแถว |
+| `settings.guardrails.actionValue` | ไม่มีเครื่องมือ | ค่า |
+| `settings.guardrails.handoffNotInKnowledge` | รอแอดมิน: ไม่พบในคลังความรู้ | ป้ายแถว |
+| `settings.guardrails.handoffNeedsHuman` | รอแอดมิน: ต้องให้คนจัดการ | ป้ายแถว |
+| `settings.guardrails.handoffFailed` | รอแอดมิน: AI ตอบไม่สำเร็จหรือไม่ทันเวลา | ป้ายแถว |
+| `settings.guardrails.handoffOther` | รอแอดมิน: เหตุผลอื่น | ป้ายแถว |
+| `settings.guardrails.budget` | AI หยุดเพราะงบของวันนี้เต็ม | ป้ายแถว |
+| `settings.guardrails.on` | เปิด | ค่า |
+| `settings.guardrails.off` | ปิด | ค่า |
+| `settings.guardrails.times` | {n} ครั้ง | ค่า |
+| `settings.guardrails.note` | ตัวเลขที่เป็นครั้งนับเมื่อแชทขึ้นรอแอดมิน ไม่ใช่จำนวนข้อความ | ใต้ตาราง |
+| `settings.guardrails.error` | โหลดตัวเลขของ Guardrails ไม่สำเร็จ | ตามด้วยปุ่ม `common.action.retry` |
+
+### LINE Official Account
+
+| Key | ข้อความ | ใช้ที่ |
+| --- | --- | --- |
+| `settings.line.title` | LINE Official Account | หัวส่วน |
+| `settings.line.status` | การเชื่อมต่อ | ป้ายแถวสถานะ |
+| `settings.line.statusConnected` | เชื่อมต่อแล้ว | ป้ายสถานะ |
+| `settings.line.statusError` | เชื่อมต่อมีปัญหา | ป้ายสถานะ |
+| `settings.line.statusNotConfigured` | ยังไม่ได้เชื่อมต่อ | ป้ายสถานะ |
+| `settings.line.basicId` | Basic ID {basicId} | คำอธิบายใต้ชื่อ OA |
+| `settings.line.lastWebhook` | รับข้อความล่าสุด {dateTime} | คำอธิบาย |
+| `settings.line.lastWebhookNever` | ยังไม่เคยรับข้อความ | คำอธิบาย |
+| `settings.line.webhookUrl` | Webhook URL | ป้ายแถว |
+| `settings.line.webhookUrlDesc` | นำไปใส่ในหน้าตั้งค่า Messaging API ของ channel | คำอธิบาย |
+| `settings.line.copy` | คัดลอก | ปุ่ม |
+| `settings.line.copiedToast` | คัดลอก Webhook URL แล้ว | toast |
+| `settings.line.copyFailed` | คัดลอกไม่ได้ เลือกข้อความแล้วคัดลอกเอง | เมื่อ clipboard ใช้ไม่ได้ |
+| `settings.line.channelId` | Channel ID | ป้ายแถว |
+| `settings.line.channelIdDesc` | ตัวเลขในแท็บ Basic settings ของ channel ระบบใช้ตรวจ Channel secret กับ LINE | คำอธิบายของแถว Channel ID |
+| `settings.line.channelIdPlaceholder` | ตัวเลขจาก LINE Developers Console | placeholder ของ Channel ID |
+| `settings.line.secretVerified` | LINE ยืนยันแล้วว่า Channel secret ตรงกับ Channel ID | บรรทัดของ Channel secret ในแถวสถานะ และต่อท้ายผลทดสอบ |
+| `settings.line.secretUnchecked` | ยังตรวจ Channel secret กับ LINE ไม่ได้ กด "ทดสอบการเชื่อมต่อ" อีกครั้งภายหลัง | สถานะเตือนเมื่อ LINE ตรวจ secret ไม่ได้ตอนบันทึกหรือทดสอบ |
+| `settings.line.secretNoChannelId` | ยังไม่ได้ตรวจ Channel secret ใส่ Channel ID พร้อม Channel secret และ Channel access token แล้วบันทึกอีกครั้ง | สถานะเตือนของ credential ที่บันทึกไว้ก่อนมีช่อง Channel ID |
+| `settings.line.channelSecret` | Channel secret | ป้ายแถว |
+| `settings.line.accessToken` | Channel access token | ป้ายแถว |
+| `settings.line.credentialsDesc` | ระบบไม่แสดงค่าที่บันทึกไว้ | คำอธิบายของแถว Channel secret และ Channel access token |
+| `settings.line.secretPlaceholderSet` | ใส่ค่าใหม่เพื่อแทนค่าเดิม | placeholder เมื่อเคยบันทึกแล้ว |
+| `settings.line.secretPlaceholderEmpty` | วางค่าจาก LINE Developers Console | placeholder เมื่อยังไม่เคยบันทึก |
+| `settings.line.save` | บันทึก | ปุ่ม |
+| `settings.line.test` | ทดสอบการเชื่อมต่อ | ปุ่ม |
+| `settings.line.testNeedsCredentials` | บันทึก Channel ID, Channel secret และ Channel access token ก่อนจึงจะทดสอบได้ | เหตุผลข้างปุ่มที่กดไม่ได้ |
+| `settings.line.testOk` | เชื่อมต่อได้ OA ชื่อ {name} | ผลทดสอบสำเร็จ |
+| `settings.line.savedToast` | บันทึกและตรวจกับ LINE แล้ว | toast หลังบันทึกสำเร็จที่ LINE ยืนยัน Channel secret ได้ ถ้าตรวจไม่ได้ใช้ `common.toast.saved` |
+| `settings.line.setupTitle` | ยังไม่ได้เชื่อม LINE Official Account | หัวของขั้นตอนเริ่มต้น |
+| `settings.line.setupStep1` | สร้าง Messaging API channel ใน LINE Developers Console | ขั้นที่ 1 |
+| `settings.line.setupStep2` | คัดลอก Channel ID, Channel secret และ Channel access token มาใส่ด้านล่างแล้วบันทึก | ขั้นที่ 2 |
+| `settings.line.setupStep3` | นำ Webhook URL ไปใส่ใน channel แล้วเปิดใช้ webhook | ขั้นที่ 3 |
+| `settings.line.setupGuide` | อ่านขั้นตอนแบบละเอียด | ลิงก์ไป runbook |
+
+ข้อความ error ที่ตรวจใน browser:
+
+| Key | ข้อความ |
+| --- | --- |
+| `settings.line.error.channelIdRequired` | ใส่ Channel ID |
+| `settings.line.error.channelIdInvalid` | Channel ID เป็นตัวเลขเท่านั้น ไม่เกิน {max} หลัก |
+| `settings.line.error.channelSecretRequired` | ใส่ Channel secret |
+| `settings.line.error.accessTokenRequired` | ใส่ Channel access token |
+
+`{max}` คือ `LINE_CHANNEL_ID_MAX_CHARS` Token ไม่ถูกต้อง Channel ID กับ Channel secret ไม่ตรงกัน และบันทึกไม่สำเร็จเพราะระบบ ใช้ข้อความจาก [error-catalog](../architecture/error-catalog.md) ซึ่งต้องตรงกับถ้อยคำใน [admin-backoffice](admin-backoffice.md)
+
+### คลังความรู้
+
+| Key | ข้อความ | ใช้ที่ |
+| --- | --- | --- |
+| `settings.kb.title` | คลังความรู้ | หัวส่วน (แถวบนไม่แสดงซ้ำ) |
+| `settings.kb.description` | AI ใช้เนื้อหาจาก PDF เหล่านี้ตอบลูกค้า | คำอธิบาย |
+| `settings.kb.upload` | อัปโหลด PDF | ปุ่ม |
+| `settings.kb.uploading` | กำลังอัปโหลด | `aria-label` ของปุ่มขณะอัปโหลด |
+| `settings.kb.usage` | ใช้ไป {used} จาก {limit} token | ใต้แถบการใช้ |
+| `settings.kb.usageLabel` | Token ของคลังความรู้ | `aria-label` ของ meter |
+| `settings.kb.colFile` | ชื่อไฟล์ | หัวตาราง |
+| `settings.kb.colPages` | หน้า | หัวตาราง |
+| `settings.kb.colTokens` | Token | หัวตาราง |
+| `settings.kb.colStatus` | สถานะ | หัวตาราง |
+| `settings.kb.statusProcessing` | กำลังอ่านไฟล์ | สถานะ |
+| `settings.kb.statusReady` | พร้อมใช้ | สถานะ |
+| `settings.kb.statusFailed` | ไม่สำเร็จ | สถานะ ตามด้วยเหตุผลจาก error catalog |
+| `settings.kb.view` | ดูข้อความ | ปุ่มในแถว |
+| `settings.kb.delete` | ลบ | ปุ่มในแถว |
+| `settings.kb.retry` | ลองใหม่ | ปุ่มในแถวที่ไม่สำเร็จ ถ้อยคำตาม [knowledge-base](knowledge-base.md) |
+| `settings.kb.retryHint` | เลือกไฟล์เดิมอีกครั้ง เพราะระบบไม่เก็บไฟล์ต้นฉบับ | tooltip ของปุ่มลองใหม่ |
+| `settings.kb.empty` | ยังไม่มีไฟล์ในคลังความรู้ อัปโหลด PDF ที่มีเมนู ราคา หรือเวลาเปิดปิดของร้าน | สถานะว่าง |
+| `settings.kb.error` | โหลดคลังความรู้ไม่สำเร็จ | ตามด้วยปุ่ม `common.action.retry` |
+| `settings.kb.textDialogSubtitle` | {pages} หน้า · {tokens} token · ข้อความที่ AI ใช้ตอบ แก้ไขไม่ได้ | บรรทัดรองของ dialog |
+| `settings.kb.textDialogError` | โหลดข้อความของไฟล์นี้ไม่สำเร็จ | dialog ดูข้อความ |
+| `settings.kb.deleteTitle` | ลบ “{fileName}” ออกจากคลังความรู้ | หัว dialog |
+| `settings.kb.deleteBody` | AI จะไม่ใช้เนื้อหาของไฟล์นี้อีก ถ้าต้องการกลับมาต้องอัปโหลดใหม่ | เนื้อหา dialog |
+| `settings.kb.deleteCancel` | เก็บไว้ | ปุ่มถอย |
+| `settings.kb.deleteConfirm` | ลบไฟล์ | ปุ่มลงมือ |
+| `settings.kb.deletedToast` | ลบไฟล์แล้ว | toast |
+
+ข้อความ error ที่ตรวจใน browser (รหัสจาก `validatePdfFile`):
+
+| Key | ข้อความ |
+| --- | --- |
+| `settings.kb.errors.not_pdf` | รองรับเฉพาะไฟล์ PDF |
+| `settings.kb.errors.pdf_too_large` | ไฟล์ต้องไม่เกิน {maxMb} MB ไฟล์นี้ {sizeMb} MB |
+| `settings.kb.errors.empty_file` | ไฟล์นี้ว่างเปล่า เลือกไฟล์อื่น |
+
+ไฟล์ซ้ำ เกินจำนวนหน้า เกินเพดานของคลัง ไม่มีข้อความ และแปลงไม่สำเร็จ ใช้ข้อความจาก [error-catalog](../architecture/error-catalog.md)
+
+### ข้อความสำเร็จรูป
+
+| Key | ข้อความ | ใช้ที่ |
+| --- | --- | --- |
+| `settings.canned.title` | ข้อความสำเร็จรูป | หัวส่วน (แถวบนไม่แสดงซ้ำ) |
+| `settings.canned.description` | ข้อความที่ใช้ตอบบ่อย เลือกใช้ได้จากช่องตอบในหน้าแชท | คำอธิบาย |
+| `settings.canned.add` | เพิ่มข้อความสำเร็จรูป | ปุ่ม |
+| `settings.canned.edit` | แก้ไข | `aria-label` ของปุ่มไอคอน |
+| `settings.canned.delete` | ลบ | `aria-label` ของปุ่มไอคอน |
+| `settings.canned.fieldTitle` | ชื่อ | ป้ายช่อง |
+| `settings.canned.fieldTitlePlaceholder` | เช่น เวลาเปิดร้าน | placeholder |
+| `settings.canned.fieldText` | ข้อความ | ป้ายช่อง |
+| `settings.canned.empty` | ยังไม่มีข้อความสำเร็จรูป | สถานะว่าง |
+| `settings.canned.error` | โหลดข้อความสำเร็จรูปไม่สำเร็จ | ตามด้วยปุ่ม `common.action.retry` |
+| `settings.canned.deleteTitle` | ลบ “{title}” | หัว dialog |
+| `settings.canned.deleteBody` | ข้อความสำเร็จรูปนี้จะหายจากรายการและเรียกคืนไม่ได้ | เนื้อหา dialog |
+| `settings.canned.deleteCancel` | เก็บไว้ | ปุ่มถอย |
+| `settings.canned.deleteConfirm` | ลบข้อความ | ปุ่มลงมือ |
+| `settings.canned.deletedToast` | ลบข้อความสำเร็จรูปแล้ว | toast |
+
+ข้อความ error ที่ตรวจใน browser:
+
+| Key | ข้อความ |
+| --- | --- |
+| `settings.canned.errors.titleRequired` | ใส่ชื่อ |
+| `settings.canned.errors.titleTooLong` | ชื่อยาวเกิน {max} ตัวอักษร |
+| `settings.canned.errors.textRequired` | ใส่ข้อความ |
+| `settings.canned.errors.textTooLong` | ข้อความยาวเกิน {max} ตัวอักษร |
+
+### ค่าใช้จ่าย AI
+
+| Key | ข้อความ | ใช้ที่ |
+| --- | --- | --- |
+| `settings.usage.title` | ค่าใช้จ่าย AI | หัวส่วน (แถวบนไม่แสดงซ้ำ) |
+| `settings.usage.monthLabel` | เลือกเดือน | `aria-label` ของตัวเลือกเดือน |
+| `settings.usage.colContact` | ลูกค้า | หัวตาราง |
+| `settings.usage.colReplies` | ครั้งที่ AI ตอบ | หัวตาราง |
+| `settings.usage.colTokens` | Token | หัวตาราง |
+| `settings.usage.colCost` | ราคาโดยประมาณ | หัวตาราง |
+| `settings.usage.openDetail` | ดูรายข้อความของ {name} | `aria-label` ของปุ่มในแถว |
+| `settings.usage.ingestRow` | อ่านไฟล์คลังความรู้ | แถวแยก |
+| `settings.usage.guardRow` | คัดกรองขอบเขตหัวข้อ | แถวแยก |
+| `settings.usage.guardCount` | {n} ครั้ง | ป้ายรองของแถวคัดกรอง |
+| `settings.usage.total` | รวมทั้งเดือน | แถวรวม |
+| `settings.usage.avgPerReply` | เฉลี่ยต่อข้อความที่ AI ตอบ {usd} | ใต้ตาราง |
+| `settings.usage.noResponse` | ส่งคำขอถึง AI แล้วไม่ได้คำตอบ {n} ครั้ง ผู้ให้บริการอาจคิดเงินครั้งเหล่านี้ ยอดรวมจึงอาจต่ำกว่าบิลจริง | ใต้ค่าเฉลี่ย เฉพาะเมื่อมีอย่างน้อยหนึ่งครั้ง |
+| `settings.usage.disclaimer` | ราคาโดยประมาณเป็นดอลลาร์สหรัฐ จากตารางราคา ณ {date} | ใต้ตาราง |
+| `settings.usage.empty` | เดือนนี้ AI ยังไม่ได้ตอบลูกค้า | สถานะว่าง |
+| `settings.usage.error` | โหลดค่าใช้จ่าย AI ไม่สำเร็จ | ตามด้วยปุ่ม `common.action.retry` |
+| `settings.usage.detailTitle` | {name} · {month} | หัว dialog รายข้อความ |
+| `settings.usage.colTime` | เวลา | หัวตาราง dialog |
+| `settings.usage.colModel` | โมเดล | หัวตาราง dialog |
+| `settings.usage.colInput` | Token ขาเข้า | หัวตาราง dialog |
+| `settings.usage.colOutput` | Token ขาออก | หัวตาราง dialog |
+| `settings.usage.colCacheRead` | Token อ่านจาก cache | หัวตาราง dialog |
+| `settings.usage.colCacheWrite` | Token เขียน cache | หัวตาราง dialog |
+| `settings.usage.colCost` | ราคาโดยประมาณ | ใช้ key เดียวกับตารางหลัก |
+| `settings.usage.colOutcome` | ผล | หัวตาราง dialog |
+| `settings.usage.outcome.ok` | ตอบแล้ว | `outcome = ok` |
+| `settings.usage.outcome.handoff` | รอแอดมิน | `outcome = handoff` |
+| `settings.usage.outcome.refused` | โมเดลปฏิเสธ | `outcome = refused` |
+| `settings.usage.outcome.failed` | ไม่สำเร็จ | `outcome = failed` |
+| `settings.usage.outcome.cancelled` | ไม่ได้ส่งเพราะ AI ถูกปิด | `outcome = cancelled` |
+| `settings.usage.outcome.blocked` | ถูกกันเพราะนอกขอบเขตหัวข้อ | `outcome = blocked` |
+| `settings.usage.detailEmpty` | ไม่มีรายการในเดือนนี้ | dialog ว่าง |
+| `settings.usage.detailError` | โหลดรายข้อความไม่สำเร็จ | ตามด้วยปุ่ม `common.action.retry` |
+
+### สถานะระบบ
+
+| Key | ข้อความ | ใช้ที่ |
+| --- | --- | --- |
+| `settings.status.title` | สถานะระบบ | หัวส่วน |
+| `settings.status.webhook` | รับ webhook ล่าสุด | ป้ายแถว |
+| `settings.status.never` | ยังไม่เคยรับ | ค่า |
+| `settings.status.lineError` | ข้อผิดพลาดล่าสุดของ LINE | ป้ายแถว |
+| `settings.status.aiError` | ข้อผิดพลาดล่าสุดของ AI | ป้ายแถว |
+| `settings.status.errorAt` | {message} · {dateTime} | ค่าของสองแถวบน |
+| `settings.status.none` | ไม่มี | ค่า |
+| `settings.status.budget` | งบ AI วันนี้ | ป้ายแถว |
+| `settings.status.budgetValue` | {used} จาก {budget} | ค่า |
+| `settings.status.database` | ฐานข้อมูล | ป้ายแถว |
+| `settings.status.dbOk` | เชื่อมต่อได้ | ค่า (เมื่อเรียกสถานะระบบไม่ได้ ส่วนนี้แสดง `settings.status.error` แทน) |
+| `settings.status.error` | โหลดสถานะระบบไม่สำเร็จ | ตามด้วยปุ่ม `common.action.retry` |

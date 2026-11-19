@@ -1,0 +1,16 @@
+node_modules/
+.next/
+out/
+coverage/
+playwright-report/
+test-results/
+e2e/.auth/
+.env
+.env.*
+!.env.example
+.data/
+src/adapters/prisma/generated/
+next-env.d.ts
+*.tsbuildinfo
+.vercel/
+.DS_Store

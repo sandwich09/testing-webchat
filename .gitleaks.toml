@@ -1,0 +1,13 @@
+# Secret scanning for CI. The default rules stay on; the allowlist names the two fixed values
+# that docker-compose.yml uses for a local-only stack. They decode to the text
+# "local-only-..." and protect nothing outside a developer machine.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Local-only compose values, not real secrets"
+regexTarget = "match"
+regexes = [
+  '''bG9jYWwtb25seS1zZXNzaW9uLXNlY3JldC0zMmJ5dGU=''',
+  '''bG9jYWwtb25seS1jcmVkZW50aWFsLWtleS0zMmJ5dGU=''',
+]

@@ -1,0 +1,18 @@
+{
+  "destination": "{{destination}}",
+  "events": [
+    {
+      "type": "unfollow",
+      "mode": "active",
+      "timestamp": "{{timestamp}}",
+      "source": {
+        "type": "user",
+        "userId": "{{userId}}"
+      },
+      "webhookEventId": "{{webhookEventId}}",
+      "deliveryContext": {
+        "isRedelivery": false
+      }
+    }
+  ]
+}

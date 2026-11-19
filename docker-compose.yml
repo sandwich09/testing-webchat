@@ -1,0 +1,79 @@
+name: testing-webchat
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: webchat
+      POSTGRES_PASSWORD: webchat
+      POSTGRES_DB: webchat
+    ports: ['15432:5432']
+    volumes: ['db-data:/var/lib/postgresql/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U webchat -d webchat']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  stub:
+    build: { context: ., target: tools, secrets: [extra_ca] }
+    command: ['pnpm', 'stubs']
+    ports: ['4010:4010']
+    environment:
+      STUB_PORT: '4010'
+      STUB_PUBLIC_URL: http://localhost:4010
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:4010/__control/health >/dev/null || exit 1']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  app:
+    build: { context: ., target: runner, secrets: [extra_ca] }
+    depends_on:
+      db: { condition: service_healthy }
+      stub: { condition: service_healthy }
+    ports: ['3000:3000']
+    environment:
+      DATABASE_URL: postgresql://webchat:webchat@db:5432/webchat
+      DIRECT_URL: postgresql://webchat:webchat@db:5432/webchat
+      ACCESS_CODE: test-webchat # local only
+      SESSION_SECRET: bG9jYWwtb25seS1zZXNzaW9uLXNlY3JldC0zMmJ5dGU=
+      CREDENTIALS_ENCRYPTION_KEY: bG9jYWwtb25seS1jcmVkZW50aWFsLWtleS0zMmJ5dGU=
+      ANTHROPIC_API_KEY: stub-anthropic-key
+      FILE_STORAGE: local
+      APP_BASE_URL: http://localhost:3000
+      LINE_API_BASE_URL: http://stub:4010/line
+      LINE_DATA_API_BASE_URL: http://stub:4010/line-data
+      ANTHROPIC_BASE_URL: http://stub:4010/anthropic
+      POLL_INTERVAL_MS: '500'
+      AI_DEBOUNCE_MS: '300'
+      RATE_LIMIT_SCALE: '10'
+    volumes: ['uploads:/app/.data']
+
+  seed:
+    build: { context: ., target: tools, secrets: [extra_ca] }
+    command: ['pnpm', 'db:seed']
+    depends_on:
+      app: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgresql://webchat:webchat@db:5432/webchat
+      CREDENTIALS_ENCRYPTION_KEY: bG9jYWwtb25seS1jcmVkZW50aWFsLWtleS0zMmJ5dGU=
+      APP_BASE_URL: http://localhost:3000
+      # The system adapters import `server-only`, which throws under plain Node.
+      NODE_OPTIONS: --conditions=react-server
+    # Same uid as the app (Dockerfile), so files the seed writes to the volume stay writable by it.
+    user: '1001:1001'
+    volumes: ['uploads:/app/.data']
+    restart: 'no'
+
+# Optional extra CA for image builds behind a TLS-intercepting proxy. Empty by default, so a plain
+# `docker compose up -d --build --wait` needs nothing. Used only while building; never in an image.
+#   EXTRA_CA_FILE=/path/to/ca-bundle.pem docker compose build
+secrets:
+  extra_ca:
+    file: ${EXTRA_CA_FILE:-./docker/no-extra-ca.pem}
+
+volumes:
+  db-data: {}
+  uploads: {}

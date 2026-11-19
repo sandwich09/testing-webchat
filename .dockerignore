@@ -1,0 +1,14 @@
+.git/
+.github/
+node_modules/
+.next/
+coverage/
+playwright-report/
+test-results/
+e2e/.auth/
+.env
+.env.*
+.data/
+src/adapters/prisma/generated/
+docs/
+*.tsbuildinfo
