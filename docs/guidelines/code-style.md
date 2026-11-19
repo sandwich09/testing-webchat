@@ -110,3 +110,4 @@ composition/          →  ทุกชั้น
 - [ ] งานหน้าจอถูกเปิดดูจริงที่ 390 และ 1280
 - [ ] เอกสารที่เกี่ยวข้องถูกแก้ใน commit เดียวกัน
 - [ ] ไม่มี credential หรือข้อมูลลูกค้าจริงในโค้ด, test และ log
+- [ ] ผ่านรายการตรวจใน [pitfalls-and-prevention](pitfalls-and-prevention.md#รายการตรวจก่อนเปิด-pr-และก่อน-deploy)

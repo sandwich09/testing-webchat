@@ -1,6 +1,6 @@
 # เอกสารของ Test webchat application
 
-> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-18
+> สถานะ: อนุมัติ · อัปเดตล่าสุด: 2026-11-19
 
 โฟลเดอร์นี้คือ source of truth ของระบบ โค้ดต้องตรงกับเอกสาร ถ้าไม่ตรง ให้ถือว่าเป็น bug ของฝั่งใดฝั่งหนึ่งและต้องแก้
 
@@ -23,7 +23,7 @@
 | `specs/` | [access-gate](specs/access-gate.md), [line-messaging](specs/line-messaging.md), [webchat-inbox](specs/webchat-inbox.md), [admin-backoffice](specs/admin-backoffice.md), [ai-reply](specs/ai-reply.md), [topic-guard](specs/topic-guard.md), [knowledge-base](specs/knowledge-base.md), [usage-cost](specs/usage-cost.md), [ui-screens](specs/ui-screens.md), [ui-copy](specs/ui-copy.md), [ai-prompt](specs/ai-prompt.md) |
 | `adr/` | บันทึกการตัดสินใจ เรียงตามเลข ล่าสุด: [0017](adr/0017-ibm-plex-until-line-seed-license-verified.md) (ถูกแทนที่โดย 0018), [0018](adr/0018-use-line-seed-sans-th.md) ฟอนต์ LINE Seed Sans TH, [0019](adr/0019-heic-conversion-with-heic-to.md) การแปลง HEIC ด้วย `heic-to`, [0020](adr/0020-topic-guardrail-as-separate-check.md) ขอบเขตหัวข้อเป็นการตรวจแยก, [0021](adr/0021-explicit-cache-marker-and-fallback-per-model.md) cache marker แบบระบุเองและการสลับโมเดลสำรองตามโมเดล (แทนบางข้อของ 0007) |
 | `plans/` | [implementation-plan](plans/implementation-plan.md), [work-breakdown](plans/work-breakdown.md) |
-| `guidelines/` | [code-style](guidelines/code-style.md), [ux-writing](guidelines/ux-writing.md) |
+| `guidelines/` | [code-style](guidelines/code-style.md), [ux-writing](guidelines/ux-writing.md), [pitfalls-and-prevention](guidelines/pitfalls-and-prevention.md) |
 | `qa/` | [test-strategy](qa/test-strategy.md), [manual-test-script](qa/manual-test-script.md), [stubs-and-fixtures](qa/stubs-and-fixtures.md) |
 | `security/` | [threat-model](security/threat-model.md), [ai-guardrails](security/ai-guardrails.md) |
 | `runbooks/` | [line-oa-setup](runbooks/line-oa-setup.md), [deploy](runbooks/deploy.md), [operations](runbooks/operations.md) |

@@ -41,6 +41,7 @@ Rules for any AI agent working in this repository. Details live in `docs/guideli
 - Run lint, typecheck and unit tests. Run E2E when a user journey is touched.
 - For screen work, open the page in a real browser at 390 and 1280 wide and look at a screenshot.
 - Say plainly what was not checked. Never claim a check that did not run.
+- Before opening a PR or deploying, go through the checklist in `docs/guidelines/pitfalls-and-prevention.md`.
 
 ## Task memory
 
