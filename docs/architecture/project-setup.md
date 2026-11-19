@@ -105,6 +105,7 @@ pnpm 10 ไม่รัน install script ของ dependency โดยค่�
 .
 ├── .github/
 │   └── workflows/
+│       ├── ai-eval.yml                   ชุดคำถามวัดคุณภาพ สั่งด้วยมือ (ADR 0032)
 │       └── ci.yml
 ├── app/                                  ไฟล์ของ Next.js ทำหน้าที่แค่ import
 │   ├── layout.tsx                        <html lang="th">, ฟอนต์, QueryProvider, Toaster
