@@ -127,21 +127,24 @@ The LINE channel secret and access token are not environment variables: they are
 
 ## Verified and not verified
 
-Verified locally with the stubs (Chromium only):
+The full account, with evidence, is in the [test report](docs/qa/test-report.md).
 
-- Lint, typecheck, unit tests with the core coverage gate, adapter tests against Postgres 17 and the stub, production build.
-- All 15 E2E journeys at 1280 px and 390 px (receive, admin reply, AI reply, kill switch, pictures and videos, knowledge base, failed send, access code, topic guard, quoted replies, admin notes, rail, inbound audio, rich menu, welcome card), including HEIC conversion in the browser under the app's CSP and axe with no violations.
-- Layout of the chat page, info panel and settings at 390, 720, 768, 900, 1039 and 1280 px.
+Verified by CI on every push to `main` (Chromium only):
 
-Verified in the first production test with a real LINE OA and the real Claude API (reported by the owner): text in and out, an inbound sticker, an outbound image and an AI reply.
+- Lint, typecheck, unit tests with the core coverage gate, adapter tests against PostgreSQL and the stubs of LINE and Claude, the production build, the migration and docs checks, `pnpm audit` and a secret scan.
+- All 16 E2E journeys at 1280 px and 390 px: receive, admin reply, AI reply, kill switch, pictures and videos, knowledge base, failed send, access code, topic guard, quoted replies, admin notes, rail, inbound audio, rich menu, welcome card and the settings tabs.
 
-Not verified (needs real credentials or accounts):
+Verified by hand on production with a real LINE OA and the real Claude API (16 steps, all passed on 19 November 2026): text, pictures, stickers and voice messages from LINE; text, pictures and video to LINE; quoted replies; profile names and pictures; the AI reply with its name, the knowledge base and the handoff to an admin; the topic guard; the rich menu buttons and the welcome card; the kill switch. The AI quality question set ran against the real API for the three selectable models.
 
-- Real LINE, not yet confirmed: quoted replies, inbound audio, outbound video, the rich menu and its postback taps, the Flex welcome card, the retry key (a second push with the same key), the same-channel check of the credentials (`GET /v2/bot/info` with a short-lived token), webhook redelivery, the reply token lifetime and the loading indicator ([work-breakdown 5.2](docs/plans/work-breakdown.md#52-ตรวจไม่ได้หากไม่มี-credential-จริง-เจ้าของงานทำ)).
-- Real Claude, beyond the AI reply of the first production test: answer quality, real cost, prompt caching, model fallback, PDF extraction, topic-guard accuracy and latency; the evaluation script has never run against the API.
-- Vercel Blob beyond the one outbound image of the first production test (video, files near the size limits); on Vercel: function limits, region, the Deploy Hook from CI and the CSP of every page. The CI workflow has not run on GitHub yet.
-- Firefox and Safari; HEIC photos from a real iPhone (the test file is synthetic).
-- `docker compose up` on a machine with no existing images and volumes (checked only on a machine that already had them).
+Not verified:
+
+- Firefox and Safari; a real phone at 390 px (the narrow layout is emulated); HEIC photos from a real iPhone (the test file is synthetic).
+- Load: there is no load test.
+- Real LINE: the retry key on a second push, redelivered webhooks, the same-channel check of the credentials, and LINE being slow or down (covered with the stub only).
+- Real Claude: prompt caching and the model fallback; the question set is small, so its numbers compare runs and are not statistics.
+- On Vercel: a function that runs close to the 300-second limit, files near the size limits, and the memory used while a large video is stored.
+- The daily refresh of a LINE profile (it needs data older than a day; covered by unit and repository tests).
+- `docker compose up` on a machine with no existing images and volumes.
 
 Known limits: one LINE OA per deployment, one shared access code without user accounts, polling rather than push updates, the AI does not read images or listen to voice messages, and the knowledge base is passed in the prompt rather than searched with embeddings ([ADR 0008](docs/adr/0008-knowledge-base-without-embeddings.md)). The open questions about external services are listed in the [implementation plan](docs/plans/implementation-plan.md#สิ่งที่ต้องยืนยันก่อนหรือระหว่างสร้าง).
 
