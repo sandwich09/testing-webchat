@@ -35,7 +35,7 @@
 1. เปิด PR เข้า `main` พร้อมผลของ lint, typecheck และ test ที่รันเอง
 2. เจ้าของงาน review และ merge แบบ squash
 3. CI รัน 4 งาน เมื่อผ่านทั้งหมดจึงเรียก Deploy Hook
-4. Build ของ production (`pnpm vercel-build` ใน `vercel.json`) รัน `pnpm migrations:applied` และ `prisma migrate deploy` ก่อน แล้วจึง build แอป ไม่รัน seed: production เริ่มจากฐานข้อมูลว่าง (ไม่มีลูกค้า ไม่มีคลังความรู้ ไม่มี credential ของ LINE ค่าใช้จ่ายเป็นศูนย์) seed (`pnpm db:seed`) เป็นข้อมูลตัวอย่างสำหรับ Docker ในเครื่องเท่านั้น ([data-model](../architecture/data-model.md#ข้อมูลตัวอย่าง-seed))
+4. Build ของ production (`pnpm vercel-build` ใน `vercel.json`) รัน `pnpm migrations:applied` และ `prisma migrate deploy` ก่อน แล้วจึง build แอป ไม่รัน seed: production เริ่มจากฐานข้อมูลว่าง (ไม่มีผู้ใช้ ไม่มีคลังความรู้ ไม่มี credential ของ LINE ค่าใช้จ่ายเป็นศูนย์) seed (`pnpm db:seed`) เป็นข้อมูลตัวอย่างสำหรับ Docker ในเครื่องเท่านั้น ([data-model](../architecture/data-model.md#ข้อมูลตัวอย่าง-seed))
 5. ตรวจหลัง deploy ตามหัวข้อถัดไป
 
 ## ตรวจหลัง deploy

@@ -29,7 +29,7 @@ export type ErrorCode = (typeof ERROR_CODES)[number];
 
 export interface AppError<C extends ErrorCode = ErrorCode> {
   code: C;
-  /** ข้อความสำหรับนักพัฒนา ห้ามมีเนื้อหาข้อความ ชื่อลูกค้า token หรือ secret */
+  /** ข้อความสำหรับนักพัฒนา ห้ามมีเนื้อหาข้อความ ชื่อผู้ใช้ token หรือ secret */
   detail?: string;
   /** มีค่าเฉพาะรหัสที่ลงท้ายด้วย .rate_limited route ใช้ตั้ง header Retry-After */
   retryAfterSeconds?: number;
@@ -104,8 +104,8 @@ export type ModelHandoffReason = "not_in_knowledge" | "needs_human_action" | "un
 
 /** เหตุผลของสถานะรอแอดมิน เก็บใน Contact.needsAdminReason ข้อความไทยอยู่ใน error-catalog */
 export type HandoffReason =
-  | "customer_sent_image"     // ลูกค้าส่งรูป
-  | "customer_sent_video"     // ลูกค้าส่งวิดีโอ
+  | "customer_sent_image"     // ผู้ใช้ส่งรูป
+  | "customer_sent_video"     // ผู้ใช้ส่งวิดีโอ
   | "customer_sent_non_text"  // สติกเกอร์ เสียง ไฟล์ ตำแหน่ง หรือชนิดอื่น
   | "budget_reached"          // งบของวันนี้เต็ม
   | "ai_not_in_knowledge"     // ai_ + ModelHandoffReason
@@ -114,13 +114,13 @@ export type HandoffReason =
   | "ai_other"
   | "ai_failed"               // เรียกโมเดลไม่สำเร็จ, ถูกปฏิเสธ, ถูกตัด, ไม่ตรง schema, ส่งคำตอบไม่สำเร็จ
   | "ai_timeout"              // aiState ค้างเกิน AI_STUCK_AFTER_MS
-  | "customer_asked_admin"    // ลูกค้ากดปุ่ม "คุยกับแอดมิน" ของ rich menu หรือการ์ดต้อนรับ
-  | "ai_unavailable";         // ลูกค้ากดปุ่ม "คุยกับ AI" ขณะ kill switch ปิด
+  | "customer_asked_admin"    // ผู้ใช้กดปุ่ม "คุยกับแอดมิน" ของ rich menu หรือการ์ดต้อนรับ
+  | "ai_unavailable";         // ผู้ใช้กดปุ่ม "คุยกับ AI" ขณะ kill switch ปิด
 
 /** บรรทัดเหตุการณ์ในแชท (Message ชนิด event) ข้อความไทยอยู่ใน error-catalog */
 export type EventCode =
   | `handoff.${HandoffReason}`
-  | "ai.turned_off_by_admin"   // แอดมินส่งข้อความ AI ตอบแทนของลูกค้าจึงถูกปิด
+  | "ai.turned_off_by_admin"   // แอดมินส่งข้อความ AI ตอบแทนของผู้ใช้จึงถูกปิด
   | "guard.blocked"            // ข้อความนอกขอบเขตหัวข้อ AI ส่งข้อความปฏิเสธแทน ไม่ขึ้นรอแอดมิน
   | "contact.followed"
   | "contact.unfollowed"
@@ -147,7 +147,7 @@ export interface Contact {
   aiState: AiState;
   aiStateAt: Date | null;
   unreadCount: number;
-  lastMessageAt: Date | null;       // เวลาข้อความขาเข้าล่าสุดของลูกค้า: ค่าที่รายชื่อใช้เรียง null ก่อนข้อความแรก
+  lastMessageAt: Date | null;       // เวลาข้อความขาเข้าล่าสุดของผู้ใช้: ค่าที่รายชื่อใช้เรียง null ก่อนข้อความแรก
   lastMessagePreview: string | null; // ข้อความตัวอักษรไม่เกิน PREVIEW_TEXT_MAX_CHARS หรือ null เมื่อเป็นสื่อ
   lastMessageBy: "customer" | "admin" | "ai" | null;
   lastMessageType: Exclude<MessageType, "event"> | null;
@@ -176,7 +176,7 @@ export interface Message {
   otherKind: OtherKind | null;
   eventCode: EventCode | null;
   lineMessageId: LineMessageId | null; // มีค่าเฉพาะขาเข้า
-  quotedLineMessageId: LineMessageId | null; // ขาเข้า: id ของ LINE ที่ลูกค้าตอบกลับด้วย "ตอบกลับ" null เมื่อไม่มี
+  quotedLineMessageId: LineMessageId | null; // ขาเข้า: id ของ LINE ที่ผู้ใช้ตอบกลับด้วย "ตอบกลับ" null เมื่อไม่มี
   lineSentIds: readonly LineMessageId[];     // ขาออก: sentMessages[].id ของ LINE ตามลำดับส่วน ว่างก่อนส่งหรือเมื่อ LINE ไม่ให้
   deliveryStatus: DeliveryStatus | null; // มีค่าเฉพาะขาออก
   deliveryError: ErrorCode | null;
@@ -250,7 +250,7 @@ export interface TokenUsage {
 export interface AiUsageRecord {
   id: UsageId;
   kind: UsageKind;
-  contactId: ContactId | null;      // มีค่าเมื่อ kind = reply และเมื่อ kind = guard ของข้อความลูกค้า (null เมื่อเป็นการทดลองจากหน้าตั้งค่า)
+  contactId: ContactId | null;      // มีค่าเมื่อ kind = reply และเมื่อ kind = guard ของข้อความผู้ใช้ (null เมื่อเป็นการทดลองจากหน้าตั้งค่า)
   messageId: MessageId | null;      // ข้อความของ AI ที่ส่ง ถ้ามี (kind = guard outcome blocked คือข้อความปฏิเสธ)
   documentId: DocumentId | null;    // มีค่าเมื่อ kind = ingest
   provider: AiProvider;
@@ -303,13 +303,13 @@ export type OutboundLinePart =
   | { type: "card"; card: WelcomeCard }; // การ์ดต้อนรับ adapter แปลงเป็น Flex bubble
 ```
 
-`WelcomeCard` (`rich-menu.model.ts`) เป็นค่าที่ไม่ขึ้นกับ LINE: `altText`, `logoUrl` (HTTPS หรือ null), `titleLine`, `accountName`, `body`, `note` และ `buttons` สามปุ่ม (`label`, `data`, `displayText`, `style` เป็น `primary`, `secondary` หรือ `link`) สร้างด้วย `buildWelcomeCard` ส่วน `RichMenuSpec` (`width`, `height`, `name`, `chatBarText`, `areas`) สร้างด้วย `richMenuSpec()` ค่าทั้งสองและข้อความที่ลูกค้าเห็นอยู่ใน `rich-menu.logic.ts` ([line-messaging](../specs/line-messaging.md#rich-menu))
+`WelcomeCard` (`rich-menu.model.ts`) เป็นค่าที่ไม่ขึ้นกับ LINE: `altText`, `logoUrl` (HTTPS หรือ null), `titleLine`, `accountName`, `body`, `note` และ `buttons` สามปุ่ม (`label`, `data`, `displayText`, `style` เป็น `primary`, `secondary` หรือ `link`) สร้างด้วย `buildWelcomeCard` ส่วน `RichMenuSpec` (`width`, `height`, `name`, `chatBarText`, `areas`) สร้างด้วย `richMenuSpec()` ค่าทั้งสองและข้อความที่ผู้ใช้เห็นอยู่ใน `rich-menu.logic.ts` ([line-messaging](../specs/line-messaging.md#rich-menu))
 
 ## ค่าคงที่
 
 ค่าทั้งหมดอยู่ใน `src/core/domain/constants.ts` ค่าของแต่ละตัวอยู่ในตาราง [ค่าคงที่ของระบบ](project-setup.md#10-ค่าคงที่ของระบบ) ที่เดียว ไฟล์นี้อ้างด้วยชื่อเท่านั้น ค่าที่มาจาก environment variable (`AI_DEBOUNCE_MS`, `AI_STUCK_AFTER_MS` ส่งผ่าน config, `RATE_LIMIT_SCALE`) ถูกส่งเข้ามาผ่าน `UseCaseConfig` ดู [use-cases](use-cases.md#การประกอบ)
 
-ชื่อที่แกนกลางใช้: `POLL_OVERLAP_SEQ`, `POLL_PAGE_LIMIT`, `AI_HISTORY_LIMIT`, `AI_REPLY_MAX_CHARS`, `AI_MAX_ROUNDS_PER_RUN`, `AI_STUCK_AFTER_MS`, `AI_MAX_TOKENS`, `AI_EXTRACT_MAX_TOKENS`, `LINE_LOADING_SECONDS`, `KNOWLEDGE_CAPACITY_TOKENS`, `PDF_MAX_BYTES`, `PDF_MAX_PAGES`, `IMAGE_MAX_BYTES`, `VIDEO_MAX_BYTES`, `PREVIEW_MAX_BYTES`, `UPLOAD_TICKET_TTL_MS`, `LINE_TEXT_MAX_CHARS`, `LINE_MAX_PARTS_PER_REQUEST`, `REPLY_TOKEN_USABLE_MS`, `LINE_RETRY_KEY_WINDOW_MS`, `LINE_CHANNEL_ID_MAX_CHARS`, `MEDIA_JOB_BUDGET_MS`, `MEDIA_CONTENT_CALL_WORST_MS`, `MEDIA_STATUS_CALL_WORST_MS`, `MEDIA_NOT_READY_POLL_MS`, `ADMIN_TEXT_MAX_CHARS`, `PREVIEW_TEXT_MAX_CHARS`, `PREVIEW_TEXT_MAX_UNITS`, `PROXY_BODY_MAX_BYTES` (ค่าของ `next.config.ts`), `MESSAGE_PAGE_LIMIT`, `CONTACT_PAGE_LIMIT`, `CONTACT_SEARCH_MAX_CHARS`, `AI_INSTRUCTIONS_MAX_CHARS`, `AI_NAME_MAX_CHARS`, `HOW_TO_TEXT_MAX_CHARS`, `WELCOME_TEXT_MAX_CHARS`, `POSTBACK_DATA_MAX_CHARS`, `RICH_MENU_WIDTH`, `RICH_MENU_HEIGHT`, `AI_DAILY_BUDGET_MAX_USD`, `ACCESS_COOKIE_TTL_MS`, `WEBHOOK_MAX_BODY_BYTES`, `JSON_MAX_BODY_BYTES`, `DEFAULT_AI_MODEL`, `DEFAULT_AI_DAILY_BUDGET_USD`, `DEFAULT_POLITE_PARTICLE`, `DEFAULT_AI_ANSWER_MODE`, ค่าของขอบเขตหัวข้อ `GUARD_MAX_TOPICS`, `GUARD_TOPIC_MAX_CHARS`, `GUARD_TEST_MAX_CHARS`, `GUARD_MODEL`, `GUARD_MAX_TOKENS`, `GUARD_TIMEOUT_MS`, `GUARD_CONTEXT_TURNS` และค่าจำกัดความถี่ `RATE_LIMIT_UNLOCK`, `RATE_LIMIT_SEND_MESSAGE`, `RATE_LIMIT_UPLOAD_TICKET`, `RATE_LIMIT_PDF_INGEST`, `RATE_LIMIT_TYPING`, `RATE_LIMIT_GUARD_TEST`, `RATE_LIMIT_NOTE_CREATE`, `RATE_LIMIT_RICH_MENU_TAP`
+ชื่อที่แกนกลางใช้: `POLL_OVERLAP_SEQ`, `POLL_PAGE_LIMIT`, `AI_HISTORY_LIMIT`, `AI_REPLY_MAX_CHARS`, `AI_MAX_ROUNDS_PER_RUN`, `AI_STUCK_AFTER_MS`, `AI_MAX_TOKENS`, `AI_EXTRACT_MAX_TOKENS`, `LINE_LOADING_SECONDS`, `KNOWLEDGE_CAPACITY_TOKENS`, `PDF_MAX_BYTES`, `PDF_MAX_PAGES`, `IMAGE_MAX_BYTES`, `VIDEO_MAX_BYTES`, `PREVIEW_MAX_BYTES`, `UPLOAD_TICKET_TTL_MS`, `LINE_TEXT_MAX_CHARS`, `LINE_MAX_PARTS_PER_REQUEST`, `REPLY_TOKEN_USABLE_MS`, `LINE_RETRY_KEY_WINDOW_MS`, `LINE_CHANNEL_ID_MAX_CHARS`, `MEDIA_JOB_BUDGET_MS`, `MEDIA_CONTENT_CALL_WORST_MS`, `MEDIA_STATUS_CALL_WORST_MS`, `MEDIA_NOT_READY_POLL_MS`, `ADMIN_TEXT_MAX_CHARS`, `PREVIEW_TEXT_MAX_CHARS`, `PREVIEW_TEXT_MAX_UNITS`, `PROXY_BODY_MAX_BYTES` (ค่าของ `next.config.ts`), `MESSAGE_PAGE_LIMIT`, `CONTACT_PAGE_LIMIT`, `CONTACT_SEARCH_MAX_CHARS`, `AI_INSTRUCTIONS_MAX_CHARS`, `AI_NAME_MAX_CHARS`, `HOW_TO_TEXT_MAX_CHARS`, `WELCOME_TEXT_MAX_CHARS`, `POSTBACK_DATA_MAX_CHARS`, `RICH_MENU_WIDTH`, `RICH_MENU_HEIGHT`, `AI_DAILY_BUDGET_MAX_USD`, `ACCESS_COOKIE_TTL_MS`, `WEBHOOK_MAX_BODY_BYTES`, `JSON_MAX_BODY_BYTES`, `DEFAULT_AI_MODEL`, `DEFAULT_AI_DAILY_BUDGET_USD`, `DEFAULT_POLITE_PARTICLE`, `DEFAULT_AI_ANSWER_MODE`, ค่าของขอบเขตหัวข้อ `GUARD_MAX_TOPICS`, `GUARD_TOPIC_MAX_CHARS`, `GUARD_TEST_MAX_CHARS`, `GUARD_MODEL`, `GUARD_MAX_TOKENS`, `GUARD_TIMEOUT_MS`, `GUARD_CONTEXT_TURNS`, `GUARD_REFUSAL_MAX_TOPICS`, ค่าของโปรไฟล์ `PROFILE_REFRESH_AFTER_MS` และค่าจำกัดความถี่ `RATE_LIMIT_UNLOCK`, `RATE_LIMIT_SEND_MESSAGE`, `RATE_LIMIT_UPLOAD_TICKET`, `RATE_LIMIT_PDF_INGEST`, `RATE_LIMIT_TYPING`, `RATE_LIMIT_GUARD_TEST`, `RATE_LIMIT_NOTE_CREATE`, `RATE_LIMIT_RICH_MENU_TAP`
 
 ค่าจำกัดความถี่ประกาศเป็น `RATE_LIMIT_RULES: Record<RateLimitAction, { limit: number; windowMs: number; scaled: boolean }>` ซึ่งอ่านค่าจาก constant ข้างบน `scaled` เป็น false เฉพาะ `unlock`
 
@@ -353,10 +353,10 @@ export function shouldAiReply(input: AiReplyConditionsInput): AiReplyDecision;
 | `handoffReasonForType` | `(type: Exclude<MessageType, "text" \| "event">) => HandoffReason` | image → `customer_sent_image`, video → `customer_sent_video`, sticker และ other → `customer_sent_non_text` |
 | `handoffReasonFromModel` | `(r: ModelHandoffReason \| null) => HandoffReason` | `"ai_" + r` และ null → `ai_other` |
 | `handoffText` | `(particle: PoliteParticle) => string` | คืน `ขออนุญาตให้แอดมินมาตอบเรื่องนี้นะ{p}` โดย `{p}` คือคำลงท้ายที่ตั้งไว้ในรูปที่ถูกต้องหลัง "นะ": `ค่ะ` → `คะ`, `ครับ` → `ครับ` ผลจึงเป็น "ขออนุญาตให้แอดมินมาตอบเรื่องนี้นะคะ" หรือ "ขออนุญาตให้แอดมินมาตอบเรื่องนี้นะครับ" |
-| `buildSystemInstructions` | `(s: Pick<Settings, "aiName" \| "aiAnswerMode" \| "aiPoliteParticle" \| "aiInstructions">) => string` | เติม slot ของแม่แบบคำสั่งระบบตาม [ai-prompt](../specs/ai-prompt.md#2-คำสั่งระบบ) ผลต้องเหมือนเดิมทุกไบต์เมื่อ input เดิม (เพื่อ prompt caching) ไม่มีเวลา id ชื่อ LINE OA หรือชื่อลูกค้า |
+| `buildSystemInstructions` | `(s: Pick<Settings, "aiName" \| "aiAnswerMode" \| "aiPoliteParticle" \| "aiInstructions">) => string` | เติม slot ของแม่แบบคำสั่งระบบตาม [ai-prompt](../specs/ai-prompt.md#2-คำสั่งระบบ) ผลต้องเหมือนเดิมทุกไบต์เมื่อ input เดิม (เพื่อ prompt caching) ไม่มีเวลา id ชื่อ LINE OA หรือชื่อผู้ใช้ |
 | `normalizeAiName` | `(raw: string \| null) => string \| null` | ตัดช่องว่างหัวท้าย เหลือว่างคืน null |
 | `formatKnowledgeBase` | `(docs: { fileName: string; text: string }[]) => string` | บล็อก `<knowledge>` ตาม [ai-prompt ข้อ 2.3](../specs/ai-prompt.md#23-บล็อกคลังความรู้) รวมการ escape และบล็อกของคลังว่าง ต่อเอกสารตามลำดับที่ได้รับ |
-| `toHistoryTurns` | `(messages: Message[]) => ChatTurn[]` | ตาม [ai-prompt ข้อ 4](../specs/ai-prompt.md#4-ประวัติแชท): ข้าม `type = event` และข้อความขาออกที่ `deliveryStatus` เป็น `pending` หรือ `failed`, ลูกค้าเป็น `customer` ส่วนแอดมินกับ AI เป็น `assistant`, สื่อแทนด้วยคำในวงเล็บเหลี่ยมตามตารางข้อ 4.2, รวมข้อความติดกันของฝั่งเดียวกันด้วยบรรทัดใหม่, ตัด turn ของ `assistant` ที่อยู่หน้าสุดทิ้ง ผลต้องจบด้วย turn ของ `customer` ถ้าไม่จบ คืน array ว่าง |
+| `toHistoryTurns` | `(messages: Message[]) => ChatTurn[]` | ตาม [ai-prompt ข้อ 4](../specs/ai-prompt.md#4-ประวัติแชท): ข้าม `type = event` และข้อความขาออกที่ `deliveryStatus` เป็น `pending` หรือ `failed`, ผู้ใช้เป็น `customer` ส่วนแอดมินกับ AI เป็น `assistant`, สื่อแทนด้วยคำในวงเล็บเหลี่ยมตามตารางข้อ 4.2, รวมข้อความติดกันของฝั่งเดียวกันด้วยบรรทัดใหม่, ตัด turn ของ `assistant` ที่อยู่หน้าสุดทิ้ง ผลต้องจบด้วย turn ของ `customer` ถ้าไม่จบ คืน array ว่าง |
 | `sanitizeAiReply` | `(text: string) => string \| null` | ทำความสะอาดตาม [ai-prompt ข้อ 6](../specs/ai-prompt.md#6-การทำความสะอาดคำตอบ) คืน null เมื่อผลว่าง หรือยาวเกิน `AI_REPLY_MAX_CHARS` |
 | `replyLinks` | `(reply: string) => string[]` | ลิงก์ในคำตอบตาม [ai-prompt ข้อ 6.1](../specs/ai-prompt.md#61-ลิงก์ในคำตอบ): URL ที่ขึ้นต้นด้วย `http://` หรือ `https://`, host ที่ขึ้นต้นด้วย `www.` และ domain ที่ตามด้วย path ไม่รวมเครื่องหมายวรรคตอนท้าย ไม่นับราคา เวลา และอีเมล ([`reply-links.logic.ts`](../../src/core/domain/reply-links.logic.ts)) |
 | `disallowedLinks` | `(reply: string, sources: readonly string[]) => string[]` | ลิงก์ของ `replyLinks(reply)` ที่ไม่มีใน `sources` (ข้อความคลังความรู้และคำแนะนำสำหรับ AI) เทียบด้วย `normalizeLink`: ไม่สนใจ scheme, `www.`, ตัวพิมพ์ และ `/` ท้าย และนับ host ของลิงก์ที่แอดมินเขียนว่าอนุญาตด้วย array ว่างคือส่งได้ |
@@ -441,11 +441,11 @@ export type GuardTopicsIssue = "too_many" | "too_long" | "duplicate";
 
 | ฟังก์ชัน | ลายเซ็น | กฎ |
 | --- | --- | --- |
-| `guardRefusalText` | `(particle: PoliteParticle) => string` | ข้อความที่ลูกค้าได้เมื่อขอบเขตหัวข้อกัน คืน `คุยได้เฉพาะหัวข้อที่กำหนดไว้นะ{p}` โดย `{p}` ตามกฎเดียวกับ `handoffText` (`ค่ะ` → `คะ`, `ครับ` → `ครับ`) ประโยคคงที่ ไม่ตั้งค่าได้ ([ADR 0024](../adr/0024-scope-reductions.md)) |
+| `guardRefusalText` | `(particle: PoliteParticle, topics: readonly string[]) => string` | ข้อความที่ผู้ใช้ได้เมื่อขอบเขตหัวข้อกัน บอกชื่อหัวข้อที่บันทึกไว้ไม่เกิน `GUARD_REFUSAL_MAX_TOPICS` หัวข้อ เช่น `ตอนนี้คุยได้เฉพาะเรื่อง “มุกตลกไทย” และ “มุกจากภาพยนตร์” นะคะ` รูปแบบเต็มอยู่ใน [topic-guard](../specs/topic-guard.md) `{p}` ตามกฎเดียวกับ `handoffText` ไม่ตั้งค่าได้ ([ADR 0024](../adr/0024-scope-reductions.md), [ADR 0031](../adr/0031-settings-tabs-user-wording-and-neutral-prompt.md)) |
 | `normalizeGuardTopics` | `(raw: readonly string[]) => { topics: string[]; issue: GuardTopicsIssue \| null }` | ตัดช่องว่างหัวท้ายของแต่ละรายการ ทิ้งรายการว่าง คงลำดับเดิม แล้วตรวจตามลำดับ: เกิน `GUARD_MAX_TOPICS` รายการ → `too_many`, รายการใดยาวเกิน `GUARD_TOPIC_MAX_CHARS` ตัว → `too_long`, มีสองรายการเท่ากันทุกตัวอักษร → `duplicate` นอกนั้น `issue` เป็น null ไม่ตัดรายการทิ้งเอง contract ของ `PATCH /api/settings` และหน้าตั้งค่าใช้ฟังก์ชันนี้ผ่าน `src/contracts/` |
 | `guardContextTurns` | `(history: ChatTurn[], n = GUARD_CONTEXT_TURNS) => { message: string; context: ChatTurn[] }` | `history` มาจาก `toHistoryTurns` จึงจบด้วย `customer` เสมอ: `message` คือ `text` ของ turn สุดท้าย และ `context` คือ turn ก่อนหน้าไม่เกิน `n` turn ตามลำดับเดิม history ว่างหรือไม่จบด้วย `customer` เป็น bug ให้ throw |
 | `buildGuardRulesBlock` | `(topics: string[]) => string` | บล็อก `<topic_guard>` ที่ต่อท้ายคำสั่งระบบของการตอบแชทเมื่อขอบเขตหัวข้อเปิด ตาม [ai-prompt ข้อ 9.5](../specs/ai-prompt.md#95-บล็อกที่ต่อท้ายคำสั่งระบบของการตอบแชท) แทน `<` และ `>` ในหัวข้อด้วย `‹` และ `›` ผลเหมือนเดิมทุกไบต์เมื่อ input เดิม |
-| `buildGuardClassifierPrompt` | `(input: { topics: string[]; message: string; context: ChatTurn[] }) => { system: string; userText: string }` | คำสั่งระบบและข้อความ user ของการคัดกรองตาม [ai-prompt ข้อ 9.1 ถึง 9.2](../specs/ai-prompt.md#91-คำสั่งระบบของการคัดกรอง) รวมการ escape ข้อความของลูกค้าและบริบท adapter ของ Claude เรียกฟังก์ชันนี้ |
+| `buildGuardClassifierPrompt` | `(input: { topics: string[]; message: string; context: ChatTurn[] }) => { system: string; userText: string }` | คำสั่งระบบและข้อความ user ของการคัดกรองตาม [ai-prompt ข้อ 9.1 ถึง 9.2](../specs/ai-prompt.md#91-คำสั่งระบบของการคัดกรอง) รวมการ escape ข้อความของผู้ใช้และบริบท adapter ของ Claude เรียกฟังก์ชันนี้ |
 | `guardVerdictOf` | `(r: TopicGuardResponse, topics: string[]) => { verdict: "allowed" \| "blocked" \| "failed"; matchedTopic: string \| null; error: ErrorCode \| null }` | `refused` → (`failed`, `ai.refused`), `truncated` → (`failed`, `ai.truncated`), `completed` กับ `verdict` null → (`failed`, `ai.invalid_output`), `allowed: false` → (`blocked`, null, null), `allowed: true` → (`allowed`, `matchedTopic` ถ้าตรงกับหัวข้อใน `topics` ทุกตัวอักษร ไม่เช่นนั้น null, null) |
 
 ฟังก์ชันล้วนฝั่งหน้าจอ เช่น การรวมผล polling, การจัดกลุ่มข้อความ และรูปแบบเวลา อยู่ใน `src/features/*/` ไม่ใช่แกนกลาง สัญญาของมันอยู่ใน [ui-screens](../specs/ui-screens.md#8-ฟังก์ชันล้วนฝั่งหน้าจอ)
@@ -533,7 +533,7 @@ export interface MessagingGateway {
 | `parseEvents` | `events` ว่างคืน `ok([])` (ปุ่ม Verify ของ LINE) event ที่ field ที่ใช้ผิดรูปถูกแปลงเป็น `unsupported` ไม่ทำให้ทั้งก้อนล้ม คืน `webhook.payload_invalid` เฉพาะเมื่อ body ไม่ใช่ JSON หรือไม่มี array `events` ลำดับของผลตรงกับลำดับใน payload |
 | `reply` | ส่งทุกชิ้นในคำขอเดียว คืน `line.reply_token_invalid` เฉพาะเมื่อ LINE ตอบ 400 ที่ `message` ตรงกับ `/invalid reply token/i` (token หมดอายุหรือถูกใช้แล้ว) ซึ่งผู้เรียกจะเปลี่ยนเป็น push ได้อย่างปลอดภัย 400 อื่น (body ผิดรูป มี `details[].property`) คืน `line.reply_failed` ซึ่งผู้เรียกห้าม push payload เดิมต่อ เครือข่ายล่มหรือ 5xx หลัง retry คืน `line.unavailable` ซึ่งหมายถึงไม่รู้ผล ผู้เรียกห้าม push ต่อเอง |
 | `push` | ใส่ header `X-Line-Retry-Key` ทุกครั้งรวมทุก retry ค่าเป็น UUID version 5 (variant RFC 4122) จาก 16 byte แรกของ SHA-256 ของ `retryKey` ตัวจริงทำผ่าน `toLineRetryKey` ตัวปลอมจำ `retryKey` ตรงตัว ถ้า LINE ตอบว่ารับคำขอนี้ไปแล้ว (สมมติว่าเป็น 409 ต้องยืนยัน) คืน `ok({ alreadyAccepted: true })` ตัวปลอมต้องจำ retryKey และไม่บันทึกการส่งซ้ำ แยก `line.quota_exceeded` ออกจาก `line.rate_limited` ด้วยข้อความของ LINE (ต้องยืนยัน) |
-| `getProfile` | timeout `LINE_PROFILE_TIMEOUT_MS` และไม่ retry เพราะเรียกก่อนตอบ webhook 404 หรือ timeout คืน `line.profile_unavailable` |
+| `getProfile` | timeout `LINE_PROFILE_TIMEOUT_MS` และไม่ retry เพราะเรียกก่อนตอบ webhook (ผู้ใช้ใหม่) หรือในงานดึงใหม่หลังตอบ 404 หรือ timeout คืน `line.profile_unavailable` |
 | `downloadContent` | ดึงจาก host ข้อมูลของ LINE ที่กำหนดตายตัวเท่านั้น เฉพาะ 200 คือไฟล์ 202 หรือ 2xx อื่นคืน `line.content_not_ready` โดยไม่อ่าน body ถ้า `Content-Length` เกิน `maxBytes` คืน `media.too_large` โดยไม่อ่าน body ถ้าไม่มี `Content-Length` stream ที่คืนต้อง error เมื่ออ่านเกิน `maxBytes` ด้วย error ที่มี `code: "media.too_large"` (ตัวจริงใช้ `LineContentTooLargeError` ตัวปลอมใช้ `FakeContentTooLargeError`) การขาดของ stream แบบอื่นต้องไม่มีรหัสนี้ 404 หรือ 410 คืน `line.content_unavailable` variant `preview` ใช้กับวิดีโอเท่านั้น (ต้องยืนยัน endpoint ภาพตัวอย่างของ LINE) |
 | `getContentStatus` | `GET /v2/bot/message/{id}/content/transcoding` ครั้งเดียวด้วย `LINE_REQUEST_TIMEOUT_MS` คืน `processing` ระหว่างที่ `downloadContent` ยังได้ `line.content_not_ready` แล้ว `succeeded` (ตัวปลอมและ harness นับคำตอบ "ยังไม่พร้อม" รวมกันทั้งสอง method) |
 | `verifyChannelSecret` | `POST /v2/oauth/accessToken` แบบ form (`grant_type=client_credentials`, `client_id`, `client_secret`) ไม่มี bearer และไม่ retry (แต่ละครั้งออก token) 200 แล้วอ่าน `GET /v2/bot/info` ด้วย token นั้นครั้งเดียวไม่ retry (`userId` และ `basicId` คือ `LineBotIdentity` ของ channel ตอบไม่ได้หรือผิดรูปได้ `bot: null`) แล้วเพิกถอนด้วย `POST /v2/oauth/revoke` ทันทีแบบ best effort คืน ok, 4xx ที่ไม่ใช่ 429 คืน `line.channel_secret_invalid`, 429, 5xx, timeout และเครือข่ายคืน `line.unavailable` (ตรวจไม่ได้) secret และ token ไม่อยู่ใน detail ของ error |
@@ -622,12 +622,12 @@ export interface DocumentExtractor {
 
 ### TopicGuard
 
-คัดกรองว่าข้อความล่าสุดของลูกค้าอยู่ในหัวข้อที่แอดมินกำหนดหรือไม่ เป็นการเรียกโมเดลแยกจากการตอบแชท ([ADR 0020](../adr/0020-topic-guardrail-as-separate-check.md)) ใช้ `GUARD_MODEL` เสมอ ไม่ขึ้นกับโมเดลที่ตั้งในหน้าตั้งค่า
+คัดกรองว่าข้อความล่าสุดของผู้ใช้อยู่ในหัวข้อที่แอดมินกำหนดหรือไม่ เป็นการเรียกโมเดลแยกจากการตอบแชท ([ADR 0020](../adr/0020-topic-guardrail-as-separate-check.md)) ใช้ `GUARD_MODEL` เสมอ ไม่ขึ้นกับโมเดลที่ตั้งในหน้าตั้งค่า
 
 ```ts
 export interface TopicGuardRequest {
   topics: string[];               // หัวข้อที่บันทึกไว้ ไม่ว่าง
-  message: string;                // turn สุดท้ายของลูกค้า จาก guardContextTurns
+  message: string;                // turn สุดท้ายของผู้ใช้ จาก guardContextTurns
   context: ChatTurn[];            // ไม่เกิน GUARD_CONTEXT_TURNS turn ก่อนหน้า เพื่อให้ตัดสินข้อความต่อเนื่อง เช่น "ขออีกมุก"
   model: AiModelId;               // GUARD_MODEL
   maxTokens: number;              // GUARD_MAX_TOKENS
@@ -757,6 +757,8 @@ export interface ContactRepository {
   ensure(input: { id: ContactId; lineUserId: LineUserId; now: Date }): Promise<{ contact: Contact; created: boolean }>;
 
   updateProfile(id: ContactId, p: { displayName: string | null; pictureUrl: string | null }): Promise<void>;
+  /** Compare-and-set ใน statement เดียว: ตั้ง profileFetchedAt = now เมื่อค่าเดิมเป็น null หรือไม่หลัง staleBefore คืน true เมื่อจองได้ ผู้เรียกพร้อมกันได้ true เพียงหนึ่ง (data-model กฎของ repository ข้อ 19) */
+  claimProfileRefresh(id: ContactId, now: Date, staleBefore: Date): Promise<boolean>;
   setFollowStatus(id: ContactId, status: FollowStatus, at: Date): Promise<boolean>;
 
   /** หลังบันทึกข้อความขาเข้าใหม่: unreadCount + 1, lastMessageAt และข้อความล่าสุด (เมื่อไม่เก่ากว่า lastMessageAt เดิม), reply token ถ้า expiresAt ใหม่กว่าของเดิม */
@@ -765,7 +767,7 @@ export interface ContactRepository {
     replyToken: string | null; replyTokenExpiresAt: Date | null;
   }): Promise<void>;
 
-  /** หลังบันทึกข้อความขาออก: ข้อความล่าสุดและผู้ส่งเท่านั้น ไม่แตะ lastMessageAt (ลำดับของรายชื่อตามลูกค้า) และ unreadCount */
+  /** หลังบันทึกข้อความขาออก: ข้อความล่าสุดและผู้ส่งเท่านั้น ไม่แตะ lastMessageAt (ลำดับของรายชื่อตามผู้ใช้) และ unreadCount */
   recordOutbound(id: ContactId, o: { preview: ReturnType<typeof previewOf>; by: "admin" | "ai" }): Promise<void>;
 
   /** compare-and-clear: ล้าง token เฉพาะเมื่อยังเป็นค่าเดิม คืน true เมื่อผู้เรียกได้สิทธิ์ใช้ token */
@@ -800,7 +802,7 @@ export interface ContactRepository {
 | `consumeReplyToken` | สองผู้เรียกพร้อมกันด้วย token เดียวกัน ได้ true คนเดียว |
 | `tryAcquireAiLock` | สองผู้เรียกพร้อมกัน ได้ true คนเดียว ไม่ยึดล็อกที่ค้างแทน การคืนสภาพทำโดย `recoverStuckAiStates` เท่านั้น |
 | `releaseAiLock` | ตั้ง idle และ aiStateAt เป็น null ถ้าเป็น idle อยู่แล้วไม่ผิด |
-| `list` | เรียง `coalesce(lastMessageAt, createdAt)` (ข้อความล่าสุดของลูกค้า) ใหม่ไปเก่า แล้ว id ใหม่ไปเก่า cursor ข้ามแถวที่ค่าเท่ากันได้ถูกต้องด้วย id `search` เทียบ displayName แบบ contains ไม่สนตัวพิมพ์ `filter`: unread คือ unreadCount > 0, needs_admin คือ needsAdmin true |
+| `list` | เรียง `coalesce(lastMessageAt, createdAt)` (ข้อความล่าสุดของผู้ใช้) ใหม่ไปเก่า แล้ว id ใหม่ไปเก่า cursor ข้ามแถวที่ค่าเท่ากันได้ถูกต้องด้วย id `search` เทียบ displayName แบบ contains ไม่สนตัวพิมพ์ `filter`: unread คือ unreadCount > 0, needs_admin คือ needsAdmin true |
 | `listChangedAfter` | `updatedSeq > after` เรียงจากน้อยไปมาก ไม่กรอง |
 | ไม่พบ | `findById` คืน null ส่วน method ที่แก้แถวซึ่งไม่มีอยู่ไม่ทำอะไรและไม่ throw |
 
@@ -812,12 +814,12 @@ export interface ContactNoteRepository {
   insert(note: ContactNote): Promise<ContactNote>;
   /** ใหม่ไปเก่า (createdAt แล้ว id) ไม่เกิน limit */
   listForContact(contactId: ContactId, limit: number): Promise<ContactNote[]>;
-  /** ลบโน้ตของลูกค้าคนนั้น false เมื่อไม่มีหรือเป็นของคนอื่น */
+  /** ลบโน้ตของผู้ใช้คนนั้น false เมื่อไม่มีหรือเป็นของคนอื่น */
   delete(contactId: ContactId, id: NoteId): Promise<boolean>;
 }
 ```
 
-ชุดทดสอบของ port (`contact-note-repository.suite.ts`) รันกับตัวปลอมและ Postgres: ทุก field กลับมาเหมือนเดิม, เรียงใหม่ไปเก่าโดย id ตัดสินเมื่อเวลาเท่ากัน, limit, ลบได้เฉพาะของลูกค้าคนนั้น, ลูกค้าที่ไม่มีถูกปฏิเสธ (foreign key)
+ชุดทดสอบของ port (`contact-note-repository.suite.ts`) รันกับตัวปลอมและ Postgres: ทุก field กลับมาเหมือนเดิม, เรียงใหม่ไปเก่าโดย id ตัดสินเมื่อเวลาเท่ากัน, limit, ลบได้เฉพาะของผู้ใช้คนนั้น, ผู้ใช้ที่ไม่มีถูกปฏิเสธ (foreign key)
 
 #### MessageRepository
 
@@ -838,7 +840,7 @@ export interface MessageRepository {
   insertEvent(m: NewMessage): Promise<Message>;
 
   markSent(id: MessageId, at: Date, lineSentIds: readonly LineMessageId[]): Promise<Message>; // เก็บ id ของส่วนที่ส่ง
-  /** ข้อความของลูกค้าคนนั้นที่ lineMessageId หรือหนึ่งใน lineSentIds อยู่ใน lineIds query เดียวต่อหน้า (การตอบกลับ) */
+  /** ข้อความของผู้ใช้คนนั้นที่ lineMessageId หรือหนึ่งใน lineSentIds อยู่ใน lineIds query เดียวต่อหน้า (การตอบกลับ) */
   findByLineIds(contactId: ContactId, lineIds: readonly LineMessageId[]): Promise<Message[]>;
   markFailed(id: MessageId, code: ErrorCode): Promise<Message>;
   /** compare-and-set: failed → pending ล้าง deliveryError และตั้งเวลาเริ่มของการส่งรอบนี้เป็น at คืน false ถ้าสถานะไม่ใช่ failed */
@@ -850,12 +852,12 @@ export interface MessageRepository {
   /** compare-and-set บน mediaStatus = pending เหมือน setMediaReady */
   /** failed บันทึก failure (ค่าเริ่มต้น download_failed) too_large ไม่มี */
   setMediaStatus(id: MessageId, status: Exclude<MediaStatus, "ready" | "pending">, failure?: MediaFailure): Promise<boolean>;
-  /** คำสั่งเดียว: สื่อของลูกค้าคนนั้นที่ยัง pending และ createdAt ก่อน staleBefore เป็น failed คืน id ที่แก้ */
+  /** คำสั่งเดียว: สื่อของผู้ใช้คนนั้นที่ยัง pending และ createdAt ก่อน staleBefore เป็น failed คืน id ที่แก้ */
   failStuckMedia(contactId: ContactId, staleBefore: Date): Promise<MessageId[]>;
-  /** คำสั่งเดียว: ข้อความขาออกของลูกค้าคนนั้นที่ยัง pending และเริ่มส่งรอบนี้ก่อน staleBefore เป็น failed ด้วย line.send_interrupted คืน id ที่แก้ */
+  /** คำสั่งเดียว: ข้อความขาออกของผู้ใช้คนนั้นที่ยัง pending และเริ่มส่งรอบนี้ก่อน staleBefore เป็น failed ด้วย line.send_interrupted คืน id ที่แก้ */
   failStuckDeliveries(contactId: ContactId, staleBefore: Date): Promise<MessageId[]>;
 
-  /** ข้อความขาเข้าล่าสุดของลูกค้าคนนั้นตาม seq ที่ AI ตอบได้: ข้ามการกดที่ตอบด้วยข้อความคงที่ (`NO_AI_TAP_EVENT_CODES`: `customer.tapped_admin`, `customer.tapped_how_to`) */
+  /** ข้อความขาเข้าล่าสุดของผู้ใช้คนนั้นตาม seq ที่ AI ตอบได้: ข้ามการกดที่ตอบด้วยข้อความคงที่ (`NO_AI_TAP_EVENT_CODES`: `customer.tapped_admin`, `customer.tapped_how_to`) */
   latestInbound(contactId: ContactId): Promise<Message | null>;
   /** limit ข้อความล่าสุดที่ไม่ใช่ event เรียงเก่าไปใหม่ */
   recentForAi(contactId: ContactId, limit: number): Promise<Message[]>;
@@ -865,7 +867,7 @@ export interface MessageRepository {
   listChangedAfter(contactId: ContactId, after: Seq, limit: number): Promise<{ messages: Message[]; hasMore: boolean }>;
   maxUpdatedSeq(contactId: ContactId): Promise<Seq>;
   countForContact(contactId: ContactId): Promise<{ total: number; byAi: number }>;
-  /** จำนวนบรรทัดเหตุการณ์ (type = event) ทุกลูกค้าที่ createdAt อยู่ใน [from, to) แยกตาม eventCode รหัสที่ไม่มีแถวไม่อยู่ในผล */
+  /** จำนวนบรรทัดเหตุการณ์ (type = event) ทุกผู้ใช้ที่ createdAt อยู่ใน [from, to) แยกตาม eventCode รหัสที่ไม่มีแถวไม่อยู่ในผล */
   countEventsByCode(range: DateRange): Promise<Partial<Record<EventCode, number>>>;
 }
 ```
@@ -877,12 +879,12 @@ export interface MessageRepository {
 | `setMediaReady`, `setMediaStatus` | compare-and-set บน `mediaStatus = pending` (UPDATE ... WHERE id AND mediaStatus = pending) แก้ได้ครั้งเดียว เรียกพร้อมกันได้ `true` คนเดียว แถวที่ไม่ใช่ pending แล้วหรือไม่มีอยู่คืน false และไม่แก้อะไร ใช้ให้ `StoreInboundMedia` สองรอบของข้อความเดียวกันไม่ทับผลกัน |
 | `recordFirstPush` | UPDATE ... WHERE id AND `firstPushAt IS NULL` ครั้งแรกเท่านั้นที่ตั้งค่า การส่งอีกครั้งไม่เลื่อน ผู้เรียกพร้อมกันได้ค่าเดียว แถวที่ไม่มีไม่ใช่ error `RetryMessage` ใช้ค่านี้วัดหน้าต่างของ retry key |
 | `markPendingIfFailed` | ตั้งเวลาเริ่มของการส่งรอบนี้ (`Message.deliveryAttemptAt`) เป็น `at` ซึ่ง `failStuckDeliveries` ใช้วัด แถว pending ที่ insert ใหม่ใช้ `createdAt` เป็นเวลาเริ่ม ค่านี้ไม่อยู่ใน entity `Message` |
-| `failStuckMedia`, `failStuckDeliveries` | UPDATE ... RETURNING คำสั่งเดียว เงื่อนไขบนสถานะ `pending` และเวลา (`createdAt` ของสื่อ, `deliveryAttemptAt` หรือ `createdAt` ของการส่ง) น้อยกว่า `staleBefore` อย่างเคร่งครัด เฉพาะลูกค้าที่ระบุ แถวที่แก้ได้ `updatedSeq` ใหม่ เรียกพร้อมกันหลายผู้เรียกแต่ละ id กลับไปที่ผู้เรียกคนเดียว การส่งที่คืนสภาพแล้วคง `retryKey` เดิม จึงกด "ส่งอีกครั้ง" ได้ ([data-model กฎของ repository ข้อ 13](data-model.md#กฎของ-repository)) |
+| `failStuckMedia`, `failStuckDeliveries` | UPDATE ... RETURNING คำสั่งเดียว เงื่อนไขบนสถานะ `pending` และเวลา (`createdAt` ของสื่อ, `deliveryAttemptAt` หรือ `createdAt` ของการส่ง) น้อยกว่า `staleBefore` อย่างเคร่งครัด เฉพาะผู้ใช้ที่ระบุ แถวที่แก้ได้ `updatedSeq` ใหม่ เรียกพร้อมกันหลายผู้เรียกแต่ละ id กลับไปที่ผู้เรียกคนเดียว การส่งที่คืนสภาพแล้วคง `retryKey` เดิม จึงกด "ส่งอีกครั้ง" ได้ ([data-model กฎของ repository ข้อ 13](data-model.md#กฎของ-repository)) |
 | `listLatest`, `listBefore` | คืนเรียง seq น้อยไปมาก (เก่าไปใหม่) รวมข้อความชนิด event |
 | `listChangedAfter` | `updatedSeq > after` เรียง updatedSeq น้อยไปมาก |
 | `maxUpdatedSeq` | ไม่มีข้อความคืน `0n` |
 | `countForContact` | `total` ไม่นับ event, `byAi` นับ author = ai |
-| `countEventsByCode` | นับเฉพาะ `type = event` ของทุกลูกค้า ช่วงเป็น `[from, to)` ตาม `createdAt` ใช้ใน `GetGuardrailStats` |
+| `countEventsByCode` | นับเฉพาะ `type = event` ของทุกผู้ใช้ ช่วงเป็น `[from, to)` ตาม `createdAt` ใช้ใน `GetGuardrailStats` |
 
 #### SettingsRepository
 
@@ -974,7 +976,7 @@ export interface UsageRepository {
 ```
 
 - `sumCost` รวมทุก kind และทุก outcome ใน `[from, to)` ตาม `createdAt` ไม่มีแถวคืน `0n`
-- `reportByContact` รวมเฉพาะแถว kind = reply (แถว guard แยกไปที่ `guardSummary`) เรียง cost มากไปน้อย, `listForContact` คืนทุก kind ของลูกค้านั้น เรียง createdAt ใหม่ไปเก่า
+- `reportByContact` รวมเฉพาะแถว kind = reply (แถว guard แยกไปที่ `guardSummary`) เรียง cost มากไปน้อย, `listForContact` คืนทุก kind ของผู้ใช้นั้น เรียง createdAt ใหม่ไปเก่า
 - `guardSummary`, `ingestSummary`, `countSafetyOutcomes` และ `countNoResponse` ไม่มีแถวคืนศูนย์ทุกค่า
 
 #### WebhookEventRepository
@@ -1115,9 +1117,9 @@ export interface Logger {
 ```
 
 - Adapter เขียน JSON หนึ่งบรรทัดต่อเหตุการณ์ทาง stdout: `{ "ts", "level", "event", ...fields }` และทิ้ง key ที่ไม่อยู่ใน `LogFields` แม้ type จะกันไว้แล้ว (กันการ cast)
-- ห้ามมี: เนื้อหาข้อความ, ชื่อและรูปของลูกค้า, `lineUserId`, IP, เนื้อหา PDF, ชื่อไฟล์, prompt, คำตอบของ AI, token, secret, signature และ error message ของ library ตาม [ADR 0016](../adr/0016-logging-without-pii-and-status-in-db.md)
+- ห้ามมี: เนื้อหาข้อความ, ชื่อและรูปของผู้ใช้, `lineUserId`, IP, เนื้อหา PDF, ชื่อไฟล์, prompt, คำตอบของ AI, token, secret, signature และ error message ของ library ตาม [ADR 0016](../adr/0016-logging-without-pii-and-status-in-db.md)
 - ชื่อเหตุการณ์เป็น `{พื้นที่}.{สิ่ง}.{สิ่งที่เกิด}` ตัวเล็ก คั่นด้วยจุด และคำในแต่ละส่วนคั่นด้วย `_`
-- Log ของขอบเขตหัวข้อใช้เฉพาะ field ใน `LogFields` ห้ามมีข้อความของลูกค้า หัวข้อ ข้อความปฏิเสธ หรือ `matchedTopic`
+- Log ของขอบเขตหัวข้อใช้เฉพาะ field ใน `LogFields` ห้ามมีข้อความของผู้ใช้ หัวข้อ ข้อความปฏิเสธ หรือ `matchedTopic`
 
 ```ts
 export type LogEvent =
@@ -1141,6 +1143,7 @@ export type LogEvent =
   | "line.webhook.event_failed"
   | "line.webhook.batch_unstored"   // error: eventCount, errorCode db.unavailable ทุก event ล้มและฐานข้อมูลล่ม ตอบ 503
   | "line.profile.fetch_failed"
+  | "line.profile.refreshed"
   | "line.send.succeeded"           // channel, messageId
   | "line.send.failed"              // channel, errorCode
   | "line.send.reply_token_rejected"

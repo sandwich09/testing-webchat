@@ -2,13 +2,23 @@ import { describe, expect, it } from 'vitest';
 import { buildContentSecurityPolicy, createNonce } from './csp';
 
 describe('buildContentSecurityPolicy', () => {
+  it('allows both hosts LINE serves profile pictures from', () => {
+    const imgSrc = buildContentSecurityPolicy('abc', { development: false })
+      .split('; ')
+      .find((d) => d.startsWith('img-src '));
+    // LINE answers `pictureUrl` on either host; a missing one shows initials instead of the picture.
+    expect(imgSrc?.split(' ')).toEqual(
+      expect.arrayContaining(['https://profile.line-scdn.net', 'https://sprofile.line-scdn.net']),
+    );
+  });
+
   it('is exactly the policy of project-setup 6.2', () => {
     expect(buildContentSecurityPolicy('abc', { development: false })).toBe(
       [
         "default-src 'self'",
         "script-src 'self' 'nonce-abc' 'strict-dynamic'",
         "style-src 'self' 'unsafe-inline'",
-        "img-src 'self' data: blob: https://profile.line-scdn.net https://stickershop.line-scdn.net https://*.public.blob.vercel-storage.com",
+        "img-src 'self' data: blob: https://profile.line-scdn.net https://sprofile.line-scdn.net https://stickershop.line-scdn.net https://*.public.blob.vercel-storage.com",
         "media-src 'self' blob: https://*.public.blob.vercel-storage.com",
         "font-src 'self'",
         "connect-src 'self' https://vercel.com https://*.public.blob.vercel-storage.com",

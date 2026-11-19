@@ -2,8 +2,7 @@
 
 // AI section of the settings page (ui-screens 9.3). Every control saves through its own
 // `useUpdateSettings` instance, so pending, success and error belong to that control only.
-import { Check } from 'lucide-react';
-import { useId, useRef, useState, type SyntheticEvent, type KeyboardEvent } from 'react';
+import { useId, useRef, useState, type ReactNode, type SyntheticEvent } from 'react';
 
 import { errorCodeOf } from '@/common/common.api';
 import { copy as commonCopy } from '@/common/common.constants';
@@ -11,7 +10,6 @@ import { cn, formatUsdForScreen } from '@/common/common.logic';
 import { ErrorState } from '@/common/ErrorState';
 import { testIds } from '@/common/test-ids';
 import { showToast } from '@/common/toast';
-import { Button } from '@/common/ui/button';
 import { Input } from '@/common/ui/input';
 import { Select } from '@/common/ui/select';
 import { Skeleton } from '@/common/ui/skeleton';
@@ -22,17 +20,15 @@ import {
   AI_DAILY_BUDGET_MAX_USD,
   AI_INSTRUCTIONS_MAX_CHARS,
   AI_MODEL_IDS,
-  POLITE_PARTICLES,
   type AiModelId,
-  type PoliteParticle,
   type SettingsDto,
 } from '@/contracts';
 
-import { AiAnswerModeRow, AiNameRow } from './AiPersonaRows';
+import { AiNameRow, ParticleRow } from './AiPersonaRows';
 import { parseBudgetInput, validateInstructions } from './settings.logic';
 import { copy } from './settings.constants';
 import { useUpdateSettings } from './settings.hooks';
-import { FieldError, nextRadioIndex, SaveButton, saveFailureText } from './SettingsFormParts';
+import { FieldError, SaveButton, saveFailureText } from './SettingsFormParts';
 import { SettingsRow } from './SettingsRow';
 import { SettingsSection } from './SettingsSection';
 
@@ -81,11 +77,6 @@ export function budgetDirty(draft: string | null, saved: string): boolean {
 /** Whether the typed instructions differ from the saved ones. */
 export function instructionsDirty(draft: string | null, saved: string): boolean {
   return draft !== null && draft !== saved;
-}
-
-/** `copy.ai.particleOption` key of a particle value. */
-export function particleLabel(particle: PoliteParticle): string {
-  return particle === 'ค่ะ' ? copy.ai.particleOption.ka : copy.ai.particleOption.krub;
 }
 
 // ---------------------------------------------------------------------------
@@ -137,9 +128,9 @@ function ModelRow({ settings }: { settings: SettingsDto }) {
       label={copy.ai.model}
       labelId={labelId}
       description={copy.ai.modelDesc}
-      wideControl
+      layout="column"
     >
-      <div className="flex flex-col items-start gap-1 medium:items-end">
+      <div className="flex flex-col gap-1">
         <Select
           aria-labelledby={labelId}
           aria-invalid={mutation.isError}
@@ -147,7 +138,7 @@ function ModelRow({ settings }: { settings: SettingsDto }) {
           pending={mutation.isPending}
           testId={testIds.settingsModel}
           optionTestId={testIds.settingsModelOption}
-          className="w-full medium:w-[220px]"
+          className="w-full"
           options={modelOptions}
           value={shown}
           onValueChange={(next) => {
@@ -205,7 +196,7 @@ function BudgetRow({ settings }: { settings: SettingsDto }) {
         onSuccess: () => {
           setDraft(null);
           showToast('success', commonCopy.toast.saved);
-          // The save button goes away; keep focus where the admin was working.
+          // The save button turns disabled; keep focus where the admin was working.
           inputRef.current?.focus();
         },
         onError: () => {
@@ -216,119 +207,45 @@ function BudgetRow({ settings }: { settings: SettingsDto }) {
   };
 
   return (
-    <SettingsRow label={copy.ai.budget} description={copy.ai.budgetDesc} wideControl>
-      <form
-        noValidate
-        onSubmit={onSubmit}
-        className="flex flex-col items-start gap-1 medium:items-end"
-      >
+    <SettingsRow label={copy.ai.budget} description={copy.ai.budgetDesc} layout="column">
+      <form noValidate onSubmit={onSubmit} className="flex flex-col gap-1">
         <div className="flex items-center gap-2">
-          <span aria-hidden="true" className="text-body text-muted">
-            $
-          </span>
-          <Input
-            ref={inputRef}
-            type="text"
-            inputMode="decimal"
-            autoComplete="off"
-            aria-label={copy.ai.budget}
-            aria-invalid={errorText !== null || undefined}
-            aria-describedby={errorText !== null ? `${errorId} ${todayId}` : todayId}
-            data-testid={testIds.settingsBudget}
-            className="w-[120px]"
-            value={value}
-            onChange={(event) => {
-              setDraft(event.target.value);
-              setRejected(null);
-              if (mutation.isError) mutation.reset();
-            }}
+          <div className="relative min-w-0 flex-1">
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-body text-muted"
+            >
+              $
+            </span>
+            <Input
+              ref={inputRef}
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              aria-label={copy.ai.budget}
+              aria-invalid={errorText !== null || undefined}
+              aria-describedby={errorText !== null ? `${errorId} ${todayId}` : todayId}
+              data-testid={testIds.settingsBudget}
+              className="pl-7 tabular-nums"
+              value={value}
+              onChange={(event) => {
+                setDraft(event.target.value);
+                setRejected(null);
+                if (mutation.isError) mutation.reset();
+              }}
+            />
+          </div>
+          <SaveButton
+            pending={mutation.isPending}
+            dirty={dirty}
+            testId={testIds.settingsBudgetSave}
           />
-          {dirty ? (
-            <SaveButton pending={mutation.isPending} testId={testIds.settingsBudgetSave} />
-          ) : null}
         </div>
         <p id={todayId} data-testid={testIds.settingsBudgetToday} className="text-sub text-muted">
           {budgetTodayText(settings.ai.todayCostUsd)}
         </p>
         <FieldError id={errorId} message={errorText} />
       </form>
-    </SettingsRow>
-  );
-}
-
-function ParticleRow({ settings }: { settings: SettingsDto }) {
-  const mutation = useUpdateSettings();
-  const errorId = useId();
-  const refs = useRef<(HTMLButtonElement | null)[]>([]);
-  const shown: PoliteParticle =
-    mutation.isPending && mutation.variables.aiPoliteParticle !== undefined
-      ? mutation.variables.aiPoliteParticle
-      : settings.ai.politeParticle;
-
-  const choose = (next: PoliteParticle) => {
-    if (mutation.isPending || next === settings.ai.politeParticle) return;
-    mutation.mutate(
-      { aiPoliteParticle: next },
-      {
-        onSuccess: () => {
-          showToast('success', commonCopy.toast.saved);
-        },
-      },
-    );
-  };
-
-  const onKeyDown = (event: KeyboardEvent, index: number) => {
-    const target = nextRadioIndex(event.key, index, POLITE_PARTICLES.length);
-    if (target === null) return;
-    event.preventDefault();
-    const particle = POLITE_PARTICLES[target];
-    if (particle === undefined) return;
-    refs.current[target]?.focus();
-    choose(particle);
-  };
-
-  return (
-    <SettingsRow label={copy.ai.particle} description={copy.ai.particleDesc}>
-      <div className="flex flex-col items-end gap-1">
-        <div
-          role="radiogroup"
-          aria-label={copy.ai.particle}
-          aria-describedby={mutation.isError ? errorId : undefined}
-          data-testid={testIds.settingsParticle}
-          className="flex gap-2"
-        >
-          {POLITE_PARTICLES.map((particle, index) => {
-            const checked = particle === shown;
-            return (
-              <Button
-                key={particle}
-                ref={(node: HTMLButtonElement | null) => {
-                  refs.current[index] = node;
-                }}
-                type="button"
-                role="radio"
-                aria-checked={checked}
-                tabIndex={checked ? 0 : -1}
-                data-value={particle}
-                className={cn('min-w-[72px]', checked && 'border-accent-strong bg-selected')}
-                onClick={() => {
-                  choose(particle);
-                }}
-                onKeyDown={(event) => {
-                  onKeyDown(event, index);
-                }}
-              >
-                {checked ? <Check aria-hidden="true" /> : null}
-                {particleLabel(particle)}
-              </Button>
-            );
-          })}
-        </div>
-        <FieldError
-          id={errorId}
-          message={mutation.isError ? saveFailureText(mutation.error) : null}
-        />
-      </div>
     </SettingsRow>
   );
 }
@@ -376,8 +293,7 @@ function InstructionsRow({ settings }: { settings: SettingsDto }) {
     <SettingsRow
       label={copy.ai.instructions}
       description={copy.ai.instructionsDesc}
-      wideControl
-      className="medium:flex-col medium:items-stretch"
+      layout="stacked"
     >
       <form noValidate onSubmit={onSubmit} className="flex flex-col gap-2">
         <Textarea
@@ -407,23 +323,25 @@ function InstructionsRow({ settings }: { settings: SettingsDto }) {
             {instructionsCounterText(value.length)}
           </p>
         </div>
-        {dirty ? (
-          <div className="flex justify-end">
-            <SaveButton pending={mutation.isPending} testId={testIds.settingsInstructionsSave} />
-          </div>
-        ) : null}
+        <div className="flex justify-end">
+          <SaveButton
+            pending={mutation.isPending}
+            dirty={dirty}
+            testId={testIds.settingsInstructionsSave}
+          />
+        </div>
       </form>
     </SettingsRow>
   );
 }
 
-function AiSkeleton() {
+function AiSkeleton({ rows }: { rows: number }) {
   return (
     <div aria-busy="true">
       <span className="sr-only" role="status">
         {commonCopy.loading}
       </span>
-      {[0, 1, 2, 3, 4, 5, 6].map((row) => (
+      {Array.from({ length: rows }, (_, row) => (
         <div key={row} className="flex min-h-16 items-center gap-6 py-3">
           <div className="flex-1 space-y-2">
             <Skeleton className="h-4 w-40" />
@@ -436,13 +354,38 @@ function AiSkeleton() {
   );
 }
 
-/**
- * AI settings (ui-screens 9.3): kill switch, model, daily budget, particle, AI name, answer scope
- * and custom instructions.
- */
-export function AiSettingsSection() {
+/** Body of an AI card: the rows once the settings are loaded, else the error or the skeleton. */
+function AiCardBody({
+  rows,
+  children,
+}: {
+  rows: number;
+  children: (settings: SettingsDto) => ReactNode;
+}) {
   const query = useSettings();
   const settings = query.data;
+  if (settings !== undefined) {
+    // The other controls stay editable when the kill switch is off: the values are kept for when
+    // it is turned on again. `data-ai-enabled` follows the (optimistic) switch.
+    return <div data-ai-enabled={settings.ai.enabled}>{children(settings)}</div>;
+  }
+  if (query.isError) {
+    return (
+      <ErrorState
+        message={commonCopy.error.section}
+        code={errorCodeOf(query.error)}
+        onRetry={() => {
+          void query.refetch();
+        }}
+      />
+    );
+  }
+  return <AiSkeleton rows={rows} />;
+}
+
+/** Card "การทำงาน" of the AI tab (ui-screens 9.3): kill switch, model and daily budget. */
+export function AiSettingsSection() {
+  const query = useSettings();
   return (
     <SettingsSection
       title={copy.ai.title}
@@ -451,29 +394,39 @@ export function AiSettingsSection() {
         void query.refetch();
       }}
     >
-      {settings !== undefined ? (
-        // The other controls stay editable when the kill switch is off: the values are kept for
-        // when it is turned on again. `data-ai-enabled` follows the (optimistic) switch.
-        <div data-ai-enabled={settings.ai.enabled}>
-          <KillSwitchRow settings={settings} />
-          <ModelRow settings={settings} />
-          <BudgetRow settings={settings} />
-          <ParticleRow settings={settings} />
-          <AiNameRow settings={settings} />
-          <AiAnswerModeRow settings={settings} />
-          <InstructionsRow settings={settings} />
-        </div>
-      ) : query.isError ? (
-        <ErrorState
-          message={commonCopy.error.section}
-          code={errorCodeOf(query.error)}
-          onRetry={() => {
-            void query.refetch();
-          }}
-        />
-      ) : (
-        <AiSkeleton />
-      )}
+      <AiCardBody rows={3}>
+        {(settings) => (
+          <>
+            <KillSwitchRow settings={settings} />
+            <ModelRow settings={settings} />
+            <BudgetRow settings={settings} />
+          </>
+        )}
+      </AiCardBody>
+    </SettingsSection>
+  );
+}
+
+/** Card "ตัวตนและน้ำเสียง" of the AI tab (ui-screens 9.3): AI name, particle and instructions. */
+export function AiPersonaSection() {
+  const query = useSettings();
+  return (
+    <SettingsSection
+      title={copy.ai.personaTitle}
+      testId={testIds.settingsSectionAiPersona}
+      onRetry={() => {
+        void query.refetch();
+      }}
+    >
+      <AiCardBody rows={3}>
+        {(settings) => (
+          <>
+            <AiNameRow settings={settings} />
+            <ParticleRow settings={settings} />
+            <InstructionsRow settings={settings} />
+          </>
+        )}
+      </AiCardBody>
     </SettingsSection>
   );
 }

@@ -77,38 +77,38 @@
 
 ## `src/features/inbox/inbox.constants.ts`
 
-### รายชื่อลูกค้า
+### รายชื่อผู้ใช้
 
 | Key | ข้อความ | ใช้ที่ |
 | --- | --- | --- |
 | `inbox.list.title` | แชท | หัวคอลัมน์ |
-| `inbox.list.searchPlaceholder` | ค้นหาชื่อลูกค้า | placeholder และ `aria-label` |
+| `inbox.list.searchPlaceholder` | ค้นหาชื่อผู้ใช้ | placeholder และ `aria-label` |
 | `inbox.list.clearSearch` | ล้างคำค้นหา | ปุ่ม X |
 | `inbox.list.tabsLabel` | ตัวกรองแชท | `aria-label` ของ tablist |
 | `inbox.list.tabAll` | ทั้งหมด | แท็บ |
 | `inbox.list.tabUnread` | ยังไม่อ่าน | แท็บ ตามด้วยจำนวน |
 | `inbox.list.tabNeedsAdmin` | รอแอดมิน | แท็บ ตามด้วยจำนวน |
 | `inbox.list.unreadAria` | {n} ข้อความยังไม่อ่าน | ตัวเลขในแถว สำหรับโปรแกรมอ่านจอ |
-| `inbox.list.emptyNoLine.title` | ยังไม่มีลูกค้าทักมา | ไม่มีลูกค้าเลย และยังไม่ได้เชื่อม LINE OA |
+| `inbox.list.emptyNoLine.title` | ยังไม่มีผู้ใช้ทักมา | ไม่มีผู้ใช้เลย และยังไม่ได้เชื่อม LINE OA |
 | `inbox.list.emptyNoLine.body` | เชื่อม LINE Official Account ที่หน้าตั้งค่า แล้วเพิ่มเพื่อนจากแอป LINE เพื่อเริ่มแชท | |
 | `inbox.list.goToSettings` | ไปที่ตั้งค่า | ลิงก์ในสถานะว่าง |
-| `inbox.list.empty.title` | ยังไม่มีลูกค้าทักมา | ไม่มีลูกค้าเลย เชื่อม LINE OA แล้ว |
-| `inbox.list.empty.body` | เมื่อลูกค้าเพิ่ม LINE Official Account เป็นเพื่อนแล้วทักมา แชทจะขึ้นที่นี่ | |
+| `inbox.list.empty.title` | ยังไม่มีผู้ใช้ทักมา | ไม่มีผู้ใช้เลย เชื่อม LINE OA แล้ว |
+| `inbox.list.empty.body` | เมื่อผู้ใช้เพิ่ม LINE Official Account เป็นเพื่อนแล้วทักมา แชทจะขึ้นที่นี่ | |
 | `inbox.list.emptyUnread` | ไม่มีแชทที่ยังไม่อ่าน | แท็บยังไม่อ่านว่าง |
 | `inbox.list.emptyNeedsAdmin` | ไม่มีแชทที่รอแอดมิน | แท็บรอแอดมินว่าง |
-| `inbox.list.emptySearch` | ไม่พบลูกค้าชื่อ “{q}” | ค้นหาไม่พบ |
-| `inbox.list.error` | โหลดรายชื่อลูกค้าไม่สำเร็จ | โหลดครั้งแรกไม่ได้ ตามด้วยปุ่ม `common.action.retry` |
+| `inbox.list.emptySearch` | ไม่พบผู้ใช้ชื่อ “{q}” | ค้นหาไม่พบ |
+| `inbox.list.error` | โหลดรายชื่อผู้ใช้ไม่สำเร็จ | โหลดครั้งแรกไม่ได้ ตามด้วยปุ่ม `common.action.retry` |
 
-### แถวของลูกค้าและข้อความล่าสุด
+### แถวของผู้ใช้และข้อความล่าสุด
 
 | Key | ข้อความ | ใช้ที่ |
 | --- | --- | --- |
-| `inbox.contact.unnamed` | ลูกค้าไม่มีชื่อ | ชื่อว่างเพราะดึงโปรไฟล์ไม่ได้ |
+| `inbox.contact.unnamed` | ผู้ใช้ไม่มีชื่อ | ชื่อว่างเพราะดึงโปรไฟล์ไม่ได้ |
 | `inbox.contact.unfollowed` | เลิกติดตามแล้ว | แถวที่เลิกติดตาม, บรรทัดรองของส่วนหัว, แผงข้อมูล |
 | `inbox.preview.you` | คุณ: | คำนำเมื่อข้อความล่าสุดเป็นของแอดมิน |
 | `inbox.preview.ai` | AI: | คำนำเมื่อข้อความล่าสุดเป็นของ AI |
 | `inbox.preview.needsAdmin` | รอแอดมิน · | คำนำสีส้มเมื่อแชทรอแอดมิน |
-| `inbox.preview.none` | ยังไม่มีข้อความ | ลูกค้าเพิ่มเพื่อนแต่ยังไม่ทัก |
+| `inbox.preview.none` | ยังไม่มีข้อความ | ผู้ใช้เพิ่มเพื่อนแต่ยังไม่ทัก |
 
 ### คำแทนสื่อและข้อความชนิดอื่น
 
@@ -149,8 +149,8 @@
 | `inbox.thread.following` | ติดตามอยู่ | บรรทัดรอง และแผงข้อมูล |
 | `inbox.thread.aiHelping` | AI กำลังช่วยตอบ | บรรทัดรองเมื่อ AI ตอบแทนเปิด |
 | `inbox.thread.needsAdmin` | รอแอดมิน | บรรทัดรองและแผงข้อมูลเมื่อแชทรอแอดมิน |
-| `inbox.thread.showInfo` | แสดงข้อมูลลูกค้า | ปุ่มแผงข้อมูล |
-| `inbox.thread.hideInfo` | ซ่อนข้อมูลลูกค้า | ปุ่มแผงข้อมูลเมื่อเปิดอยู่ |
+| `inbox.thread.showInfo` | แสดงข้อมูลผู้ใช้ | ปุ่มแผงข้อมูล |
+| `inbox.thread.hideInfo` | ซ่อนข้อมูลผู้ใช้ | ปุ่มแผงข้อมูลเมื่อเปิดอยู่ |
 
 ### สวิตช์ AI ตอบแทน
 
@@ -158,27 +158,27 @@
 | --- | --- | --- |
 | `inbox.ai.label` | AI ตอบแทน | ป้ายสวิตช์ในส่วนหัวและแผงข้อมูล |
 | `inbox.ai.labelKilled` | AI ปิดจากหน้าตั้งค่า | ป้ายในส่วนหัวเมื่อ kill switch ปิด |
-| `inbox.ai.noteOff` | เปิดเพื่อให้ AI ตอบลูกค้าคนนี้จากคลังความรู้ | หมายเหตุในแผงข้อมูล |
-| `inbox.ai.noteOn` | AI ตอบลูกค้าคนนี้ และปิดเองเมื่อคุณส่งข้อความ | |
-| `inbox.ai.noteKilled` | AI ถูกปิดทั้งระบบ เปิดได้ที่ ตั้งค่า › AI ตอบแทน | ถ้อยคำตาม [webchat-inbox](webchat-inbox.md) |
-| `inbox.ai.noteUnfollowed` | ลูกค้าเลิกติดตามแล้ว AI จึงตอบไม่ได้ | |
+| `inbox.ai.noteOff` | เปิดเพื่อให้ AI ตอบผู้ใช้คนนี้จากคลังความรู้ | หมายเหตุในแผงข้อมูล |
+| `inbox.ai.noteOn` | AI ตอบผู้ใช้คนนี้ และปิดเองเมื่อคุณส่งข้อความ | |
+| `inbox.ai.noteKilled` | AI ถูกปิดทั้งระบบ เปิดได้ที่ ตั้งค่า › AI | ถ้อยคำตาม [webchat-inbox](webchat-inbox.md) |
+| `inbox.ai.noteUnfollowed` | ผู้ใช้เลิกติดตามแล้ว AI จึงตอบไม่ได้ | |
 
 ### พื้นที่ข้อความ
 
 | Key | ข้อความ | ใช้ที่ |
 | --- | --- | --- |
 | `inbox.thread.logLabel` | ข้อความในแชท | `aria-label` ของพื้นที่ข้อความ |
-| `inbox.thread.placeholder` | เลือกแชทจากรายชื่อเพื่อเริ่มตอบ | ยังไม่เลือกลูกค้า |
+| `inbox.thread.placeholder` | เลือกแชทจากรายชื่อเพื่อเริ่มตอบ | ยังไม่เลือกผู้ใช้ |
 | `inbox.thread.empty` | ยังไม่มีข้อความในแชทนี้ | แชทว่าง |
 | `inbox.thread.error` | โหลดข้อความไม่สำเร็จ | ตามด้วยปุ่ม `common.action.retry` |
 | `inbox.thread.notFound` | ไม่พบแชทนี้ | id ใน URL ไม่มีอยู่ |
 | `inbox.thread.backToList` | กลับไปที่รายชื่อ | ลิงก์ในสถานะไม่พบ |
 | `inbox.thread.loadingOlder` | กำลังโหลดข้อความก่อนหน้า | ข้อความซ่อนของ skeleton ด้านบน |
 | `inbox.thread.newMessages` | ข้อความใหม่ | ปุ่มลอยเมื่อมีข้อความใหม่ขณะเลื่อนขึ้นไป |
-| `inbox.notes.title` | โน้ต (เห็นเฉพาะแอดมิน) | หัวของส่วนโน้ตในแผงข้อมูลลูกค้า |
-| `inbox.notes.hint` | ลูกค้าและ AI ไม่เห็นโน้ตนี้ | ใต้หัว |
+| `inbox.notes.title` | โน้ต (เห็นเฉพาะแอดมิน) | หัวของส่วนโน้ตในแผงข้อมูลผู้ใช้ |
+| `inbox.notes.hint` | ผู้ใช้และ AI ไม่เห็นโน้ตนี้ | ใต้หัว |
 | `inbox.notes.inputLabel` | โน้ตใหม่ | ชื่อของช่อง |
-| `inbox.notes.placeholder` | พิมพ์โน้ตเกี่ยวกับลูกค้า | placeholder |
+| `inbox.notes.placeholder` | พิมพ์โน้ตเกี่ยวกับผู้ใช้ | placeholder |
 | `inbox.notes.keys` | Enter เพิ่ม · Shift+Enter ขึ้นบรรทัดใหม่ | ใต้ช่อง |
 | `inbox.notes.add` | เพิ่มโน้ต | ปุ่ม |
 | `inbox.notes.counter` | {n}/{max} | ตัวนับ `{max}` จาก `CONTACT_NOTE_MAX_CHARS` |
@@ -220,7 +220,7 @@
 | `inbox.composer.attach` | แนบรูปหรือวิดีโอ | ปุ่มไอคอน |
 | `inbox.composer.attachHint` | รูป JPEG, PNG, WebP, HEIC ไม่เกิน {imageMaxMb} MB · วิดีโอ MP4 ไม่เกิน {videoMaxMb} MB | tooltip ของปุ่มแนบเมื่อชี้หรือ focus และคำอธิบาย (`aria-describedby`) ของปุ่มทุกความกว้าง ก่อนเลือกไฟล์ `{imageMaxMb}` และ `{videoMaxMb}` มาจาก `IMAGE_MAX_BYTES` และ `VIDEO_MAX_BYTES` |
 | `inbox.composer.waitUpload` | ส่งได้เมื่ออัปโหลดเสร็จ | แทน hint เมื่อไฟล์แนบยังไม่พร้อม |
-| `inbox.composer.disabled.unfollowed` | ส่งข้อความหาลูกค้าที่เลิกติดตามแล้วไม่ได้ | แทนแถบเครื่องมือ |
+| `inbox.composer.disabled.unfollowed` | ส่งข้อความหาผู้ใช้ที่เลิกติดตามแล้วไม่ได้ | แทนแถบเครื่องมือ |
 | `inbox.composer.disabled.lineNotConfigured` | เชื่อม LINE Official Account ที่หน้าตั้งค่าก่อนจึงจะส่งข้อความได้ | แทนแถบเครื่องมือ |
 
 ### ไฟล์แนบ
@@ -248,19 +248,19 @@
 
 การขอสิทธิ์อัปโหลดหรือ PUT ที่ server ปฏิเสธ (ชนิด ขนาด จำกัดความถี่ ไฟล์ไม่ครบ) ใช้ข้อความจาก [error-catalog](../architecture/error-catalog.md) โดยแทน `{imageMaxMb}`, `{videoMaxMb}` จาก constant และ `{size}` ด้วยขนาดของไฟล์ที่เลือก `media.too_large` ของ PUT ใช้ข้อความของ `upload.too_large` เพื่อบอกขนาดของไฟล์ด้วย ทุกข้อความเรื่องชนิดหรือขนาดบอกสิ่งที่รับได้ ไม่มีตัวเลขเขียนตายตัวในข้อความ
 
-### แผงข้อมูลลูกค้า
+### แผงข้อมูลผู้ใช้
 
 | Key | ข้อความ | ใช้ที่ |
 | --- | --- | --- |
-| `inbox.info.title` | ข้อมูลลูกค้า | หัวแผง |
-| `inbox.info.close` | ปิดข้อมูลลูกค้า | ปุ่ม X |
+| `inbox.info.title` | ข้อมูลผู้ใช้ | หัวแผง |
+| `inbox.info.close` | ปิดข้อมูลผู้ใช้ | ปุ่ม X |
 | `inbox.info.followedAt` | เพิ่มเพื่อนเมื่อ {date} | ใต้ชื่อ |
 | `inbox.info.status` | สถานะ | ป้ายรายละเอียด |
 | `inbox.info.messageCount` | ข้อความทั้งหมด | ป้ายรายละเอียด |
 | `inbox.info.aiReplyCount` | AI ตอบไปแล้ว | ป้ายรายละเอียด |
 | `inbox.info.timesValue` | {n} ครั้ง | ค่าของ AI ตอบไปแล้ว |
 | `inbox.info.lastContact` | ทักล่าสุด | ป้ายรายละเอียด |
-| `inbox.info.error` | โหลดข้อมูลลูกค้าไม่สำเร็จ | ตามด้วยปุ่ม `common.action.retry` |
+| `inbox.info.error` | โหลดข้อมูลผู้ใช้ไม่สำเร็จ | ตามด้วยปุ่ม `common.action.retry` |
 
 ### Lightbox
 
@@ -278,13 +278,25 @@
 | --- | --- |
 | `settings.page.title` | ตั้งค่า |
 
-### AI ตอบแทน
+### แท็บ
 
 | Key | ข้อความ | ใช้ที่ |
 | --- | --- | --- |
-| `settings.ai.title` | AI ตอบแทน | หัวส่วน |
+| `settings.tabs.label` | ส่วนของหน้าตั้งค่า | `aria-label` ของ tablist |
+| `settings.tabs.ai` | AI | แท็บที่ 1 (การ์ดการทำงาน และตัวตนและน้ำเสียง) |
+| `settings.tabs.knowledge` | ความรู้และขอบเขต | แท็บที่ 2 (การ์ดความรู้ที่ใช้ตอบ และขอบเขตหัวข้อ) |
+| `settings.tabs.line` | LINE | แท็บที่ 3 (การ์ดการเชื่อมต่อ, Rich menu และข้อความต้อนรับ) |
+| `settings.tabs.usage` | ค่าใช้จ่าย | แท็บที่ 4 |
+| `settings.tabs.status` | สถานะระบบ | แท็บที่ 5 |
+
+### AI
+
+| Key | ข้อความ | ใช้ที่ |
+| --- | --- | --- |
+| `settings.ai.title` | การทำงาน | หัวการ์ดแรกของแท็บ AI (สวิตช์ทั้งระบบ, โมเดล, งบต่อวัน) |
+| `settings.ai.personaTitle` | ตัวตนและน้ำเสียง | หัวการ์ดที่สองของแท็บ AI (ชื่อ AI, คำลงท้าย, คำแนะนำสำหรับ AI) |
 | `settings.ai.killSwitch` | เปิดใช้ AI ทั้งระบบ | ป้ายแถว |
-| `settings.ai.killSwitchDesc` | ปิดแล้ว AI หยุดตอบลูกค้าทุกคนทันที | คำอธิบาย |
+| `settings.ai.killSwitchDesc` | ปิดแล้ว AI หยุดตอบผู้ใช้ทุกคนทันที | คำอธิบาย |
 | `settings.ai.killSwitchOnToast` | เปิดใช้ AI ทั้งระบบแล้ว | toast |
 | `settings.ai.killSwitchOffToast` | ปิด AI ทั้งระบบแล้ว | toast |
 | `settings.ai.model` | โมเดล | ป้ายแถว |
@@ -296,14 +308,14 @@
 | `settings.ai.budgetDesc` | ถึงเพดานแล้ว AI หยุดจนถึงเที่ยงคืนตามเวลาไทย | คำอธิบาย |
 | `settings.ai.budgetToday` | วันนี้ใช้ไป {used} | ใต้ช่องงบ |
 | `settings.ai.particle` | คำลงท้าย | ป้ายแถว |
-| `settings.ai.particleDesc` | คำที่ AI ใช้ลงท้ายประโยคกับลูกค้า | คำอธิบาย |
+| `settings.ai.particleDesc` | คำที่ AI ใช้ลงท้ายประโยคกับผู้ใช้ | คำอธิบาย |
 | `settings.ai.particleOption.ka` | ค่ะ | ตัวเลือก |
 | `settings.ai.particleOption.krub` | ครับ | ตัวเลือก |
 | `settings.ai.aiName` | ชื่อ AI | ป้ายแถว และชื่อของช่อง |
 | `settings.ai.aiNameDesc` | ชื่อที่ AI ใช้เรียกตัวเองและบอกตอนทักทาย เว้นว่างได้ | คำอธิบาย |
 | `settings.ai.aiNamePlaceholder` | เช่น มินนี่ | placeholder |
-| `settings.ai.answerMode` | ขอบเขตคำตอบ | ป้ายแถว และชื่อของกลุ่มตัวเลือก |
-| `settings.ai.answerModeDesc` | สิ่งที่ AI ใช้ตอบลูกค้า | คำอธิบาย |
+| `settings.ai.answerMode` | ขอบเขตคำตอบ | ป้ายแถวบนสุดของการ์ด `settings.kb.cardTitle` และชื่อของกลุ่มตัวเลือก มีบนหน้าจอที่เดียว |
+| `settings.ai.answerModeDesc` | สิ่งที่ AI ใช้ตอบผู้ใช้ | คำอธิบาย |
 | `settings.ai.answerModeOption.general` | คุยทั่วไปได้ | ตัวเลือก (ค่าเริ่มต้น) |
 | `settings.ai.answerModeOption.knowledge_only` | ตอบจากคลังความรู้เท่านั้น | ตัวเลือก |
 | `settings.ai.answerModeOptionDesc.general` | ยึดคลังความรู้ก่อน เรื่องอื่นตอบจากความรู้ทั่วไป | คำอธิบายใต้ตัวเลือก |
@@ -328,13 +340,13 @@
 
 | Key | ข้อความ | ใช้ที่ |
 | --- | --- | --- |
-| `settings.guard.title` | ขอบเขตหัวข้อ | หัวส่วน |
+| `settings.guard.title` | ขอบเขตหัวข้อ | หัวการ์ดที่สองของแท็บความรู้และขอบเขต |
 | `settings.guard.switch` | จำกัดหัวข้อที่ AI คุยได้ | ป้ายแถว |
 | `settings.guard.switchDesc` | เปิดแล้ว AI ตอบเฉพาะหัวข้อในรายการ เรื่องอื่นไม่ตอบ | คำอธิบาย |
 | `settings.guard.enabledToast` | เปิดขอบเขตหัวข้อแล้ว | toast |
 | `settings.guard.disabledToast` | ปิดขอบเขตหัวข้อแล้ว | toast |
 | `settings.guard.topics` | หัวข้อที่คุยได้ | ป้ายแถว |
-| `settings.guard.topicsDesc` | เพิ่มทีละหัวข้อ บันทึกทันทีเมื่อเพิ่มหรือลบ | คำอธิบาย |
+| `settings.guard.topicsDesc` | ใช้คำกว้าง ๆ ได้ เช่น การศึกษา ผู้ใช้จะเห็นชื่อหัวข้อเหล่านี้เมื่อถามนอกเรื่อง | คำอธิบาย (ข้อความปฏิเสธบอกชื่อหัวข้อตาม [topic-guard](topic-guard.md)) |
 | `settings.guard.topicInput` | หัวข้อใหม่ | `aria-label` ของช่องเพิ่มหัวข้อ |
 | `settings.guard.topicsPlaceholder` | พิมพ์หัวข้อ | placeholder |
 | `settings.guard.topicAdd` | เพิ่ม | ปุ่ม |
@@ -344,7 +356,7 @@
 | `settings.guard.topicsCounter` | {n}/{max} หัวข้อ | ตัวนับ `{max}` จาก `GUARD_MAX_TOPICS` |
 | `settings.guard.test` | ทดลอง | ป้ายแถว และ `aria-label` ของช่องทดลอง |
 | `settings.guard.testDesc` | ทดลองกับหัวข้อที่บันทึกไว้ มีค่าใช้จ่ายทุกครั้ง | คำอธิบาย |
-| `settings.guard.testPlaceholder` | พิมพ์ข้อความแบบที่ลูกค้าจะพิมพ์ | placeholder |
+| `settings.guard.testPlaceholder` | พิมพ์ข้อความแบบที่ผู้ใช้จะพิมพ์ | placeholder |
 | `settings.guard.testSubmit` | ทดสอบ | ปุ่ม |
 | `settings.guard.testing` | กำลังทดสอบ | `aria-label` ของปุ่มขณะทดสอบ |
 | `settings.guard.testAllowed` | ผ่าน: อยู่ในหัวข้อ {topic} | ผลทดลองที่ผ่าน |
@@ -369,12 +381,12 @@
 
 การเปิดโดยไม่มีหัวข้อที่ server ปฏิเสธ การทดลองถี่เกิน และความผิดพลาดของ AI ระหว่างทดลอง ใช้ข้อความจาก [error-catalog](../architecture/error-catalog.md)
 
-### LINE Official Account
+### LINE: การเชื่อมต่อ
 
 | Key | ข้อความ | ใช้ที่ |
 | --- | --- | --- |
-| `settings.line.title` | LINE Official Account | หัวส่วน |
-| `settings.line.status` | การเชื่อมต่อ | ป้ายแถวสถานะ |
+| `settings.line.title` | การเชื่อมต่อ | หัวการ์ดแรกของแท็บ LINE |
+| `settings.line.status` | สถานะ | ป้ายแถวสถานะ |
 | `settings.line.statusConnected` | เชื่อมต่อแล้ว | ป้ายสถานะ |
 | `settings.line.statusError` | เชื่อมต่อมีปัญหา | ป้ายสถานะ |
 | `settings.line.statusNotConfigured` | ยังไม่ได้เชื่อมต่อ | ป้ายสถานะ |
@@ -387,15 +399,19 @@
 | `settings.line.copiedToast` | คัดลอก Webhook URL แล้ว | toast |
 | `settings.line.copyFailed` | คัดลอกไม่ได้ เลือกข้อความแล้วคัดลอกเอง | เมื่อ clipboard ใช้ไม่ได้ |
 | `settings.line.channelId` | Channel ID | ป้ายแถว |
-| `settings.line.channelIdDesc` | ตัวเลขในแท็บ Basic settings ของ channel ระบบใช้ตรวจ Channel secret กับ LINE | คำอธิบายของแถว Channel ID |
+| `settings.line.channelIdDesc` | ตัวเลขในแท็บ Basic settings ของ channel | คำอธิบายของแถว Channel ID |
 | `settings.line.channelIdPlaceholder` | ตัวเลขจาก LINE Developers Console | placeholder ของ Channel ID |
 | `settings.line.secretVerified` | LINE ยืนยันแล้วว่า Channel secret ตรงกับ Channel ID | บรรทัดของ Channel secret ในแถวสถานะ และต่อท้ายผลทดสอบ |
 | `settings.line.secretUnchecked` | ยังตรวจ Channel secret กับ LINE ไม่ได้ กด "ทดสอบการเชื่อมต่อ" อีกครั้งภายหลัง | สถานะเตือนเมื่อ LINE ตรวจ secret ไม่ได้ตอนบันทึกหรือทดสอบ |
 | `settings.line.secretNoChannelId` | ยังไม่ได้ตรวจ Channel secret ใส่ Channel ID พร้อม Channel secret และ Channel access token แล้วบันทึกอีกครั้ง | สถานะเตือนของ credential ที่บันทึกไว้ก่อนมีช่อง Channel ID |
 | `settings.line.channelSecret` | Channel secret | ป้ายแถว |
 | `settings.line.accessToken` | Channel access token | ป้ายแถว |
-| `settings.line.credentialsDesc` | ระบบไม่แสดงค่าที่บันทึกไว้ | คำอธิบายของแถว Channel secret และ Channel access token |
-| `settings.line.secretPlaceholderSet` | ใส่ค่าใหม่เพื่อแทนค่าเดิม | placeholder เมื่อเคยบันทึกแล้ว |
+| `settings.line.channelSecretDesc` | อยู่ในแท็บ Basic settings ของ channel | คำอธิบายของแถว Channel secret ตาม [line-oa-setup](../runbooks/line-oa-setup.md) |
+| `settings.line.accessTokenDesc` | อยู่ในแท็บ Messaging API ของ channel | คำอธิบายของแถว Channel access token ตาม [line-oa-setup](../runbooks/line-oa-setup.md) |
+| `settings.line.savedMask` | •••••••••••• | ค่าคงที่ที่ช่อง Channel secret และ Channel access token ที่ล็อกแสดงเมื่อบันทึกแล้ว ไม่มาจากค่าจริงและไม่บอกความยาว |
+| `settings.line.edit` | แก้ไข {field} | `aria-label` ของปุ่มไอคอนดินสอ `{field}` คือป้ายของแถว |
+| `settings.line.cancelEdit` | ยกเลิกการแก้ไข {field} | `aria-label` ของปุ่มไอคอน X ที่แทนปุ่มดินสอขณะแก้ |
+| `settings.line.secretPlaceholderSet` | ใส่ค่าใหม่เพื่อแทนค่าเดิม | placeholder ของช่องลับที่เปิดแก้หลังบันทึกแล้ว |
 | `settings.line.secretPlaceholderEmpty` | วางค่าจาก LINE Developers Console | placeholder เมื่อยังไม่เคยบันทึก |
 | `settings.line.save` | บันทึก | ปุ่ม |
 | `settings.line.test` | ทดสอบการเชื่อมต่อ | ปุ่ม |
@@ -419,16 +435,17 @@
 
 `{max}` คือ `LINE_CHANNEL_ID_MAX_CHARS` Token ไม่ถูกต้อง Channel ID กับ Channel secret ไม่ตรงกัน และบันทึกไม่สำเร็จเพราะระบบ ใช้ข้อความจาก [error-catalog](../architecture/error-catalog.md) ซึ่งต้องตรงกับถ้อยคำใน [admin-backoffice](admin-backoffice.md)
 
-### Rich menu และข้อความต้อนรับ
+### LINE: Rich menu และข้อความต้อนรับ
 
 | Key | ข้อความ | ใช้ที่ |
 | --- | --- | --- |
-| `settings.richMenu.title` | Rich menu และข้อความต้อนรับ | หัวส่วน |
-| `settings.richMenu.status` | Rich menu | ป้ายแถวสถานะ |
+| `settings.richMenu.title` | Rich menu | หัวการ์ดที่สองของแท็บ LINE |
+| `settings.richMenu.welcomeTitle` | ข้อความต้อนรับ | หัวการ์ดที่สามของแท็บ LINE |
+| `settings.richMenu.status` | สถานะ | ป้ายแถวสถานะของ rich menu |
 | `settings.richMenu.statusPublished` | Publish แล้ว | ป้ายสถานะ จุดสีเขียว |
 | `settings.richMenu.statusNotPublished` | ยังไม่ได้ publish | ป้ายสถานะ จุดสีเทา |
 | `settings.richMenu.publishedAt` | Publish เมื่อ {dateTime} | คำอธิบายแถวเมื่อ publish แล้ว |
-| `settings.richMenu.notPublishedDesc` | เมนูสามปุ่ม คุยกับ AI คุยกับแอดมิน และวิธีทดสอบ ใต้ช่องพิมพ์ของลูกค้า | คำอธิบายแถวเมื่อยังไม่ได้ publish |
+| `settings.richMenu.notPublishedDesc` | เมนูสามปุ่ม คุยกับ AI คุยกับแอดมิน และวิธีทดสอบ ใต้ช่องพิมพ์ของผู้ใช้ | คำอธิบายแถวเมื่อยังไม่ได้ publish |
 | `settings.richMenu.needsLine` | เชื่อม LINE Official Account ก่อนจึงจะ publish ได้ | คำอธิบายแถวเมื่อยังไม่เชื่อม LINE ปุ่ม publish ปิดอยู่ |
 | `settings.richMenu.lastError` | ครั้งล่าสุดไม่สำเร็จ: {error} | ใต้ปุ่ม `{error}` คือข้อความของรหัสจาก error catalog |
 | `settings.richMenu.publish` | Publish rich menu | ปุ่มเมื่อยังไม่ได้ publish |
@@ -437,28 +454,29 @@
 | `settings.richMenu.publishedToast` | Publish rich menu แล้ว | toast |
 | `settings.richMenu.removedToast` | นำ rich menu ออกแล้ว | toast |
 | `settings.richMenu.howTo` | ข้อความวิธีทดสอบ | ป้ายแถว และชื่อของช่อง |
-| `settings.richMenu.howToDesc` | ส่งเมื่อลูกค้ากดปุ่ม "วิธีทดสอบ" | คำอธิบายแถว |
+| `settings.richMenu.howToDesc` | ส่งเมื่อผู้ใช้กดปุ่ม "วิธีทดสอบ" | คำอธิบายแถว |
 | `settings.richMenu.welcomeSwitch` | ส่งข้อความต้อนรับเมื่อเพิ่มเพื่อน | ป้ายแถว และชื่อของสวิตช์ |
 | `settings.richMenu.welcomeSwitchDesc` | ส่งการ์ดต้อนรับพร้อมปุ่มเดียวกับ rich menu ครั้งเดียวต่อการเพิ่มเพื่อน | คำอธิบายแถว |
 | `settings.richMenu.welcomeOnToast` | เปิดข้อความต้อนรับแล้ว | toast |
 | `settings.richMenu.welcomeOffToast` | ปิดข้อความต้อนรับแล้ว | toast |
-| `settings.richMenu.welcomeText` | ข้อความต้อนรับ | ป้ายแถว และชื่อของช่อง |
-| `settings.richMenu.welcomeTextDesc` | ข้อความในการ์ดต้อนรับ ชื่อบัญชีและปุ่มระบบใส่ให้เอง | คำอธิบายแถว |
+| `settings.richMenu.welcomeText` | ข้อความในการ์ด | ป้ายแถว และชื่อของช่อง |
+| `settings.richMenu.welcomeTextDesc` | ชื่อบัญชีและปุ่มระบบใส่ให้เอง | คำอธิบายแถว |
 | `settings.richMenu.counter` | {n}/{max} | ตัวนับใต้ช่อง |
 | `settings.richMenu.reset` | ใช้ข้อความเริ่มต้น | ปุ่มข้างปุ่มบันทึก แสดงเมื่อมีข้อความที่บันทึกเองหรือกำลังแก้ |
 | `settings.richMenu.resetToast` | กลับไปใช้ข้อความเริ่มต้นแล้ว | toast |
 | `settings.richMenu.tooLong` | ข้อความยาวเกิน {max} ตัวอักษร | ใต้ช่อง |
 | `settings.richMenu.preview` | ตัวอย่างการ์ดต้อนรับ | ป้ายแถว และชื่อของตัวอย่าง |
-| `settings.richMenu.previewDesc` | ลูกค้าเห็นการ์ดนี้ใน LINE หน้าตาจริงขึ้นกับแอป LINE ของลูกค้า | คำอธิบายแถว |
+| `settings.richMenu.previewDesc` | ผู้ใช้เห็นการ์ดนี้ใน LINE หน้าตาจริงขึ้นกับแอป LINE ของผู้ใช้ | คำอธิบายแถว |
 
-`{max}` คือ `HOW_TO_TEXT_MAX_CHARS` หรือ `WELCOME_TEXT_MAX_CHARS` ข้อความเริ่มต้นของสองช่อง ชื่อปุ่ม และข้อความคงที่ของการ์ด ("ยินดีต้อนรับสู่" และบรรทัดหมายเหตุ) เป็นข้อความที่ลูกค้าเห็น จึงอยู่ที่ `src/core/domain/rich-menu.logic.ts` ที่เดียว ([line-messaging](line-messaging.md#rich-menu)) หน้าตั้งค่าได้ข้อความเริ่มต้นจาก `SettingsDto` และชื่อปุ่มกับข้อความคงที่จาก `src/contracts`
+`{max}` คือ `HOW_TO_TEXT_MAX_CHARS` หรือ `WELCOME_TEXT_MAX_CHARS` ข้อความเริ่มต้นของสองช่อง ชื่อปุ่ม และข้อความคงที่ของการ์ด ("ยินดีต้อนรับสู่" และบรรทัดหมายเหตุ) เป็นข้อความที่ผู้ใช้เห็น จึงอยู่ที่ `src/core/domain/rich-menu.logic.ts` ที่เดียว ([line-messaging](line-messaging.md#rich-menu)) หน้าตั้งค่าได้ข้อความเริ่มต้นจาก `SettingsDto` และชื่อปุ่มกับข้อความคงที่จาก `src/contracts`
 
 ### คลังความรู้
 
 | Key | ข้อความ | ใช้ที่ |
 | --- | --- | --- |
-| `settings.kb.title` | คลังความรู้ | หัวส่วน (แถวบนไม่แสดงซ้ำ) |
-| `settings.kb.description` | AI ใช้เนื้อหาจาก PDF เหล่านี้ตอบลูกค้า | คำอธิบาย |
+| `settings.kb.cardTitle` | ความรู้ที่ใช้ตอบ | หัวการ์ดแรกของแท็บความรู้และขอบเขต |
+| `settings.kb.title` | คลังความรู้ | ป้ายแถวของปุ่มอัปโหลด และ `<caption>` ของตาราง |
+| `settings.kb.description` | AI ใช้เนื้อหาจาก PDF เหล่านี้ตอบผู้ใช้ | คำอธิบาย |
 | `settings.kb.upload` | อัปโหลด PDF | ปุ่ม |
 | `settings.kb.uploadHint` | ไฟล์ PDF ไม่เกิน {maxMb} MB และไม่เกิน {maxPages} หน้า | ข้อความใต้ปุ่มที่เห็นตลอด และคำอธิบาย (`aria-describedby`) ของปุ่ม `{maxMb}` และ `{maxPages}` มาจาก `PDF_MAX_BYTES` และ `PDF_MAX_PAGES` |
 | `settings.kb.uploading` | กำลังอัปโหลด | `aria-label` ของปุ่มขณะอัปโหลด |
@@ -475,7 +493,7 @@
 | `settings.kb.delete` | ลบ | ปุ่มในแถว |
 | `settings.kb.retry` | ลองใหม่ | ปุ่มในแถวที่ไม่สำเร็จ ถ้อยคำตาม [knowledge-base](knowledge-base.md) |
 | `settings.kb.retryHint` | เลือกไฟล์เดิมอีกครั้ง เพราะระบบไม่เก็บไฟล์ต้นฉบับ | tooltip ของปุ่มลองใหม่ |
-| `settings.kb.empty` | ยังไม่มีไฟล์ในคลังความรู้ อัปโหลด PDF ที่มีข้อมูลที่อยากให้ AI ใช้ตอบลูกค้า | สถานะว่าง |
+| `settings.kb.empty` | ยังไม่มีไฟล์ในคลังความรู้ อัปโหลด PDF ที่มีข้อมูลที่อยากให้ AI ใช้ตอบผู้ใช้ | สถานะว่าง |
 | `settings.kb.error` | โหลดคลังความรู้ไม่สำเร็จ | ตามด้วยปุ่ม `common.action.retry` |
 | `settings.kb.textDialogSubtitle` | {pages} หน้า · {tokens} token · ข้อความที่ AI ใช้ตอบ แก้ไขไม่ได้ | บรรทัดรองของ dialog |
 | `settings.kb.textDialogError` | โหลดข้อความของไฟล์นี้ไม่สำเร็จ | dialog ดูข้อความ |
@@ -499,9 +517,9 @@
 
 | Key | ข้อความ | ใช้ที่ |
 | --- | --- | --- |
-| `settings.usage.title` | ค่าใช้จ่าย AI | หัวส่วน (แถวบนไม่แสดงซ้ำ) |
+| `settings.usage.title` | ค่าใช้จ่าย AI | หัวการ์ดของแท็บค่าใช้จ่าย (แถวบนไม่แสดงซ้ำ) |
 | `settings.usage.monthLabel` | เลือกเดือน | `aria-label` ของตัวเลือกเดือน |
-| `settings.usage.colContact` | ลูกค้า | หัวตาราง |
+| `settings.usage.colContact` | ผู้ใช้ | หัวตาราง |
 | `settings.usage.colReplies` | ครั้งที่ AI ตอบ | หัวตาราง |
 | `settings.usage.colTokens` | Token | หัวตาราง |
 | `settings.usage.colCost` | ราคาโดยประมาณ | หัวตาราง |
@@ -513,7 +531,7 @@
 | `settings.usage.avgPerReply` | เฉลี่ยต่อข้อความที่ AI ตอบ {usd} | ใต้ตาราง |
 | `settings.usage.noResponse` | ส่งคำขอถึง AI แล้วไม่ได้คำตอบ {n} ครั้ง ผู้ให้บริการอาจคิดเงินครั้งเหล่านี้ ยอดรวมจึงอาจต่ำกว่าบิลจริง | ใต้ค่าเฉลี่ย เฉพาะเมื่อมีอย่างน้อยหนึ่งครั้ง |
 | `settings.usage.disclaimer` | ราคาโดยประมาณเป็นดอลลาร์สหรัฐ จากตารางราคา ณ {date} | ใต้ตาราง |
-| `settings.usage.empty` | เดือนนี้ AI ยังไม่ได้ตอบลูกค้า | สถานะว่าง |
+| `settings.usage.empty` | เดือนนี้ AI ยังไม่ได้ตอบผู้ใช้ | สถานะว่าง |
 | `settings.usage.error` | โหลดค่าใช้จ่าย AI ไม่สำเร็จ | ตามด้วยปุ่ม `common.action.retry` |
 | `settings.usage.detailTitle` | {name} · {month} | หัว dialog รายข้อความ |
 | `settings.usage.colTime` | เวลา | หัวตาราง dialog |
@@ -537,7 +555,7 @@
 
 | Key | ข้อความ | ใช้ที่ |
 | --- | --- | --- |
-| `settings.status.title` | สถานะระบบ | หัวส่วน |
+| `settings.status.title` | สถานะระบบ | หัวการ์ดของแท็บสถานะระบบ |
 | `settings.status.webhook` | รับ webhook ล่าสุด | ป้ายแถว |
 | `settings.status.never` | ยังไม่เคยรับ | ค่า |
 | `settings.status.lineError` | ข้อผิดพลาดล่าสุดของ LINE | ป้ายแถว |

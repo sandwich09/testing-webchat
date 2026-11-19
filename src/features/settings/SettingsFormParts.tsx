@@ -6,6 +6,7 @@ import { Loader2 } from 'lucide-react';
 
 import { errorCodeOf } from '@/common/common.api';
 import { copy as commonCopy } from '@/common/common.constants';
+import { cn } from '@/common/common.logic';
 import { errorMessage } from '@/common/error-messages';
 import { Button } from '@/common/ui/button';
 
@@ -28,20 +29,42 @@ export function nextRadioIndex(key: string, current: number, count: number): num
   return null;
 }
 
-export function SaveButton({ pending, testId }: { pending: boolean; testId: string }) {
+/**
+ * The save button of a field. It is always next to its field, so the field does not move when the
+ * admin starts typing: a disabled secondary button while nothing changed, the primary button once
+ * the value differs from the saved one (ux-writing "ปุ่ม"). While saving it keeps its width, shows
+ * a spinner and keeps focus (aria-disabled).
+ */
+export function SaveButton({
+  pending,
+  dirty,
+  testId,
+  label = commonCopy.action.save,
+  className,
+}: {
+  pending: boolean;
+  /** The field holds a value that is not saved yet. */
+  dirty: boolean;
+  testId: string;
+  label?: string;
+  className?: string;
+}) {
   return (
     <Button
       type="submit"
+      variant={dirty || pending ? 'default' : 'secondary'}
+      disabled={!dirty && !pending}
       aria-busy={pending || undefined}
       aria-disabled={pending || undefined}
       data-testid={testId}
-      className="relative min-w-20"
+      data-dirty={dirty}
+      className={cn('relative min-w-20 medium:h-10', className)}
       onClick={(event) => {
         // aria-disabled keeps focus on the button while saving; a second click does nothing.
         if (pending) event.preventDefault();
       }}
     >
-      <span className={pending ? 'invisible' : undefined}>{commonCopy.action.save}</span>
+      <span className={pending ? 'invisible' : undefined}>{label}</span>
       {pending ? (
         <Loader2 aria-hidden="true" className="absolute size-[18px] animate-spin" />
       ) : null}

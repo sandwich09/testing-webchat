@@ -164,6 +164,8 @@ model Contact {
   followedAt          DateTime?      @db.Timestamptz(3)
   /// Event time of the follow, unfollow or customer message that last set followStatus.
   followStatusAt      DateTime?      @db.Timestamptz(3)
+  /// Time of the latest LINE profile fetch attempt (success or not); null before the first.
+  profileFetchedAt    DateTime?      @db.Timestamptz(3)
   aiEnabled           Boolean        @default(false)
   needsAdmin          Boolean        @default(false)
   needsAdminReason    HandoffReason?

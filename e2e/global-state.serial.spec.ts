@@ -166,6 +166,11 @@ async function turnContactAiOn(page: Page): Promise<void> {
   await expect(aiSwitch).toHaveAttribute('aria-checked', 'true');
 }
 
+/** A tab of the settings page by its `?tab=` value. */
+function settingsTab(page: Page, tab: string) {
+  return page.locator(`[data-testid="${testIds.settingsTab}"][data-tab="${tab}"]`);
+}
+
 /** Today's date in Bangkok time, the day of the guard counter and the daily budget. */
 function bangkokDay(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
@@ -186,7 +191,7 @@ test.describe('journey 3: AI replies for the customer', () => {
     isMobile,
   }) => {
     const suffix = uniqueSuffix();
-    const name = `ลูกค้า AI ${suffix}`;
+    const name = `ผู้ใช้ AI ${suffix}`;
     const particle = initial.ai.politeParticle as PoliteParticle;
 
     // 3.1
@@ -301,7 +306,7 @@ test.describe('journey 3: AI replies for the customer', () => {
     };
     const usageRow = usage.contacts.find((c) => c.contactId === contactId);
     expect(Number(usageRow?.costUsd)).toBeCloseTo(expectedCost, 9);
-    await page.goto('/settings');
+    await page.goto('/settings?tab=usage');
     const screenRow = page.locator(
       `[data-testid="${testIds.usageRow}"][data-contact-id="${contactId}"]`,
     );
@@ -316,7 +321,7 @@ test.describe('journey 4: kill switch', () => {
     isMobile,
   }) => {
     const suffix = uniqueSuffix();
-    const name = `ลูกค้า kill ${suffix}`;
+    const name = `ผู้ใช้ kill ${suffix}`;
 
     // 4.1
     const v = await createContactWithMessage(request, { displayName: name, text: `ทัก ${suffix}` });
@@ -326,7 +331,7 @@ test.describe('journey 4: kill switch', () => {
     try {
       // 4.2a: the model is a themed listbox driven by the keyboard. Escape closes it without a
       // change and gives focus back to the trigger.
-      await page.goto('/settings');
+      await page.goto('/settings?tab=ai');
       const model = page.getByTestId(testIds.settingsModel);
       const savedModel = await model.getAttribute('data-value');
       await model.focus();
@@ -351,7 +356,9 @@ test.describe('journey 4: kill switch', () => {
       await expect(model).toHaveAttribute('aria-expanded', 'false');
       await expect(model).toBeFocused();
       await expect(model).toHaveAttribute('data-value', savedModel ?? '');
-      // The month of the usage report: a click on another month shows that month.
+      // The month of the usage report, on its own tab: a click on another month shows that month.
+      await settingsTab(page, 'usage').click();
+      await expect(page).toHaveURL(/[?&]tab=usage\b/);
       const month = page.getByTestId(testIds.usageMonth);
       await expect(month).toHaveAttribute('data-value', /^\d{4}-\d{2}$/);
       await month.click();
@@ -363,6 +370,7 @@ test.describe('journey 4: kill switch', () => {
       await expectDocumentNotScrollable(page);
 
       // 4.2
+      await settingsTab(page, 'ai').click();
       const killSwitch = page.getByTestId(testIds.settingsKillSwitch);
       await expect(killSwitch).toHaveAttribute('aria-checked', 'true');
       await killSwitch.click();
@@ -415,36 +423,63 @@ test.describe('journey 4: kill switch', () => {
       await expect(aiSwitch).toBeEnabled();
       await expect(aiSwitch).toHaveAttribute('aria-checked', 'true');
 
-      // 4.7: the LINE section shows the saved Channel ID (not secret) and that LINE confirmed the
-      // pair; saving the same values again checks the secret with LINE and keeps the Channel ID.
-      await page.goto('/settings');
+      // 4.7: the LINE tab shows the saved Channel ID (not secret) in a locked field and the two
+      // secrets as a fixed mask; LINE confirmed the pair. Only the field opened with its pencil
+      // is sent, and the server checks it with the stored values.
+      await page.goto('/settings?tab=line');
       const line = page.getByTestId(testIds.settingsSectionLine);
       const channelId = line.getByTestId(testIds.lineChannelId);
+      const secret = line.getByTestId(testIds.lineChannelSecret);
+      const token = line.getByTestId(testIds.lineAccessToken);
+      const save = line.getByTestId(testIds.lineSave);
       await expect(channelId).toHaveValue(STUB_CHANNEL_ID);
+      await expect(channelId).toBeDisabled();
+      await expect(secret).toBeDisabled();
+      await expect(secret).not.toHaveValue(STUB_CHANNEL_SECRET);
+      await expect(token).toBeDisabled();
+      await expect(save).toBeDisabled();
       await expect(line.getByTestId(testIds.lineSecretStatus)).toHaveAttribute(
         'data-status',
         'verified',
       );
-      await expect(line.getByTestId(testIds.lineChannelSecret)).toHaveValue('');
+      const channelIdEdit = line.getByTestId(testIds.lineChannelIdEdit);
+      await channelIdEdit.click();
+      await expect(channelId).toBeEnabled();
+      await expect(channelId).toBeFocused();
+      await expect(channelId).toHaveValue('');
       await channelId.fill('12ab');
-      await line.getByTestId(testIds.lineSave).click();
+      await save.click();
       await expect(
         line.getByText(
           uiCopy('settings.line.error.channelIdInvalid', { max: LINE_CHANNEL_ID_MAX_CHARS }),
         ),
       ).toBeVisible();
+      // Cancel puts the saved Channel ID back, locked.
+      await channelIdEdit.click();
+      await expect(channelId).toBeDisabled();
+      await expect(channelId).toHaveValue(STUB_CHANNEL_ID);
+      const credentialPuts: unknown[] = [];
+      page.on('request', (r) => {
+        if (r.method() === 'PUT' && r.url().endsWith('/api/settings/line-credentials')) {
+          credentialPuts.push(r.postDataJSON());
+        }
+      });
       const oauthBefore = (await stubLineRequests({ endpoint: 'oauth-token' })).length;
-      await channelId.fill(STUB_CHANNEL_ID);
-      await line.getByTestId(testIds.lineChannelSecret).fill(STUB_CHANNEL_SECRET);
-      await line.getByTestId(testIds.lineAccessToken).fill(STUB_CHANNEL_ACCESS_TOKEN);
-      await line.getByTestId(testIds.lineSave).click();
+      await line.getByTestId(testIds.lineAccessTokenEdit).click();
+      await expect(token).toBeFocused();
+      await token.fill(STUB_CHANNEL_ACCESS_TOKEN);
+      await expect(save).toBeEnabled();
+      await save.click();
       await expect(toastWith(page, uiCopy('settings.line.savedToast'), 'success')).toBeVisible();
+      expect(credentialPuts).toEqual([{ channelAccessToken: STUB_CHANNEL_ACCESS_TOKEN }]);
       const oauth = (await stubLineRequests({ endpoint: 'oauth-token' })).slice(oauthBefore);
       expect(oauth.map((r) => r.status)).toEqual([200]);
+      await expect(token).toBeDisabled();
+      await expect(save).toBeDisabled();
       await page.reload();
       await expect(channelId).toHaveValue(STUB_CHANNEL_ID);
-      await expect(line.getByTestId(testIds.lineChannelSecret)).toHaveValue('');
-      await expect(line.getByTestId(testIds.lineAccessToken)).toHaveValue('');
+      await expect(secret).toBeDisabled();
+      await expect(token).toBeDisabled();
       await expect(line.getByTestId(testIds.lineSecretStatus)).toHaveAttribute(
         'data-status',
         'verified',
@@ -488,7 +523,7 @@ test.describe('journey 6: knowledge base', () => {
     await stubClaudeDelayNext({ ms: 1500 });
 
     // 6.2
-    await page.goto('/settings');
+    await page.goto('/settings?tab=knowledge');
     const usageText = page.getByTestId(testIds.kbUsageText);
     await expect(usageText).toBeVisible();
     const usageBefore = await usageText.textContent();
@@ -521,7 +556,7 @@ test.describe('journey 6: knowledge base', () => {
     expect(documentPosts).toHaveLength(postsBefore);
 
     // 6.7: AI gets the document in its knowledge.
-    const name = `ลูกค้าคลัง ${suffix}`;
+    const name = `ผู้ใช้คลัง ${suffix}`;
     const v = await createContactWithMessage(request, { displayName: name, text: `ทัก ${suffix}` });
     const contactId = await openChat(page, name);
     await turnContactAiOn(page);
@@ -536,7 +571,7 @@ test.describe('journey 6: knowledge base', () => {
     expect(knowledge).toContain(marker);
 
     // 6.8
-    await page.goto('/settings');
+    await page.goto('/settings?tab=knowledge');
     await tinyRow.getByTestId(testIds.kbRowDelete).click();
     await expect(page.getByTestId(testIds.kbDeleteDialog)).toBeVisible();
     await expect(page.getByTestId(testIds.kbDeleteCancel)).toBeFocused();
@@ -572,14 +607,13 @@ test.describe('journey 9: topic guard', () => {
     const suffix = uniqueSuffix();
     const topics = ['มุกตลกไทย', 'มุกจากภาพยนตร์'];
 
-    // 9.1
-    await page.goto('/settings');
+    // 9.1: the knowledge tab holds the knowledge card, then the topic guard card.
+    await page.goto('/settings?tab=knowledge');
     const order = await page
+      .getByTestId(testIds.settingsTabPanel)
       .locator('[data-testid^="settings-section-"]')
       .evaluateAll((nodes) => nodes.map((n) => n.getAttribute('data-testid')));
-    expect(order.indexOf(testIds.settingsSectionGuard)).toBe(
-      order.indexOf(testIds.settingsSectionAi) + 1,
-    );
+    expect(order).toEqual([testIds.settingsSectionKb, testIds.settingsSectionGuard]);
     const topicItems = page.getByTestId(testIds.guardTopic);
     const counter = page.getByTestId(testIds.guardTopicsCounter);
     const topicInput = page.getByTestId(testIds.guardTopicInput);
@@ -592,8 +626,8 @@ test.describe('journey 9: topic guard', () => {
     const before = {
       blocked: await trailingNumber(page, testIds.guardBlockedToday),
       day: bangkokDay(),
-      // The refusal is fixed; only its ending follows the particle of the AI section.
-      refusal: guardRefusalText(initial.ai.politeParticle as PoliteParticle),
+      // The refusal names the saved topics; its ending follows the particle of the AI tab.
+      refusal: guardRefusalText(initial.ai.politeParticle as PoliteParticle, topics),
     };
 
     try {
@@ -632,7 +666,7 @@ test.describe('journey 9: topic guard', () => {
       await expect(guardSwitch).toHaveAttribute('aria-checked', 'true');
 
       // 9.3
-      const name = `ลูกค้าหัวข้อ ${suffix}`;
+      const name = `ผู้ใช้หัวข้อ ${suffix}`;
       const v = await createContactWithMessage(request, {
         displayName: name,
         text: `ทัก ${suffix}`,
@@ -717,12 +751,37 @@ test.describe('journey 9: topic guard', () => {
       await expect(bubbles(page, { author: 'ai', text: before.refusal })).toHaveCount(2);
       await waitAiIdle(request, contactId);
       expect(await stubClaudeRequests({ match: helloWeather, purpose: 'reply' })).toEqual([]);
+      // The refusal names the topics, so the user learns what to ask.
+      for (const topic of topics) expect(before.refusal).toContain(`“${topic}”`);
+
+      // 9.6c: a question about what can be discussed passes the guard (allowed, no topic); the
+      // chat model is told to list the topics.
+      const meta = `คุยเรื่องอะไรได้บ้าง ${suffix}`;
+      const listing = `คุยได้เรื่องมุกตลกไทยและมุกจากภาพยนตร์ ${suffix}`;
+      await stubClaudeNextReply({
+        match: meta,
+        kind: 'guard',
+        json: { allowed: true, matchedTopic: null },
+      });
+      await stubClaudeNextReply({
+        match: meta,
+        kind: 'reply',
+        json: { reply: listing, needsAdmin: false, handoffReason: null },
+      });
+      await customerSays(request, v, meta);
+      await expect(bubbles(page, { author: 'ai', text: listing })).toHaveCount(1);
+      const metaReplies = await stubClaudeRequests({ match: meta, purpose: 'reply' });
+      expect(metaReplies).toHaveLength(1);
+      expect(claudeBody(metaReplies[0]).system?.[0]?.text).toContain(
+        'ถ้าผู้ใช้ถามว่าคุยเรื่องอะไรได้บ้างหรือมีหัวข้ออะไร ให้บอกหัวข้อในรายการด้านล่างสั้น ๆ',
+      );
+      await waitAiIdle(request, contactId);
 
       await backToList(page, isMobile);
       await expect(row(page, name)).toHaveAttribute('data-needs-admin', 'false');
 
       // 9.7
-      await page.goto('/settings');
+      await page.goto('/settings?tab=knowledge');
       await expect(page.getByTestId(testIds.guardBlockedToday)).toHaveText(
         // The counter is per Bangkok day: past midnight it starts again from these two messages.
         uiCopy('settings.guard.blockedToday', {
@@ -731,7 +790,7 @@ test.describe('journey 9: topic guard', () => {
       );
     } finally {
       // 9.8: switch off through the screen, then put the saved topics back.
-      await page.goto('/settings');
+      await page.goto('/settings?tab=knowledge');
       const guardSwitch = page.getByTestId(testIds.guardSwitch);
       if ((await guardSwitch.getAttribute('aria-checked')) === 'true') await guardSwitch.click();
       await expect(guardSwitch).toHaveAttribute('aria-checked', 'false');
@@ -772,7 +831,7 @@ test.describe('journey 14: rich menu', () => {
 
     // 14.1 Publish from the settings page: create, upload on the data host, set as default.
     const since = Math.max(0, ...(await stubLineRequests()).map((r) => r.seq));
-    await page.goto('/settings');
+    await page.goto('/settings?tab=line');
     await expect(section.getByTestId(testIds.richMenuStatus)).toHaveAttribute(
       'data-status',
       'not_published',
@@ -829,11 +888,11 @@ test.describe('journey 14: rich menu', () => {
     await expect(toastWith(page, uiCopy('common.toast.saved'), 'success')).toBeVisible();
 
     // 14.3 A customer taps "วิธีทดสอบ": an event line and the saved text by reply.
-    const name = `ลูกค้าเมนู ${suffix}`;
+    const name = `ผู้ใช้เมนู ${suffix}`;
     const v = await createContactWithMessage(request, { displayName: name, text: `ทัก ${suffix}` });
     const contactId = await openChat(page, name);
     const howToTap = await customerTaps(request, v, 'how_to');
-    await expect(systemLine(page, 'customer.tapped_how_to')).toHaveText('ลูกค้ากดปุ่ม วิธีทดสอบ');
+    await expect(systemLine(page, 'customer.tapped_how_to')).toHaveText('ผู้ใช้กดปุ่ม วิธีทดสอบ');
     await expect(bubbles(page, { author: 'ai', text: howTo })).toHaveCount(1);
     expect(await replyTexts(howToTap.replyToken)).toEqual([howTo]);
 
@@ -865,7 +924,7 @@ test.describe('journey 14: rich menu', () => {
 
     // 14.6 Remove, and the how-to text back to the default.
     const beforeRemove = Math.max(0, ...(await stubLineRequests()).map((r) => r.seq));
-    await page.goto('/settings');
+    await page.goto('/settings?tab=line');
     await section.getByTestId(testIds.richMenuRemove).click();
     await expect(
       toastWith(page, uiCopy('settings.richMenu.removedToast'), 'success'),
@@ -906,11 +965,11 @@ test.describe('journey 15: welcome card', () => {
     request,
   }) => {
     const suffix = uniqueSuffix();
-    const section = page.getByTestId(testIds.settingsSectionRichMenu);
+    const section = page.getByTestId(testIds.settingsSectionWelcome);
 
     // 15.1 The switch is on; the welcome text is edited and shows in the preview.
     const text = `ยินดีต้อนรับสู่การทดสอบ ${suffix}`;
-    await page.goto('/settings');
+    await page.goto('/settings?tab=line');
     await expect(section.getByTestId(testIds.settingsWelcomeSwitch)).toHaveAttribute(
       'aria-checked',
       'true',
@@ -957,7 +1016,7 @@ test.describe('journey 15: welcome card', () => {
     await expect(systemLine(page, 'customer.tapped_how_to')).toBeVisible();
 
     // 15.5 The switch off: a new friend gets no reply.
-    await page.goto('/settings');
+    await page.goto('/settings?tab=line');
     await section.getByTestId(testIds.settingsWelcomeSwitch).click();
     await expect(
       toastWith(page, uiCopy('settings.richMenu.welcomeOffToast'), 'success'),

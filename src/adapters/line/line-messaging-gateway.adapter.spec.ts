@@ -205,7 +205,7 @@ const makeHarness = async (): Promise<MessagingGatewayHarness> => {
   const knownUserId = newUser();
   await control('/line/profiles', {
     userId: knownUserId,
-    displayName: 'ลูกค้าทดสอบ',
+    displayName: 'ผู้ใช้ทดสอบ',
     pictureUrl: null,
   });
   return {

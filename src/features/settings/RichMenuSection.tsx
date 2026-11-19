@@ -1,10 +1,10 @@
 'use client';
 
-// Rich menu and welcome card section of the settings page (ui-screens 9.4.1): publish or remove
-// the LINE rich menu, the text of "วิธีทดสอบ", and the welcome card sent on a follow. Every control
+// Rich menu and welcome card cards of the LINE tab (ui-screens 9.4.1): publish or remove the LINE
+// rich menu, the text of "วิธีทดสอบ", and the welcome card sent on a follow. Every control
 // saves through its own mutation, so pending, success and error belong to that control only.
 import { Loader2 } from 'lucide-react';
-import { useId, useRef, useState, type SyntheticEvent } from 'react';
+import { useId, useRef, useState, type ReactNode, type SyntheticEvent } from 'react';
 
 import { errorCodeOf } from '@/common/common.api';
 import { copy as commonCopy } from '@/common/common.constants';
@@ -82,7 +82,7 @@ function StatusRow({
       ? copy.richMenu.publishedAt.replace('{dateTime}', formatDateTime(richMenu.publishedAt, now))
       : copy.richMenu.notPublishedDesc;
   return (
-    <SettingsRow label={copy.richMenu.status} description={description} wideControl>
+    <SettingsRow label={copy.richMenu.status} description={description} layout="column">
       <div className="flex flex-col items-start gap-2 medium:items-end">
         <p
           data-testid={testIds.richMenuStatus}
@@ -225,12 +225,7 @@ function DefaultBackedTextRow({
   };
 
   return (
-    <SettingsRow
-      label={label}
-      description={description}
-      wideControl
-      className="medium:flex-col medium:items-stretch"
-    >
+    <SettingsRow label={label} description={description} layout="stacked">
       <form noValidate onSubmit={onSubmit} className="flex flex-col gap-2">
         <Textarea
           ref={areaRef}
@@ -276,7 +271,7 @@ function DefaultBackedTextRow({
               {copy.richMenu.reset}
             </Button>
           ) : null}
-          {dirty ? <SaveButton pending={mutation.isPending} testId={ids.save} /> : null}
+          <SaveButton pending={mutation.isPending} dirty={dirty} testId={ids.save} />
         </div>
       </form>
     </SettingsRow>
@@ -325,8 +320,7 @@ function WelcomePreview({ welcome }: { welcome: SettingsDto['welcome'] }) {
     <SettingsRow
       label={copy.richMenu.preview}
       description={copy.richMenu.previewDesc}
-      wideControl
-      className="medium:flex-col medium:items-stretch"
+      layout="stacked"
     >
       <figure
         data-testid={testIds.welcomePreview}
@@ -370,53 +364,17 @@ function WelcomePreview({ welcome }: { welcome: SettingsDto['welcome'] }) {
   );
 }
 
-function RichMenuBody({ settings }: { settings: SettingsDto }) {
-  return (
-    <div>
-      <StatusRow richMenu={settings.richMenu} lineConfigured={settings.line.configured} />
-      <DefaultBackedTextRow
-        field="howToText"
-        label={copy.richMenu.howTo}
-        description={copy.richMenu.howToDesc}
-        saved={settings.richMenu.howToText}
-        defaultText={settings.richMenu.howToDefault}
-        max={HOW_TO_TEXT_MAX_CHARS}
-        ids={{
-          field: testIds.settingsHowTo,
-          save: testIds.settingsHowToSave,
-          reset: testIds.settingsHowToReset,
-        }}
-      />
-      <WelcomeSwitchRow enabled={settings.welcome.enabled} />
-      <DefaultBackedTextRow
-        field="welcomeText"
-        label={copy.richMenu.welcomeText}
-        description={copy.richMenu.welcomeTextDesc}
-        saved={settings.welcome.text}
-        defaultText={settings.welcome.defaultText}
-        max={WELCOME_TEXT_MAX_CHARS}
-        ids={{
-          field: testIds.settingsWelcomeText,
-          save: testIds.settingsWelcomeTextSave,
-          reset: testIds.settingsWelcomeTextReset,
-        }}
-      />
-      <WelcomePreview welcome={settings.welcome} />
-    </div>
-  );
-}
-
-function RichMenuSkeleton() {
+function CardSkeleton({ rows }: { rows: number }) {
   return (
     <div aria-busy="true">
       <span className="sr-only" role="status">
         {commonCopy.loading}
       </span>
-      {[0, 1, 2].map((row) => (
+      {Array.from({ length: rows }, (_, row) => (
         <div key={row} className="flex min-h-16 items-center gap-6 py-3">
           <div className="flex-1 space-y-2">
             <Skeleton className="h-4 w-40" />
-            <Skeleton className="h-3 w-64" />
+            <Skeleton className="h-3 w-64 max-w-full" />
           </div>
           <Skeleton className="h-9 w-32" />
         </div>
@@ -425,31 +383,93 @@ function RichMenuSkeleton() {
   );
 }
 
-/** Rich menu and welcome card settings (ui-screens 9.4.1). */
-export function RichMenuSection() {
+/** A card of the LINE tab that shows the settings: its rows, else the error or the skeleton. */
+function SettingsCard({
+  title,
+  testId,
+  rows,
+  children,
+}: {
+  title: string;
+  testId: string;
+  rows: number;
+  children: (settings: SettingsDto) => ReactNode;
+}) {
   const query = useSettings();
   const settings = query.data;
+  const retry = () => {
+    void query.refetch();
+  };
   return (
-    <SettingsSection
-      title={copy.richMenu.title}
-      testId={testIds.settingsSectionRichMenu}
-      onRetry={() => {
-        void query.refetch();
-      }}
-    >
+    <SettingsSection title={title} testId={testId} onRetry={retry}>
       {settings !== undefined ? (
-        <RichMenuBody settings={settings} />
+        children(settings)
       ) : query.isError ? (
         <ErrorState
           message={commonCopy.error.section}
           code={errorCodeOf(query.error)}
-          onRetry={() => {
-            void query.refetch();
-          }}
+          onRetry={retry}
         />
       ) : (
-        <RichMenuSkeleton />
+        <CardSkeleton rows={rows} />
       )}
     </SettingsSection>
+  );
+}
+
+/** Card "Rich menu" of the LINE tab (ui-screens 9.4.1): publish or remove, and the how-to text. */
+export function RichMenuSection() {
+  return (
+    <SettingsCard title={copy.richMenu.title} testId={testIds.settingsSectionRichMenu} rows={2}>
+      {(settings) => (
+        <>
+          <StatusRow richMenu={settings.richMenu} lineConfigured={settings.line.configured} />
+          <DefaultBackedTextRow
+            field="howToText"
+            label={copy.richMenu.howTo}
+            description={copy.richMenu.howToDesc}
+            saved={settings.richMenu.howToText}
+            defaultText={settings.richMenu.howToDefault}
+            max={HOW_TO_TEXT_MAX_CHARS}
+            ids={{
+              field: testIds.settingsHowTo,
+              save: testIds.settingsHowToSave,
+              reset: testIds.settingsHowToReset,
+            }}
+          />
+        </>
+      )}
+    </SettingsCard>
+  );
+}
+
+/** Card "ข้อความต้อนรับ" of the LINE tab (ui-screens 9.4.1): switch, text and preview of the card. */
+export function WelcomeSection() {
+  return (
+    <SettingsCard
+      title={copy.richMenu.welcomeTitle}
+      testId={testIds.settingsSectionWelcome}
+      rows={3}
+    >
+      {(settings) => (
+        <>
+          <WelcomeSwitchRow enabled={settings.welcome.enabled} />
+          <DefaultBackedTextRow
+            field="welcomeText"
+            label={copy.richMenu.welcomeText}
+            description={copy.richMenu.welcomeTextDesc}
+            saved={settings.welcome.text}
+            defaultText={settings.welcome.defaultText}
+            max={WELCOME_TEXT_MAX_CHARS}
+            ids={{
+              field: testIds.settingsWelcomeText,
+              save: testIds.settingsWelcomeTextSave,
+              reset: testIds.settingsWelcomeTextReset,
+            }}
+          />
+          <WelcomePreview welcome={settings.welcome} />
+        </>
+      )}
+    </SettingsCard>
   );
 }

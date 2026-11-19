@@ -353,7 +353,8 @@ describe('taps next to a text the AI has not answered yet', () => {
       const rawBody = JSON.stringify({ destination: 'Ubot', events });
       const r = await receive()({ rawBody, signature: gateway.sign(rawBody) }, ctx);
       if (!r.ok) throw new Error(r.error.code);
-      return r.value.followUps;
+      // The daily profile refresh is not part of these races (receive-line-events spec).
+      return r.value.followUps.filter((job) => job.kind !== 'refresh_profile');
     };
     /** Runs every follow-up at once, as scheduleLineFollowUps does after the 200. */
     const runAll = (jobs: FollowUpJob[]) =>

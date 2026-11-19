@@ -133,7 +133,7 @@ async function main(): Promise<number> {
     aiInstructions: '',
   });
   const guardedSystem = `${baseSystem}\n\n${buildGuardRulesBlock(topics)}`;
-  const refusal = guardRefusalText(EVAL_PARTICLE);
+  const refusal = guardRefusalText(EVAL_PARTICLE, topics);
   const knowledgeText = formatKnowledgeBase([{ fileName: KB_FILE_NAME, text: kbText }]);
   const emptyKnowledge = formatKnowledgeBase([]);
 

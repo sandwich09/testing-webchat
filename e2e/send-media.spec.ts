@@ -46,7 +46,7 @@ test('journey 5: pictures and videos are checked, converted, uploaded and sent',
   request,
 }) => {
   const suffix = uniqueSuffix();
-  const name = `ลูกค้าส่งรูป ${suffix}`;
+  const name = `ผู้ใช้ส่งรูป ${suffix}`;
   const tray = page.getByTestId(testIds.attachmentTray);
   const status = page.getByTestId(testIds.attachmentStatus);
   const fileInput = page.getByTestId(testIds.composerFileInput);

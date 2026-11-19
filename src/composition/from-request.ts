@@ -117,9 +117,11 @@ export const toUpdateSettingsInput = (
 export const toSetLineCredentialsInput = (
   body: SetLineCredentialsBody,
 ): SetLineCredentialsInput => ({
-  channelId: body.channelId,
-  channelSecret: body.channelSecret,
-  channelAccessToken: body.channelAccessToken as LineAccessToken,
+  ...(body.channelId === undefined ? {} : { channelId: body.channelId }),
+  ...(body.channelSecret === undefined ? {} : { channelSecret: body.channelSecret }),
+  ...(body.channelAccessToken === undefined
+    ? {}
+    : { channelAccessToken: body.channelAccessToken as LineAccessToken }), // brand: checked by the contract
 });
 
 /** `*key` segments of /api/local-storage/*key back into the storage key. */

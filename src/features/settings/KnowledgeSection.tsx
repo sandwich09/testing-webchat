@@ -6,6 +6,7 @@ import { useId, useRef, useState, type ChangeEvent, type ReactNode } from 'react
 import { errorCodeOf } from '@/common/common.api';
 import { copy as commonCopy } from '@/common/common.constants';
 import { cn, formatInt } from '@/common/common.logic';
+import { useSettings } from '@/common/common.hooks';
 import { EmptyState } from '@/common/EmptyState';
 import { ErrorState } from '@/common/ErrorState';
 import { errorMessage } from '@/common/error-messages';
@@ -13,6 +14,7 @@ import { testIds } from '@/common/test-ids';
 import { Button } from '@/common/ui/button';
 import { Skeleton } from '@/common/ui/skeleton';
 import { PDF_MAX_BYTES, PDF_MAX_PAGES, type DocumentDto } from '@/contracts';
+import { AiAnswerModeRow } from '@/features/settings/AiPersonaRows';
 import { KbDeleteDialog } from '@/features/settings/KbDeleteDialog';
 import { KbDocumentTable } from '@/features/settings/KbDocumentTable';
 import { KbTextDialog } from '@/features/settings/KbTextDialog';
@@ -83,7 +85,32 @@ async function readHead(file: File): Promise<Uint8Array> {
   }
 }
 
-/** Knowledge base section: upload, usage meter, file table and its dialogs (ui-screens 9.5 to 9.7). */
+/** The answer scope row at the top of the card; it reads the settings (ui-screens 9.5). */
+function AnswerModeBlock() {
+  const query = useSettings();
+  if (query.data !== undefined) return <AiAnswerModeRow settings={query.data} />;
+  if (query.isError) {
+    return (
+      <ErrorState
+        message={commonCopy.error.section}
+        onRetry={() => {
+          void query.refetch();
+        }}
+      />
+    );
+  }
+  return (
+    <div aria-busy="true" className="flex flex-col gap-2 py-3">
+      <Skeleton className="h-4 w-40" />
+      <Skeleton className="h-16 w-full" />
+    </div>
+  );
+}
+
+/**
+ * Card "ความรู้ที่ใช้ตอบ" of the knowledge tab: the answer scope, then the knowledge base with its
+ * upload, usage meter, file table and dialogs (ui-screens 9.5 to 9.7).
+ */
 export function KnowledgeSection() {
   const list = useKbDocuments();
   const upload = useUploadKbDocument();
@@ -207,13 +234,14 @@ export function KnowledgeSection() {
 
   return (
     <SettingsSection
-      title={copy.kb.title}
+      title={copy.kb.cardTitle}
       testId={testIds.settingsSectionKb}
       onRetry={() => {
         void list.refetch();
       }}
     >
-      <SettingsRow description={copy.kb.description}>
+      <AnswerModeBlock />
+      <SettingsRow label={copy.kb.title} description={copy.kb.description} layout="column">
         <Button
           ref={uploadButtonRef}
           disabled={busy}
@@ -223,7 +251,7 @@ export function KnowledgeSection() {
           }}
           data-testid={testIds.kbUpload}
           aria-describedby={uploadHintId}
-          className="relative"
+          className="relative w-full medium:h-10"
         >
           <span className={cn('inline-flex items-center gap-2', busy && 'invisible')}>
             <Upload aria-hidden="true" />
@@ -236,7 +264,7 @@ export function KnowledgeSection() {
         <p
           id={uploadHintId}
           data-testid={testIds.kbUploadHint}
-          className="text-sub [overflow-wrap:anywhere] text-muted"
+          className="mt-1 text-sub [overflow-wrap:anywhere] text-muted"
         >
           {pdfUploadHintText()}
         </p>

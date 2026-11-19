@@ -10,9 +10,8 @@ import {
   instructionsCounterText,
   instructionsDirty,
   instructionsErrorText,
-  particleLabel,
 } from './AiSettingsSection';
-import { aiNameDirty, aiNameErrorText, answerModeLabel } from './AiPersonaRows';
+import { aiNameDirty, aiNameErrorText, answerModeLabel, particleLabel } from './AiPersonaRows';
 import { nextRadioIndex, saveFailureText } from './SettingsFormParts';
 
 describe('saveFailureText', () => {

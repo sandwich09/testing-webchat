@@ -104,6 +104,30 @@ export class FakeContactRepository implements ContactRepository {
     return Promise.resolve();
   };
 
+  /** `Contact.profileFetchedAt`, a column the domain model does not carry. */
+  private readonly profileFetchedAt = new Map<ContactId, number>();
+
+  readonly claimProfileRefresh: ContactRepository['claimProfileRefresh'] = (
+    id,
+    now,
+    staleBefore,
+  ) => {
+    const last = this.profileFetchedAt.get(id);
+    if (!this.rows.has(id) || (last !== undefined && last > staleBefore.getTime())) {
+      return Promise.resolve(false);
+    }
+    this.profileFetchedAt.set(id, now.getTime());
+    // The real row is updated, so its trigger moves updatedSeq as well.
+    this.write(id, () => undefined);
+    return Promise.resolve(true);
+  };
+
+  /** Test helper: when the latest profile fetch was claimed, or undefined. */
+  profileFetchedAtOf(id: ContactId): Date | undefined {
+    const at = this.profileFetchedAt.get(id);
+    return at === undefined ? undefined : new Date(at);
+  }
+
   /** `Contact.followStatusAt`, a column the domain model does not carry. */
   private readonly followStatusAt = new Map<ContactId, number>();
 

@@ -180,7 +180,8 @@ export type FollowUpJob =
   | { kind: "store_media"; messageId: MessageId }
   | { kind: "ai_reply"; contactId: ContactId; triggerMessageId: MessageId }
   | { kind: "rich_menu_action"; contactId: ContactId; action: RichMenuAction; tapMessageId: MessageId }
-  | { kind: "welcome"; contactId: ContactId; replyToken: string };
+  | { kind: "welcome"; contactId: ContactId; replyToken: string }
+  | { kind: "refresh_profile"; contactId: ContactId };
 ```
 
 ขั้นก่อนตอบ (ทั้งหมดอยู่ใน request):
@@ -201,33 +202,37 @@ export type FollowUpJob =
    - `unsupported`: log `line.webhook.event_unsupported` พร้อม `lineEventType`
    - `follow`:
      1. `contacts.ensure({ id: ids.contactId(), lineUserId, now })`
-     2. ถ้า `created` เรียก `fetchProfile` (ด้านล่าง)
+     2. ถ้า `created` เรียก `fetchProfile` (ด้านล่าง) ไม่เช่นนั้นเพิ่ม `{ kind: "refresh_profile", contactId }` (ด้านล่าง)
      3. ถ้าสร้างใหม่ หรือ `followStatus` เดิมเป็น `unfollowed`: `contacts.setFollowStatus(id, "following", timestamp)` ซึ่งตั้ง `followedAt` ด้วย ถ้าคืน true (follow นี้ไม่เก่ากว่า event ที่ตั้งสถานะเดิม) `messages.insertEvent(contact.followed)`
      4. ถ้า event มี reply token (ไม่ใช่การส่งซ้ำ): เพิ่ม `{ kind: "welcome", contactId, replyToken }`
    - `postback`:
      1. `parsePostbackData(data)` เป็น null (data ที่แอปไม่ได้สร้าง): log `line.postback.ignored` ไม่มีค่าของ data แล้วจบ ไม่สร้าง Contact
-     2. `contacts.ensure(...)` และถ้า `created` เรียก `fetchProfile`
+     2. `contacts.ensure(...)` และถ้า `created` เรียก `fetchProfile` ไม่เช่นนั้นเพิ่ม `refresh_profile`
      3. `hitRateLimit("rich_menu_tap", contactId, now)` เกิน: log `line.postback.rate_limited` (`contactId`, `reason`) แล้วจบ
      4. `messages.insertInboundIfAbsent` แถวชนิด `text` ข้อความคือชื่อปุ่ม (`RICH_MENU_LABELS`) `eventCode` เป็น `customer.tapped_{action}`, `lineMessageId` null และ `webhookEventId` ของ event เป็น unique key ถ้า `inserted` เป็น false (การส่งซ้ำที่แข่งกับครั้งแรก) log `line.webhook.event_duplicate` แล้วจบ ไม่มี unread หรืองานที่สอง
      5. `contacts.recordInbound(...)` เหมือนข้อความ (unread, ลำดับรายชื่อ, reply token)
      6. ถ้า Contact เป็น `unfollowed`: ตั้งกลับเป็นติดตามอยู่แบบเดียวกับ `message` ข้อ 6 (ทำก่อนข้อ 5)
      7. log `line.postback.received` แล้วเพิ่ม `{ kind: "rich_menu_action", contactId, action, tapMessageId }`
    - `unfollow`:
-     1. `contacts.ensure(...)` (กรณีไม่เคยเห็นลูกค้าคนนี้มาก่อน)
-     2. ถ้าสถานะเดิมเป็น `following`: `setFollowStatus(id, "unfollowed", timestamp)` ซึ่งล้าง reply token ด้วย ถ้าคืน true `insertEvent(contact.unfollowed)` unfollow ที่เก่ากว่า follow หรือข้อความล่าสุดของลูกค้าไม่เปลี่ยนอะไร
+     1. `contacts.ensure(...)` (กรณีไม่เคยเห็นผู้ใช้คนนี้มาก่อน)
+     2. ถ้าสถานะเดิมเป็น `following`: `setFollowStatus(id, "unfollowed", timestamp)` ซึ่งล้าง reply token ด้วย ถ้าคืน true `insertEvent(contact.unfollowed)` unfollow ที่เก่ากว่า follow หรือข้อความล่าสุดของผู้ใช้ไม่เปลี่ยนอะไร
    - `message`:
-     1. `contacts.ensure(...)` และถ้า `created` เรียก `fetchProfile`
+     1. `contacts.ensure(...)` และถ้า `created` เรียก `fetchProfile` ไม่เช่นนั้นเพิ่ม `refresh_profile`
      2. สร้าง `NewMessage`: id ใหม่, direction inbound, author customer, `createdAt = timestamp`, ฟิลด์ตามชนิด, `mediaStatus` เป็น `pending` เมื่อเป็นรูปหรือวิดีโอที่ `hostedByLine` และเป็น `failed` พร้อม `mediaFailure: external_source` เมื่อไม่ใช่ (สื่อจาก URL ภายนอก)
      3. `{ inserted, message } = messages.insertInboundIfAbsent(newMessage)`
      4. ถ้า `message` (แถวที่เพิ่งบันทึก หรือแถวเดิมเมื่อ `inserted` เป็น false) เป็นรูปหรือวิดีโอที่ `mediaStatus = pending`: เพิ่ม `{ kind: "store_media", messageId }` ทุกครั้งที่พบแถวนี้ รวมการส่งซ้ำของ LINE เพราะครั้งก่อนอาจพังหลังบันทึกข้อความแต่ก่อนคืนงาน งานซ้ำไม่เป็นอันตรายเพราะ `StoreInboundMedia` ปิดสถานะสื่อได้ครั้งเดียว (compare-and-set บน pending) งานถูกเพิ่มก่อนข้อ 6 เพื่อให้ข้อ 6 ที่พังไม่ทำให้งานหาย
      5. ถ้า `inserted` เป็น false ข้ามข้อ 6 และ 7 ไม่มี unread หรืองาน ai_reply ซ้ำ
-     6. ถ้า Contact ที่อ่านในข้อ 1 เป็น `unfollowed`: ข้อความยืนยันว่าลูกค้ายังเป็นเพื่อน (unfollow หรือ follow อาจหายหรือมาไม่เรียง) `setFollowStatus(id, "following", timestamp)` ถ้าคืน true `insertEvent(contact.followed)` ที่เวลาของข้อความ ข้อความที่เก่ากว่า unfollow ไม่เปลี่ยนสถานะ จากนั้น `contacts.recordInbound(contactId, { at: timestamp, preview: previewOf(message), replyToken: expiry ? replyToken : null, replyTokenExpiresAt: expiry })` โดย `expiry = replyTokenExpiry(timestamp, isRedelivery)`
+     6. ถ้า Contact ที่อ่านในข้อ 1 เป็น `unfollowed`: ข้อความยืนยันว่าผู้ใช้ยังเป็นเพื่อน (unfollow หรือ follow อาจหายหรือมาไม่เรียง) `setFollowStatus(id, "following", timestamp)` ถ้าคืน true `insertEvent(contact.followed)` ที่เวลาของข้อความ ข้อความที่เก่ากว่า unfollow ไม่เปลี่ยนสถานะ จากนั้น `contacts.recordInbound(contactId, { at: timestamp, preview: previewOf(message), replyToken: expiry ? replyToken : null, replyTokenExpiresAt: expiry })` โดย `expiry = replyTokenExpiry(timestamp, isRedelivery)`
      7. อ่าน Contact ใหม่หลังข้อ 6 (`contacts.findById`) ถ้า `aiEnabled` เป็น true: เพิ่ม `{ kind: "ai_reply", contactId, triggerMessageId: message.id }` ไม่ตรวจ kill switch ที่นี่ เพราะ `GenerateAiReply` ตรวจเองหลังรวมข้อความ การอ่านหลังบันทึกคู่กับ `HandleRichMenuAction` ข้อ 2 ที่เปิดสวิตช์ก่อนอ่านข้อความล่าสุด: ข้อความที่มาพร้อมหรือหลังการกด "คุยกับ AI" ไม่ว่าลำดับใด จะได้งานของตัวเอง หรือเป็นข้อความที่งานของการกดตอบ จึงถูกตอบครั้งเดียว
 3. `webhookEvents.insertIfAbsent({ webhookEventId, type: kind, receivedAt: now })` เป็นขั้นสุดท้าย ถ้าระบบพังก่อนถึงขั้นนี้ LINE ส่งซ้ำแล้วทุกขั้นข้างบนทำซ้ำได้โดยไม่เกิดข้อความซ้ำ
 
-`fetchProfile(contactId, lineUserId)`: เรียกเฉพาะลูกค้าที่เห็นครั้งแรก (`created` เป็น true) ภายใน request ก่อนตอบ 200 `gateway.getProfile` มี timeout `LINE_PROFILE_TIMEOUT_MS` และไม่ retry สำเร็จแล้ว `contacts.updateProfile` ล้มเหลวให้ log `line.profile.fetch_failed` บันทึก Contact โดยไม่มีชื่อ แล้วทำต่อ ตาม [line-messaging](../specs/line-messaging.md#ชนิดของ-event)
+`fetchProfile(contactId, lineUserId)`: เรียกเฉพาะผู้ใช้ที่เห็นครั้งแรก (`created` เป็น true) ภายใน request ก่อนตอบ 200 `gateway.getProfile` มี timeout `LINE_PROFILE_TIMEOUT_MS` และไม่ retry สำเร็จแล้ว `contacts.updateProfile` ล้มเหลวให้ log `line.profile.fetch_failed` บันทึก Contact โดยไม่มีชื่อ แล้วทำต่อ ตาม [line-messaging](../specs/line-messaging.md#ชนิดของ-event)
 
-หลังตอบ: route ส่งแต่ละ `FollowUpJob` เข้า `runJob`: `store_media` → `StoreInboundMedia`, `ai_reply` → `GenerateAiReply`, `rich_menu_action` → `HandleRichMenuAction` แล้ว `GenerateAiReply` ในงานเดียวกันเมื่อผลมี `aiReply`, `welcome` → `SendWelcome`
+`fetchProfile` จองการลองก่อนเรียก LINE ด้วย `contacts.claimProfileRefresh(contactId, now, now - PROFILE_REFRESH_AFTER_MS)` (ผู้ใช้ใหม่ได้ true เสมอ) เวลาที่จองนับทั้งเมื่อสำเร็จและไม่สำเร็จ งาน `refresh_profile` ของ event ถัดไปจึงลองใหม่หลัง `PROFILE_REFRESH_AFTER_MS` ไม่ใช่ทุกข้อความ
+
+`refresh_profile`: ข้อความ การกดปุ่ม และ follow ของผู้ใช้ที่มีอยู่แล้ว (`created` เป็น false) เพิ่มงานนี้หนึ่งงานต่อผู้ใช้ต่อ request (event ถัดไปของผู้ใช้คนเดียวกันใน payload เดียวกันไม่เพิ่มซ้ำ) unfollow ไม่เพิ่ม ใน request ไม่มีการเรียก LINE หรือเขียนเพิ่ม การตัดสินว่าต้องดึงหรือไม่อยู่ใน `RefreshContactProfile` หลังตอบ ([line-messaging](../specs/line-messaging.md#โปรไฟล์ของผู้ใช้))
+
+หลังตอบ: route ส่งแต่ละ `FollowUpJob` เข้า `runJob`: `store_media` → `StoreInboundMedia`, `ai_reply` → `GenerateAiReply`, `rich_menu_action` → `HandleRichMenuAction` แล้ว `GenerateAiReply` ในงานเดียวกันเมื่อผลมี `aiReply`, `welcome` → `SendWelcome`, `refresh_profile` → `RefreshContactProfile`
 
 Test:
 
@@ -237,9 +242,11 @@ Test:
 - ไม่มี header signature → `webhook.signature_invalid`
 - body ไม่ใช่ JSON แต่ signature ถูก → ok, followUps ว่าง, lastWebhookAt ถูกบันทึก
 - `events` ว่าง (ปุ่ม Verify) → ok, ไม่มีการเขียนนอกจาก lastWebhookAt
-- ข้อความตัวอักษรจากลูกค้าใหม่ → สร้าง Contact ที่ aiEnabled false, ดึงโปรไฟล์, บันทึก Message, unreadCount เป็น 1, ไม่มีงาน ai_reply
+- ข้อความตัวอักษรจากผู้ใช้ใหม่ → สร้าง Contact ที่ aiEnabled false, ดึงโปรไฟล์, บันทึก Message, unreadCount เป็น 1, ไม่มีงาน ai_reply
+- ผู้ใช้ใหม่: การดึงโปรไฟล์ในขั้นก่อนตอบจองเวลาของการลอง (`claimProfileRefresh`) ทั้งเมื่อสำเร็จและไม่สำเร็จ และไม่มีงาน `refresh_profile`
+- ผู้ใช้ที่มีอยู่แล้วส่งหลาย event ใน request เดียว → งาน `refresh_profile` หนึ่งงาน และไม่เรียก `getProfile` ใน request, unfollow → ไม่มีงานนี้
 - ดึงโปรไฟล์ไม่สำเร็จ → Contact ชื่อว่าง และข้อความยังถูกบันทึก
-- ลูกค้าเดิมที่เปิด AI ตอบแทน ส่งข้อความ → มีงาน ai_reply ที่อ้างข้อความนี้
+- ผู้ใช้เดิมที่เปิด AI ตอบแทน ส่งข้อความ → มีงาน ai_reply ที่อ้างข้อความนี้
 - `webhookEventId` ซ้ำ → ข้าม ไม่มี Message ใหม่ ไม่มี followUp
 - `webhookEventId` ใหม่แต่ `lineMessageId` ซ้ำ → ไม่มี Message ใหม่ unreadCount ไม่เพิ่ม ไม่มี followUp
 - พังหลังบันทึก Message ก่อนบันทึก WebhookEvent แล้วส่งซ้ำ → มี Message เดียว
@@ -254,12 +261,12 @@ Test:
 - เสียง, ไฟล์, ตำแหน่ง → type other พร้อม otherKind ที่ถูกต้อง
 - follow ครั้งแรก → Contact ติดตามอยู่ followedAt เท่ากับเวลา event และมีบรรทัด contact.followed
 - unfollow ที่เก่ากว่า follow ล่าสุด (รวมในก้อนเดียวกัน) → ยังติดตามอยู่ ไม่มีบรรทัดใหม่
-- ข้อความหรือการกดจากลูกค้าที่เป็น `unfollowed` → ติดตามอยู่ followedAt เท่ากับเวลาของข้อความ และมีบรรทัด contact.followed ข้อความที่เก่ากว่า unfollow → ยังเลิกติดตาม
+- ข้อความหรือการกดจากผู้ใช้ที่เป็น `unfollowed` → ติดตามอยู่ followedAt เท่ากับเวลาของข้อความ และมีบรรทัด contact.followed ข้อความที่เก่ากว่า unfollow → ยังเลิกติดตาม
 - follow ซ้ำขณะติดตามอยู่ → ไม่มีบรรทัดเหตุการณ์ใหม่
 - unfollow → เลิกติดตามแล้ว reply token ถูกล้าง มีบรรทัด contact.unfollowed
 - event ชนิดที่ไม่รู้จัก → log แล้วข้าม และ event อื่นในก้อนเดียวกันยังถูกประมวลผล
 - event แรก throw → event ที่สองยังถูกบันทึก และผลรวมเป็น ok
-- สอง event ของลูกค้าคนเดียวกันในก้อนเดียว → Message สองแถวตามลำดับ seq เดียวกับใน payload
+- สอง event ของผู้ใช้คนเดียวกันในก้อนเดียว → Message สองแถวตามลำดับ seq เดียวกับใน payload
 - ฐานข้อมูลล่มทั้งก้อน (ทุก event throw และ ping throw) → `db.unavailable` และ log `line.webhook.batch_unstored`
 - ก้อนเดิมถูกส่งซ้ำหลัง 5xx (`isRedelivery`) สองครั้ง → Message แถวเดียว unreadCount เป็น 1 และไม่เก็บ reply token
 - event หนึ่งถูกบันทึก อีก event ล้มเพราะฐานข้อมูล → ok
@@ -270,9 +277,28 @@ Test:
 - postback ซ้ำ (`webhookEventId` เดิม) → แถวเดียว; กดเกิน `RATE_LIMIT_RICH_MENU_TAP` → ไม่มีแถวและงาน
 - follow ที่มี reply token → งาน `welcome` รวม follow หลัง unfollow; follow ที่ส่งซ้ำ → ไม่มีงาน
 
+## RefreshContactProfile
+
+**หน้าที่:** ดึงชื่อและรูปของผู้ใช้ที่มีอยู่แล้วใหม่ อย่างมากวันละครั้ง เป็นงานหลังตอบ webhook ([line-messaging](../specs/line-messaging.md#โปรไฟล์ของผู้ใช้), [ADR 0031](../adr/0031-settings-tabs-user-wording-and-neutral-prompt.md))
+
+| | |
+| --- | --- |
+| Input | `{ contactId: ContactId }` |
+| Output | `{ outcome: "refreshed" \| "skipped" \| "failed" }` |
+| Port | `SettingsRepository`, `SecretCipher`, `MessagingGateway`, `ContactRepository`, `Clock`, `Logger` |
+| Error | ไม่มี (ทุกความล้มเหลวเป็น outcome) |
+
+1. `loadLineAccess()` ล้มเหลว: `skipped`
+2. `contacts.claimProfileRefresh(contactId, now, now - PROFILE_REFRESH_AFTER_MS)` เป็น false (ลองไปแล้วภายใน 24 ชั่วโมง หรือ event อื่นจองก่อน): `skipped` ไม่เรียก LINE
+3. `contacts.findById` ไม่พบ: `skipped`
+4. `gateway.getProfile(token, lineUserId)` (timeout `LINE_PROFILE_TIMEOUT_MS` ไม่ retry) สำเร็จ: `contacts.updateProfile(contactId, profile)` (รูปที่เป็น null ล้างรูปเดิม แถวได้ `updatedSeq` ใหม่) log `line.profile.refreshed` คืน `refreshed`
+5. ไม่สำเร็จหรือ throw (404 ของผู้ใช้ที่บล็อกบัญชีรวมอยู่ในนี้): คงชื่อและรูปเดิม log `line.profile.fetch_failed` (`contactId` และ `errorCode` หรือ `errorName` เท่านั้น ไม่มีชื่อ) คืน `failed` เวลาที่จองในข้อ 2 ยังอยู่ จึงไม่ลองใหม่จนครบ `PROFILE_REFRESH_AFTER_MS`
+
+Test: ลองล่าสุดยังไม่ครบ 24 ชั่วโมง → ไม่เรียก LINE, ครบหรือเป็น NULL → เรียกหนึ่งครั้ง ชื่อใหม่ รูป null ล้างรูปเดิม `updatedSeq` เพิ่ม, สามงานพร้อมกันของผู้ใช้คนเดียว → เรียก LINE ครั้งเดียว, LINE ไม่สำเร็จหรือ throw → ชื่อและรูปเดิมอยู่ งานถัดไปหนึ่งนาทีต่อมาไม่เรียกซ้ำ และ log ไม่มีชื่อ
+
 ## HandleRichMenuAction
 
-**หน้าที่:** ทำตามปุ่มของ rich menu หรือการ์ดต้อนรับหลังตอบ webhook ตาม [line-messaging](../specs/line-messaging.md#เมื่อลูกค้ากดปุ่ม)
+**หน้าที่:** ทำตามปุ่มของ rich menu หรือการ์ดต้อนรับหลังตอบ webhook ตาม [line-messaging](../specs/line-messaging.md#เมื่อผู้ใช้กดปุ่ม)
 
 | | |
 | --- | --- |
@@ -411,7 +437,7 @@ export type AiReplyRunOutcome =
 
 ### ขั้นตอนหลัก
 
-ลำดับการตรวจของทั้ง use case: kill switch → สวิตช์รายลูกค้า → การติดตาม → ชนิดข้อความ → งบต่อวัน (ข้อ 4) → รวมข้อความและล็อก (ข้อ 1, 5) → ขอบเขตหัวข้อเมื่อ `guardEnabled` (`replyOnce` ข้อ 4) → คลังความรู้และโมเดลตอบแชท (`replyOnce` ข้อ 5 เป็นต้นไป) งบถูกตรวจก่อนการคัดกรอง และต้นทุนของการคัดกรองนับรวมในงบผ่าน `usage.sumCost`
+ลำดับการตรวจของทั้ง use case: kill switch → สวิตช์รายผู้ใช้ → การติดตาม → ชนิดข้อความ → งบต่อวัน (ข้อ 4) → รวมข้อความและล็อก (ข้อ 1, 5) → ขอบเขตหัวข้อเมื่อ `guardEnabled` (`replyOnce` ข้อ 4) → คลังความรู้และโมเดลตอบแชท (`replyOnce` ข้อ 5 เป็นต้นไป) งบถูกตรวจก่อนการคัดกรอง และต้นทุนของการคัดกรองนับรวมในงบผ่าน `usage.sumCost`
 
 วนได้ไม่เกิน `AI_MAX_ROUNDS_PER_RUN` รอบ เริ่ม `round = 1`
 
@@ -420,7 +446,7 @@ export type AiReplyRunOutcome =
    - รอบที่ 1 และ `latest.id !== triggerMessageId`: log `ai.reply.superseded` คืน `superseded` เพราะงานของข้อความที่ใหม่กว่าจะตอบเอง
    - รอบที่ 2 ขึ้นไป: ใช้ `latest` เป็นข้อความที่จะตอบ
 3. อ่าน `s = settings.get()`, `c = contacts.findById(contactId)` (null คืน `skipped: contact_missing`) และ `todayCost = usage.sumCost(bangkokDayRange(now))`
-4. `d = shouldAiReply({ killSwitchOn: s.aiEnabled, contact: c, latestInbound: latest, todayCost, dailyBudget: s.aiDailyBudget })` ข้อ 2 ถึง 4 ทำซ้ำทุกรอบ kill switch และสวิตช์รายลูกค้าที่ถูกปิดระหว่างรอบจึงหยุดรอบถัดไป
+4. `d = shouldAiReply({ killSwitchOn: s.aiEnabled, contact: c, latestInbound: latest, todayCost, dailyBudget: s.aiDailyBudget })` ข้อ 2 ถึง 4 ทำซ้ำทุกรอบ kill switch และสวิตช์รายผู้ใช้ที่ถูกปิดระหว่างรอบจึงหยุดรอบถัดไป
    - `d.handoff` ไม่เป็น null: `raiseHandoff(c, d.handoff)` คืน `handoff`
    - `d.reply` เป็น false นอกนั้น: log `ai.reply.skipped` คืน `skipped`
 5. เฉพาะรอบที่ 1: `contacts.tryAcquireAiLock(contactId, now)` เป็น false: log `ai.reply.locked` คืน `locked` ผู้ถือล็อกจะเห็นข้อความนี้ในข้อ 8 ถ้าได้ล็อก ถือต่อจนจบงาน และ `contacts.releaseAiLock(contactId)` อยู่ใน `finally` ครั้งเดียว ไม่ว่าจบด้วยผลใดหรือ throw
@@ -429,7 +455,7 @@ export type AiReplyRunOutcome =
 8. `newer = messages.latestInbound(contactId)` ถ้า `newer.seq > trace.seenSeq` ไม่จริง คืนผลของ `replyOnce` ข้อความที่โมเดลเห็นแล้วในประวัติของรอบนี้ (มาหลังข้อ 2 แต่ก่อนอ่านประวัติ) จึงไม่ทำให้เกิดรอบที่ตอบซ้ำ ถ้าจริงและ `round < AI_MAX_ROUNDS_PER_RUN`: `round += 1` กลับไปข้อ 1 โดยยังถือล็อก
 9. ถ้า `newer.seq > trace.seenSeq` และ `round = AI_MAX_ROUNDS_PER_RUN`: ทำข้อ 2 ถึง 4 อีกครั้งโดยไม่รอ ถ้าผ่าน `raiseHandoff(c, "ai_timeout")` คืน `handoff` ไม่เรียกโมเดล งานของข้อความนั้นได้ `locked` ไปแล้ว หรือถ้าตื่นหลังปล่อยล็อกจะเห็นประวัติที่จบด้วยคำตอบของรอบนี้ จึงต้องให้แอดมินตอบแทนการเงียบ
 
-ล็อกถูกถือตั้งแต่ข้อ 5 ของรอบที่ 1 จนจบงาน การรอช่วงรวมข้อความของรอบที่ 1 ไม่ถือล็อก การรอก่อนรอบที่ 2 ขึ้นไปถือล็อก งานของข้อความที่มาระหว่างงานนี้จึงได้แค่ `superseded` หรือ `locked` และไม่มีทางอ่านประวัติตาม seq ที่จบด้วยคำตอบของงานนี้ ข้อความนั้นถูกตอบโดยรอบถัดไปของผู้ถือล็อก (ข้อ 8) หรือขึ้นรอแอดมิน (ข้อ 9) ข้อความที่มาหลังข้อ 8 ของรอบสุดท้ายมี seq สูงกว่าทุกคำตอบของงานนี้ งานของมันตื่นหลังช่วงรวมข้อความ ได้ล็อกหลังงานนี้ปล่อย และเห็นประวัติที่จบด้วยลูกค้า
+ล็อกถูกถือตั้งแต่ข้อ 5 ของรอบที่ 1 จนจบงาน การรอช่วงรวมข้อความของรอบที่ 1 ไม่ถือล็อก การรอก่อนรอบที่ 2 ขึ้นไปถือล็อก งานของข้อความที่มาระหว่างงานนี้จึงได้แค่ `superseded` หรือ `locked` และไม่มีทางอ่านประวัติตาม seq ที่จบด้วยคำตอบของงานนี้ ข้อความนั้นถูกตอบโดยรอบถัดไปของผู้ถือล็อก (ข้อ 8) หรือขึ้นรอแอดมิน (ข้อ 9) ข้อความที่มาหลังข้อ 8 ของรอบสุดท้ายมี seq สูงกว่าทุกคำตอบของงานนี้ งานของมันตื่นหลังช่วงรวมข้อความ ได้ล็อกหลังงานนี้ปล่อย และเห็นประวัติที่จบด้วยผู้ใช้
 
 เวลาที่ถือล็อก: `aiStateAt` ตั้งครั้งเดียวในข้อ 5 เวลาแย่ที่สุดคือ `AI_MAX_ROUNDS_PER_RUN` × (การคัดกรองรวม retry + การตอบแชทรวม retry + LINE) + `AI_DEBOUNCE_MS` ซึ่ง `AI_STUCK_AFTER_MS` ตั้งไว้ให้มากกว่าค่านี้ ([project-setup](project-setup.md#10-ค่าคงที่ของระบบ)) เงื่อนไขนี้จึงจริงทั้งบน Vercel ที่งานใน `after()` ถูกตัดที่ `WEBHOOK_MAX_DURATION_S` และใน Docker ที่ไม่มีเพดานเวลา ถ้า function ถูกตัดขณะถือล็อก แถวค้างเป็น `replying` และกลไกงานที่ค้างเปลี่ยนเป็นรอแอดมิน `ai_timeout`
 
@@ -440,14 +466,14 @@ export type AiReplyRunOutcome =
 1. `access = loadLineAccess()` ล้มเหลว: `raiseHandoff(c, "ai_failed")` คืน `handoff` (ไม่เรียกโมเดลเมื่อส่งไม่ได้อยู่แล้ว)
 2. `gateway.showLoading(access, c.lineUserId, LINE_LOADING_SECONDS)` ไม่รอผลเป็นเงื่อนไข ล้มเหลวให้ log `line.loading.failed`
 3. `rows = messages.recentForAi(contactId, AI_HISTORY_LIMIT)`, `history = toHistoryTurns(rows)` ถ้าว่าง คืน `skipped: no_history`
-   - รอบที่ 2 ขึ้นไป: ข้อความของลูกค้าที่มาระหว่างการเรียกโมเดลของรอบก่อนมี seq ต่ำกว่าข้อความ AI ของรอบนั้น ทั้งที่รอบนั้นไม่เห็น ถ้าเรียงตาม seq ประวัติจะจบด้วยฝั่งแอดมินและข้อความนั้นไม่ถูกตอบ จึงย้ายเฉพาะข้อความใน `replyIds` ของรอบก่อนไปไว้หลังแถวสุดท้ายที่รอบนั้นเห็น (`seenSeq` ของรอบนั้น) แถวอื่นคงลำดับ seq แล้วจึง `toHistoryTurns` ไม่มีแถวใดหายหรือซ้ำ
-   - การกด "คุยกับแอดมิน" หรือ "วิธีทดสอบ" ที่อยู่หลังข้อความที่รอบนี้ตอบ (`latest`) ย้ายไปไว้ก่อนข้อความนั้นพร้อมข้อความขาออกผู้ส่ง `ai` แถวเดียวที่ตามหลังมันทันที (ข้อความคงที่ของปุ่ม) ประวัติจึงจบด้วยข้อความของลูกค้าและข้อความนั้นถูกตอบ แถวอื่นหลัง `latest` (เช่นคำตอบของงานอื่นที่ตอบไปแล้ว) คงที่ ประวัติจึงจบด้วยฝั่งแอดมินและไม่ตอบซ้ำ (`deferNoAiTaps`)
-   - คำตอบของรอบก่อนที่ส่งไม่สำเร็จถูกตัดโดย `toHistoryTurns` ข้อความของลูกค้าก่อนและหลังจึงรวมเป็นตาเดียวและถูกตอบทั้งหมด ข้อความแจ้งส่งต่อแอดมินและข้อความปฏิเสธที่ส่งแล้วอยู่ในตำแหน่งที่รอบนั้นตอบ ข้อความหลายข้อความที่มาระหว่างนั้นอยู่หลังคำตอบตามลำดับ seq และรวมเป็นตาเดียว
+   - รอบที่ 2 ขึ้นไป: ข้อความของผู้ใช้ที่มาระหว่างการเรียกโมเดลของรอบก่อนมี seq ต่ำกว่าข้อความ AI ของรอบนั้น ทั้งที่รอบนั้นไม่เห็น ถ้าเรียงตาม seq ประวัติจะจบด้วยฝั่งแอดมินและข้อความนั้นไม่ถูกตอบ จึงย้ายเฉพาะข้อความใน `replyIds` ของรอบก่อนไปไว้หลังแถวสุดท้ายที่รอบนั้นเห็น (`seenSeq` ของรอบนั้น) แถวอื่นคงลำดับ seq แล้วจึง `toHistoryTurns` ไม่มีแถวใดหายหรือซ้ำ
+   - การกด "คุยกับแอดมิน" หรือ "วิธีทดสอบ" ที่อยู่หลังข้อความที่รอบนี้ตอบ (`latest`) ย้ายไปไว้ก่อนข้อความนั้นพร้อมข้อความขาออกผู้ส่ง `ai` แถวเดียวที่ตามหลังมันทันที (ข้อความคงที่ของปุ่ม) ประวัติจึงจบด้วยข้อความของผู้ใช้และข้อความนั้นถูกตอบ แถวอื่นหลัง `latest` (เช่นคำตอบของงานอื่นที่ตอบไปแล้ว) คงที่ ประวัติจึงจบด้วยฝั่งแอดมินและไม่ตอบซ้ำ (`deferNoAiTaps`)
+   - คำตอบของรอบก่อนที่ส่งไม่สำเร็จถูกตัดโดย `toHistoryTurns` ข้อความของผู้ใช้ก่อนและหลังจึงรวมเป็นตาเดียวและถูกตอบทั้งหมด ข้อความแจ้งส่งต่อแอดมินและข้อความปฏิเสธที่ส่งแล้วอยู่ในตำแหน่งที่รอบนั้นตอบ ข้อความหลายข้อความที่มาระหว่างนั้นอยู่หลังคำตอบตามลำดับ seq และรวมเป็นตาเดียว
 4. ขอบเขตหัวข้อ ทำเฉพาะเมื่อ `s.guardEnabled` เป็น true ก่อนโหลดคลังความรู้และก่อนเรียกโมเดลตอบแชท ([topic-guard](../specs/topic-guard.md)):
    1. `{ message, context } = guardContextTurns(history)` แล้ว `g = topicGuard.classify({ topics: s.guardTopics, message, context, model: GUARD_MODEL, maxTokens: GUARD_MAX_TOKENS, timeoutMs: GUARD_TIMEOUT_MS })`
-   2. `g` เป็น error: ถ้ารหัสเป็น `ai.no_response` (ส่งแล้วไม่ได้คำตอบ อาจถูกคิดเงิน) `usage.insert(noResponseUsage({ kind: "guard", contactId, model: GUARD_MODEL, ... }))` รหัสอื่นไม่มีคำตอบจาก API จึงไม่มีต้นทุนและไม่มีแถว แล้ว `settings.recordAiError({ code, at: now })`, log `guard.failed`, `raiseHandoff(c, "ai_failed")` คืน `handoff` ไม่ส่งอะไรให้ลูกค้า
+   2. `g` เป็น error: ถ้ารหัสเป็น `ai.no_response` (ส่งแล้วไม่ได้คำตอบ อาจถูกคิดเงิน) `usage.insert(noResponseUsage({ kind: "guard", contactId, model: GUARD_MODEL, ... }))` รหัสอื่นไม่มีคำตอบจาก API จึงไม่มีต้นทุนและไม่มีแถว แล้ว `settings.recordAiError({ code, at: now })`, log `guard.failed`, `raiseHandoff(c, "ai_failed")` คืน `handoff` ไม่ส่งอะไรให้ผู้ใช้
    3. `gr = g.value`, `{ cost, priceKnown } = computeCost(gr.usage, gr.servedModel, config.priceTable)` (`priceKnown` false log `ai.price_unknown_model`) และ `gd` คือแถว AiUsage ฉบับร่าง `{ id: ids.usageId(), kind: "guard", contactId, provider: "claude", model: gr.servedModel, usage: gr.usage, cost, createdAt: now }` แล้ว `v = guardVerdictOf(gr, s.guardTopics)`
-   4. `v.verdict = failed` (ปฏิเสธ ถูกตัด ไม่ตรง schema): `usage.insert({ ...gd, messageId: null, outcome: "failed", error: v.error })`, `settings.recordAiError({ code: v.error, at: now })`, log `guard.failed`, `raiseHandoff(c, "ai_failed")` คืน `handoff` (ปิดแบบปลอดภัย ไม่ส่งอะไรให้ลูกค้า)
+   4. `v.verdict = failed` (ปฏิเสธ ถูกตัด ไม่ตรง schema): `usage.insert({ ...gd, messageId: null, outcome: "failed", error: v.error })`, `settings.recordAiError({ code: v.error, at: now })`, log `guard.failed`, `raiseHandoff(c, "ai_failed")` คืน `handoff` (ปิดแบบปลอดภัย ไม่ส่งอะไรให้ผู้ใช้)
    5. `v.verdict = blocked`: log `guard.checked` (outcome blocked) แล้วคืนผลของ `sendGuardRefusal(c, access, gd, "classifier")` ไม่โหลดคลังความรู้และไม่เรียกโมเดลตอบแชท
    6. `v.verdict = allowed`: `usage.insert({ ...gd, messageId: null, outcome: "ok", error: null })`, log `guard.checked` (outcome ok) แล้วทำข้อ 5 ต่อ
 5. `knowledge = knowledgeSource.getKnowledge()`
@@ -463,7 +489,7 @@ export type AiReplyRunOutcome =
 13. `o.outcome` เป็น `refused` หรือ `failed`:
     - `usage.insert({ ..., messageId: null, outcome: o.outcome, error: o.error })`
     - `settings.recordAiError({ code: o.error, at: now })`
-    - `raiseHandoff(c2, o.handoff)` คืน `handoff` ไม่ส่งอะไรให้ลูกค้า
+    - `raiseHandoff(c2, o.handoff)` คืน `handoff` ไม่ส่งอะไรให้ผู้ใช้
 14. ข้อความที่จะส่ง: `ok` ใช้ `text` จากข้อ 10, `handoff` ใช้ `handoffText(s2.aiPoliteParticle)` เสมอ ไม่ส่ง `reply` ของโมเดล ([ai-prompt ข้อ 5.4](../specs/ai-prompt.md#54-จากผลไปสู่การกระทำ))
 15. `id = ids.messageId()`, `messages.insertOutboundIfAbsent({ id, author: "ai", type: "text", text, deliveryStatus: "pending", retryKey: id, createdAt: now, ... })`, `contacts.recordOutbound(contactId, { preview, by: "ai" })` (ไม่แก้ `lastMessageAt` ลำดับของรายชื่อจึงไม่เปลี่ยน)
 16. `usage.insert({ ..., messageId: id, outcome: o.outcome, error: null })`
@@ -476,12 +502,12 @@ export type AiReplyRunOutcome =
 
 `draft` คือแถว AiUsage ฉบับร่างของการเรียกที่ตัดสินว่ากัน (`kind: "guard"` จากข้อ 4.3 หรือ `kind: "reply"` จากข้อ 9) และ `by` เป็น `"classifier"` หรือ `"chat_model"` ใช้เป็น `reason` ของ log
 
-1. ตรวจซ้ำก่อนส่งเหมือนข้อ 12: `s2 = settings.get()`, `c2 = contacts.findById(contactId)` ถ้า kill switch ปิด, AI ตอบแทนของลูกค้าปิด หรือเลิกติดตาม: `usage.insert({ ...draft, messageId: null, outcome: "cancelled", error: null })`, log `ai.reply.cancelled` คืน `cancelled`
-2. `id = ids.messageId()`, `messages.insertOutboundIfAbsent({ id, author: "ai", type: "text", text: guardRefusalText(s2.aiPoliteParticle), deliveryStatus: "pending", retryKey: id, createdAt: now, ... })`, `contacts.recordOutbound(contactId, { preview, by: "ai" })` (ไม่แก้ `lastMessageAt` ลำดับของรายชื่อจึงไม่เปลี่ยน)
+1. ตรวจซ้ำก่อนส่งเหมือนข้อ 12: `s2 = settings.get()`, `c2 = contacts.findById(contactId)` ถ้า kill switch ปิด, AI ตอบแทนของผู้ใช้ปิด หรือเลิกติดตาม: `usage.insert({ ...draft, messageId: null, outcome: "cancelled", error: null })`, log `ai.reply.cancelled` คืน `cancelled`
+2. `id = ids.messageId()`, `messages.insertOutboundIfAbsent({ id, author: "ai", type: "text", text: guardRefusalText(s2.aiPoliteParticle, s2.guardTopics), deliveryStatus: "pending", retryKey: id, createdAt: now, ... })`, `contacts.recordOutbound(contactId, { preview, by: "ai" })` (ไม่แก้ `lastMessageAt` ลำดับของรายชื่อจึงไม่เปลี่ยน)
 3. `messages.insertEvent` ชนิด event, author system, direction internal, `eventCode = guard.blocked`
 4. `usage.insert({ ...draft, messageId: id, outcome: "blocked", error: null })`
 5. log `guard.blocked` พร้อม `reason: by`
-6. `sent = deliverOutbound(message, c2, access, "auto")` (reply token ก่อน แล้ว push) ถ้า `sent.deliveryStatus = failed`: `raiseHandoff(c2, "ai_failed")` คืน `handoff` เพราะลูกค้าไม่ได้รับอะไร
+6. `sent = deliverOutbound(message, c2, access, "auto")` (reply token ก่อน แล้ว push) ถ้า `sent.deliveryStatus = failed`: `raiseHandoff(c2, "ai_failed")` คืน `handoff` เพราะผู้ใช้ไม่ได้รับอะไร
 7. คืน `blocked` พร้อม `messageId: id` ไม่เรียก `raiseHandoff` และไม่แตะ `aiEnabled` แชทจึงไม่ขึ้นรอแอดมินและ AI ตอบแทนยังเปิด
 
 ข้อความแจ้งส่งต่อแอดมินคือ `ขออนุญาตให้แอดมินมาตอบเรื่องนี้นะ{particle}` ตามคำลงท้ายที่ตั้งไว้ รูปที่ใช้จริงหลัง "นะ" กำหนดใน `handoffText` ของ [domain-and-ports](domain-and-ports.md#ai)
@@ -495,8 +521,8 @@ Test (ทุกข้อใช้ Clock ปลอม และ adapter ปลอ
 เงื่อนไข
 
 - kill switch ปิด → `skipped: kill_switch_off` ไม่เรียกโมเดล ไม่ขึ้นรอแอดมิน
-- AI ตอบแทนของลูกค้าปิด → `skipped: contact_ai_off`
-- ลูกค้าเลิกติดตาม → `skipped: unfollowed`
+- AI ตอบแทนของผู้ใช้ปิด → `skipped: contact_ai_off`
+- ผู้ใช้เลิกติดตาม → `skipped: unfollowed`
 - ข้อความล่าสุดเป็นรูป → `handoff: customer_sent_image` มีบรรทัด `handoff.customer_sent_image` ไม่เรียกโมเดล
 - ข้อความล่าสุดเป็นวิดีโอ → `customer_sent_video`, สติกเกอร์หรือชนิดอื่น → `customer_sent_non_text`
 - งบวันนี้เท่ากับเพดาน → `handoff: budget_reached` ไม่เรียกโมเดล
@@ -511,8 +537,8 @@ Test (ทุกข้อใช้ Clock ปลอม และ adapter ปลอ
 - งบเต็ม → `handoff: budget_reached` ไม่เรียก `TopicGuard` และไม่เรียกโมเดลตอบแชท
 - kill switch ปิด → `skipped: kill_switch_off` ไม่เรียก `TopicGuard`
 - ผ่าน (`allowed: true`) → เรียก `TopicGuard` หนึ่งครั้งก่อน `KnowledgeSource` และ `ChatModel`, AiUsage kind guard outcome ok แล้ว AiUsage kind reply ตามปกติ, คำสั่งระบบที่โมเดลได้รับลงท้ายด้วยผลของ `buildGuardRulesBlock(topics)`
-- คำขอที่ `TopicGuard` ได้รับ: `model` เป็น `GUARD_MODEL` แม้ตั้งโมเดลตอบแชทเป็น Opus, `maxTokens` เป็น `GUARD_MAX_TOKENS`, `timeoutMs` เป็น `GUARD_TIMEOUT_MS`, `topics` ตามที่บันทึก, `message` เป็น turn สุดท้ายของลูกค้า (ข้อความรัวสามข้อความรวมเป็นหนึ่ง) และ `context` ไม่เกิน `GUARD_CONTEXT_TURNS` turn ก่อนหน้า
-- ถูกกัน (`allowed: false`) → `blocked`, ไม่เรียก `KnowledgeSource` และ `ChatModel`, ลูกค้าได้ `guardRefusalText(aiPoliteParticle)` ผ่าน reply token, ข้อความผู้ส่ง ai, บรรทัด `guard.blocked`, AiUsage kind guard outcome blocked พร้อม messageId ของข้อความปฏิเสธ, `needsAdmin` ไม่เปลี่ยน และ `aiEnabled` ยังเป็น true
+- คำขอที่ `TopicGuard` ได้รับ: `model` เป็น `GUARD_MODEL` แม้ตั้งโมเดลตอบแชทเป็น Opus, `maxTokens` เป็น `GUARD_MAX_TOKENS`, `timeoutMs` เป็น `GUARD_TIMEOUT_MS`, `topics` ตามที่บันทึก, `message` เป็น turn สุดท้ายของผู้ใช้ (ข้อความรัวสามข้อความรวมเป็นหนึ่ง) และ `context` ไม่เกิน `GUARD_CONTEXT_TURNS` turn ก่อนหน้า
+- ถูกกัน (`allowed: false`) → `blocked`, ไม่เรียก `KnowledgeSource` และ `ChatModel`, ผู้ใช้ได้ `guardRefusalText(aiPoliteParticle, guardTopics)` ผ่าน reply token, ข้อความผู้ส่ง ai, บรรทัด `guard.blocked`, AiUsage kind guard outcome blocked พร้อม messageId ของข้อความปฏิเสธ, `needsAdmin` ไม่เปลี่ยน และ `aiEnabled` ยังเป็น true
 - ถูกกันขณะ reply token หมดอายุ → ส่งข้อความปฏิเสธด้วย push พร้อม retryKey เท่ากับ id ของข้อความ
 - ถูกกันแล้วส่งไม่สำเร็จ (`line.unavailable`) → ข้อความ failed และขึ้นรอแอดมิน `ai_failed`
 - kill switch ถูกปิดระหว่างการคัดกรองที่ได้ผลกัน → `cancelled` ไม่ส่งข้อความปฏิเสธ, AiUsage kind guard outcome cancelled, ไม่มีบรรทัดเหตุการณ์
@@ -522,13 +548,13 @@ Test (ทุกข้อใช้ Clock ปลอม และ adapter ปลอ
 - `stop = truncated` → AiUsage outcome failed error `ai.truncated`, `ai_failed`
 - `verdict = null` (ไม่ตรง schema) → AiUsage outcome failed error `ai.invalid_output`, `ai_failed`
 - `allowed: true` แต่ `matchedTopic` ไม่อยู่ในรายการหัวข้อ → ยังผ่าน และถือ `matchedTopic` เป็น null
-- คำทักทายขณะขอบเขตหัวข้อเปิด: `TopicGuard` ตอบ `allowed: true` และ `matchedTopic: null` → เรียก `ChatModel` หนึ่งครั้ง คำสั่งระบบมีชื่อ AI และบรรทัดคำทักทายของบล็อก `<topic_guard>` ลูกค้าได้คำตอบของโมเดล AiUsage guard ok แล้ว reply ok ไม่มีบรรทัด `guard.blocked` ("greeting while the guard is on: allowed with no topic, the chat model introduces the AI")
-- คำทักทายพร้อมคำขอนอกหัวข้อ: `TopicGuard` ตอบ `allowed: false` → `blocked` ไม่เรียก `ChatModel` ลูกค้าได้ข้อความปฏิเสธ มีบรรทัด `guard.blocked` ("greeting with an off-topic request: blocked by the guard, the chat model is not called")
+- คำทักทายขณะขอบเขตหัวข้อเปิด: `TopicGuard` ตอบ `allowed: true` และ `matchedTopic: null` → เรียก `ChatModel` หนึ่งครั้ง คำสั่งระบบมีชื่อ AI และบรรทัดคำทักทายของบล็อก `<topic_guard>` ผู้ใช้ได้คำตอบของโมเดล AiUsage guard ok แล้ว reply ok ไม่มีบรรทัด `guard.blocked` ("greeting while the guard is on: allowed with no topic, the chat model introduces the AI")
+- คำทักทายพร้อมคำขอนอกหัวข้อ: `TopicGuard` ตอบ `allowed: false` → `blocked` ไม่เรียก `ChatModel` ผู้ใช้ได้ข้อความปฏิเสธ มีบรรทัด `guard.blocked` ("greeting with an off-topic request: blocked by the guard, the chat model is not called")
 - ถูกกันหลังเปลี่ยนคำลงท้ายเป็น "ครับ" → ข้อความปฏิเสธของครั้งนั้นลงท้าย "นะครับ" (อ่านคำลงท้ายตอนส่ง)
-- ผ่านการคัดกรอง แต่โมเดลตอบแชทคืน `needsAdmin` true เหตุผล `unsafe_or_offtopic` → ส่ง `guardRefusalText(aiPoliteParticle)` ไม่ใช่ `handoffText`, บรรทัด `guard.blocked`, AiUsage kind reply outcome blocked, ไม่ขึ้นรอแอดมิน
+- ผ่านการคัดกรอง แต่โมเดลตอบแชทคืน `needsAdmin` true เหตุผล `unsafe_or_offtopic` → ส่ง `guardRefusalText(aiPoliteParticle, guardTopics)` ไม่ใช่ `handoffText`, บรรทัด `guard.blocked`, AiUsage kind reply outcome blocked, ไม่ขึ้นรอแอดมิน
 - ขอบเขตหัวข้อปิด และโมเดลคืน `unsafe_or_offtopic` → ขึ้นรอแอดมิน `ai_unsafe_or_offtopic` ตามเดิม
 - ต้นทุนของการคัดกรองเมื่อเช้านับรวมใน `todayCost` ของข้อความถัดไป (งบเต็มเพราะการคัดกรองแล้ว → `budget_reached`)
-- log ของการคัดกรองไม่มีข้อความของลูกค้า หัวข้อ หรือข้อความปฏิเสธ
+- log ของการคัดกรองไม่มีข้อความของผู้ใช้ หัวข้อ หรือข้อความปฏิเสธ
 
 การรวมข้อความและล็อก
 
@@ -538,10 +564,10 @@ Test (ทุกข้อใช้ Clock ปลอม และ adapter ปลอ
 - ข้อความใหม่เข้ามาระหว่างเรียกโมเดล และงานของมันได้ `locked` → ผู้ถือล็อกตอบรอบที่ 2 ให้ข้อความนั้น
 - งานของข้อความที่มาระหว่างเรียกโมเดลตื่นระหว่างการรอก่อนรอบที่ 2 → `locked` และผู้ถือล็อกตอบข้อความนั้นในรอบที่ 2 (เดิมงานนั้นได้ `skipped: no_history` และรอบที่ 2 ได้ `locked`)
 - ล็อกถูกขอครั้งเดียว ยังเป็น `replying` ระหว่างการรอก่อนรอบที่ 2 และ `aiStateAt` ไม่เปลี่ยน
-- kill switch หรือสวิตช์รายลูกค้าถูกปิดระหว่างรอบ → รอบที่ 2 คืน `skipped` ไม่เรียกโมเดล ล็อกถูกปล่อย
+- kill switch หรือสวิตช์รายผู้ใช้ถูกปิดระหว่างรอบ → รอบที่ 2 คืน `skipped` ไม่เรียกโมเดล ล็อกถูกปล่อย
 - ข้อความใหม่ระหว่างรอบที่ `AI_MAX_ROUNDS_PER_RUN` → ไม่มีรอบเพิ่ม `handoff: ai_timeout` พร้อมบรรทัดเหตุการณ์ งานของข้อความนั้นที่ตื่นภายหลังได้ `skipped: no_history`
 - ข้อความที่เหลือหลังรอบสุดท้ายเป็นรูป → `handoff: customer_sent_image` ไม่ใช่ `ai_timeout`, kill switch ปิดแล้ว → `skipped` ไม่ขึ้นรอแอดมิน
-- ข้อความมาหลังข้อ 8 ของรอบสุดท้าย → งานของมันได้ล็อกหลังปล่อย ประวัติจบด้วยลูกค้า และตอบ
+- ข้อความมาหลังข้อ 8 ของรอบสุดท้าย → งานของมันได้ล็อกหลังปล่อย ประวัติจบด้วยผู้ใช้ และตอบ
 - โมเดลล้มเหลว → ล็อกถูกปล่อย
 - `replyOnce` throw → ล็อกถูกปล่อย และ exception ถูกส่งต่อ
 
@@ -560,13 +586,13 @@ Test (ทุกข้อใช้ Clock ปลอม และ adapter ปลอ
 - port คืน `ai.unavailable` → ไม่มี AiUsage, เหตุผล `ai_failed`, lastAiError ถูกบันทึก
 - port คืน `ai.auth_failed`, `ai.rate_limited`, `ai.bad_request` → เหมือนข้อบน
 - ความรู้ว่าง → `knowledgeText` เป็นบล็อกของคลังว่าง และยังเรียกโมเดล
-- คำขอที่โมเดลได้รับ: โมเดลตามที่ตั้ง, คำแนะนำสำหรับ AI อยู่ใน systemInstructions, ประวัติไม่เกิน `AI_HISTORY_LIMIT` ข้อความ, ไม่มีบรรทัดเหตุการณ์และข้อความขาออกที่ส่งไม่สำเร็จ, จบด้วยข้อความของลูกค้า, `now` เท่ากับเวลาของ Clock ปลอม
+- คำขอที่โมเดลได้รับ: โมเดลตามที่ตั้ง, คำแนะนำสำหรับ AI อยู่ใน systemInstructions, ประวัติไม่เกิน `AI_HISTORY_LIMIT` ข้อความ, ไม่มีบรรทัดเหตุการณ์และข้อความขาออกที่ส่งไม่สำเร็จ, จบด้วยข้อความของผู้ใช้, `now` เท่ากับเวลาของ Clock ปลอม
 
 ตรวจซ้ำก่อนส่ง
 
 - kill switch ถูกปิดระหว่างเรียกโมเดล → `cancelled` ไม่ส่ง, AiUsage outcome cancelled พร้อมต้นทุน, ไม่ขึ้นรอแอดมิน
 - แอดมินตอบเอง (AI ตอบแทนถูกปิด) ระหว่างเรียกโมเดล → `cancelled`
-- ลูกค้าเลิกติดตามระหว่างเรียกโมเดล → `cancelled`
+- ผู้ใช้เลิกติดตามระหว่างเรียกโมเดล → `cancelled`
 
 การส่ง
 
@@ -580,7 +606,7 @@ Test (ทุกข้อใช้ Clock ปลอม และ adapter ปลอ
 
 ## SendAdminMessage
 
-**หน้าที่:** บันทึกและส่งข้อความ รูป หรือวิดีโอของแอดมิน ปิด AI ตอบแทนของลูกค้าคนนั้น ตาม [webchat-inbox](../specs/webchat-inbox.md#ช่องตอบ) และ [line-messaging](../specs/line-messaging.md#ส่งข้อความ)
+**หน้าที่:** บันทึกและส่งข้อความ รูป หรือวิดีโอของแอดมิน ปิด AI ตอบแทนของผู้ใช้คนนั้น ตาม [webchat-inbox](../specs/webchat-inbox.md#ช่องตอบ) และ [line-messaging](../specs/line-messaging.md#ส่งข้อความ)
 
 | | |
 | --- | --- |
@@ -616,8 +642,8 @@ Test:
 - สองคำขอพร้อมกันด้วย messageId เดิม → gateway ถูกเรียกครั้งเดียว
 - messageId เดิมแต่ contactId ต่าง → `message.id_conflict`
 - messageId เดิม contactId เดิม แต่ข้อความตัวอักษรต่าง หรือชนิดสื่อต่าง → `message.id_conflict`
-- ลูกค้าไม่มีอยู่ → `contact.not_found`
-- ลูกค้าเลิกติดตาม → `contact.unfollowed` ไม่มีข้อความถูกบันทึก ไม่เรียก LINE
+- ผู้ใช้ไม่มีอยู่ → `contact.not_found`
+- ผู้ใช้เลิกติดตาม → `contact.unfollowed` ไม่มีข้อความถูกบันทึก ไม่เรียก LINE
 - ยังไม่ตั้ง credential → `line.not_configured` ไม่มีข้อความถูกบันทึก
 - ส่งเกินค่าจำกัดความถี่ → `message.rate_limited` พร้อม retryAfterSeconds
 - push ได้ `line.unauthorized` → คืน ok ข้อความ failed error นั้น lastLineError ถูกบันทึก
@@ -648,8 +674,8 @@ Test:
 1. `hitRateLimit("send_message", ctx.clientIp ?? "unknown", now)` เกินคืน `message.rate_limited`
 2. `m = messages.findById(messageId)` null หรือ `m.contactId !== contactId` คืน `message.not_found`
 3. `m.direction !== "outbound"` หรือ `m.deliveryStatus !== "failed"` คืน `message.not_retryable`
-4. `isRetryKeyExpired(m, now)` (ผ่าน `LINE_RETRY_KEY_WINDOW_MS` นับจาก `m.firstPushAt` แล้ว ปลายหน้าต่างนับว่าผ่าน) log `line.send.retry_expired` (warn, `messageId`, `contactId`) คืน `message.retry_expired` ไม่เรียก LINE และข้อความยังเป็น failed เหตุผล: หลังหน้าต่างนี้ LINE ถือ key เดิมเป็นคำขอใหม่ ถ้าครั้งก่อนถึงลูกค้าแล้ว ลูกค้าจะได้ซ้ำ แอดมินจึงต้องพิมพ์ส่งใหม่ `firstPushAt` ไม่ใช่ `deliveryAttemptAt` ซึ่งเลื่อนทุกครั้งที่กดส่งอีกครั้ง ข้อความที่ยังไม่เคย push (reply ล้มเหลว) ไม่มีหน้าต่าง
-5. `c = contacts.findById` null คืน `message.not_found` (ข้อความอ้าง Contact ด้วย foreign key ลูกค้าที่หายไปจึงหมายถึงข้อความหายด้วย) เลิกติดตามคืน `contact.unfollowed` (ข้อความยังเป็น failed)
+4. `isRetryKeyExpired(m, now)` (ผ่าน `LINE_RETRY_KEY_WINDOW_MS` นับจาก `m.firstPushAt` แล้ว ปลายหน้าต่างนับว่าผ่าน) log `line.send.retry_expired` (warn, `messageId`, `contactId`) คืน `message.retry_expired` ไม่เรียก LINE และข้อความยังเป็น failed เหตุผล: หลังหน้าต่างนี้ LINE ถือ key เดิมเป็นคำขอใหม่ ถ้าครั้งก่อนถึงผู้ใช้แล้ว ผู้ใช้จะได้ซ้ำ แอดมินจึงต้องพิมพ์ส่งใหม่ `firstPushAt` ไม่ใช่ `deliveryAttemptAt` ซึ่งเลื่อนทุกครั้งที่กดส่งอีกครั้ง ข้อความที่ยังไม่เคย push (reply ล้มเหลว) ไม่มีหน้าต่าง
+5. `c = contacts.findById` null คืน `message.not_found` (ข้อความอ้าง Contact ด้วย foreign key ผู้ใช้ที่หายไปจึงหมายถึงข้อความหายด้วย) เลิกติดตามคืน `contact.unfollowed` (ข้อความยังเป็น failed)
 6. `access = loadLineAccess()` ล้มเหลวคืน error นั้น
 7. `messages.markPendingIfFailed(messageId, now)` เป็น false คืน `message.not_retryable` (มีอีกคำขอ retry อยู่แล้ว) `now` เป็นเวลาเริ่มของการส่งรอบนี้ที่การคืนสภาพการส่งที่ค้างใช้วัด
 8. `final = deliverOutbound(m, c, access, "push_only")` ใช้ push เสมอ เพราะ reply ไม่มี retry key และครั้งก่อนอาจไปถึงแล้ว
@@ -757,7 +783,7 @@ Test: ไฟล์มีอยู่ → stream พร้อมชนิด, key
 
 ## ShowTypingToCustomer
 
-**หน้าที่:** ขอให้ LINE แสดง loading ในแอปของลูกค้าเมื่อแอดมินเริ่มพิมพ์ ตาม [webchat-inbox](../specs/webchat-inbox.md#ช่องตอบ) ข้อ 8
+**หน้าที่:** ขอให้ LINE แสดง loading ในแอปของผู้ใช้เมื่อแอดมินเริ่มพิมพ์ ตาม [webchat-inbox](../specs/webchat-inbox.md#ช่องตอบ) ข้อ 8
 
 | | |
 | --- | --- |
@@ -768,7 +794,7 @@ Test: ไฟล์มีอยู่ → stream พร้อมชนิด, key
 
 1. `c = contacts.findById` null คืน `contact.not_found`
 2. เลิกติดตาม คืน `ok({ shown: false })`
-3. `hitRateLimit("typing", contactId, now)` เกิน คืน `ok({ shown: false })` (หนึ่งครั้งต่อหน้าต่างต่อลูกค้า ไม่ใช่ต่อ IP)
+3. `hitRateLimit("typing", contactId, now)` เกิน คืน `ok({ shown: false })` (หนึ่งครั้งต่อหน้าต่างต่อผู้ใช้ ไม่ใช่ต่อ IP)
 4. `loadLineAccess()` ล้มเหลว คืน `ok({ shown: false })`
 5. `gateway.showLoading(access, c.lineUserId, LINE_LOADING_SECONDS)` ล้มเหลว log `line.loading.failed` คืน `ok({ shown: false })`
 6. คืน `ok({ shown: true })`
@@ -777,16 +803,16 @@ Test: ไฟล์มีอยู่ → stream พร้อมชนิด, key
 
 Test:
 
-- ลูกค้าติดตามอยู่ → showLoading ถูกเรียก, shown true
+- ผู้ใช้ติดตามอยู่ → showLoading ถูกเรียก, shown true
 - เรียกสองครั้งภายในหน้าต่างเดียวของ `RATE_LIMIT_TYPING` → ครั้งที่สอง shown false ไม่เรียก LINE
 - เลื่อนเวลาปลอมข้ามหน้าต่าง → เรียกได้อีก
-- ลูกค้าเลิกติดตาม → shown false ไม่เรียก LINE
+- ผู้ใช้เลิกติดตาม → shown false ไม่เรียก LINE
 - LINE ล้มเหลว → shown false ไม่เป็น error
-- ไม่มีลูกค้า → `contact.not_found`
+- ไม่มีผู้ใช้ → `contact.not_found`
 
 ## SetContactAi
 
-**หน้าที่:** เปิดหรือปิด AI ตอบแทนของลูกค้าหนึ่งคน
+**หน้าที่:** เปิดหรือปิด AI ตอบแทนของผู้ใช้หนึ่งคน
 
 | | |
 | --- | --- |
@@ -803,7 +829,7 @@ Test:
 
 การเปิดไม่ทำให้ AI ตอบข้อความที่ค้างอยู่ AI ตอบเมื่อมีข้อความใหม่เข้ามา
 
-Test: เปิดเมื่อ kill switch เปิด → aiEnabled true, เปิดเมื่อ kill switch ปิด → `ai.disabled_globally` ค่าไม่เปลี่ยน, ปิดเมื่อ kill switch ปิด → สำเร็จ, เปิดขณะรอแอดมิน → needsAdmin ถูกล้าง, ไม่มีลูกค้า → `contact.not_found`
+Test: เปิดเมื่อ kill switch เปิด → aiEnabled true, เปิดเมื่อ kill switch ปิด → `ai.disabled_globally` ค่าไม่เปลี่ยน, ปิดเมื่อ kill switch ปิด → สำเร็จ, เปิดขณะรอแอดมิน → needsAdmin ถูกล้าง, ไม่มีผู้ใช้ → `contact.not_found`
 
 ## MarkContactRead
 
@@ -817,7 +843,7 @@ Test: เปิดเมื่อ kill switch เปิด → aiEnabled true, �
 1. ไม่พบคืน `contact.not_found`
 2. `contacts.markRead(contactId)` คืนแถวหลังแก้
 
-Test: unreadCount 3 → 0 และ updatedSeq เพิ่ม, ไม่มีลูกค้า → `contact.not_found`
+Test: unreadCount 3 → 0 และ updatedSeq เพิ่ม, ไม่มีผู้ใช้ → `contact.not_found`
 
 ## ListContactNotes
 
@@ -828,7 +854,7 @@ Test: unreadCount 3 → 0 และ updatedSeq เพิ่ม, ไม่มี�
 | Port | `ContactRepository`, `ContactNoteRepository` |
 | Error | `contact.not_found` |
 
-1. ไม่พบลูกค้าคืน `contact.not_found` 2. `notes.listForContact(contactId, CONTACT_NOTE_LIST_LIMIT)`
+1. ไม่พบผู้ใช้คืน `contact.not_found` 2. `notes.listForContact(contactId, CONTACT_NOTE_LIST_LIMIT)`
 
 ## AddContactNote
 
@@ -840,7 +866,7 @@ Test: unreadCount 3 → 0 และ updatedSeq เพิ่ม, ไม่มี�
 | Error | `contact.not_found`, `note.rate_limited` |
 
 1. `hitRateLimit("note_create", ctx.clientIp ?? "unknown", now)` เกิน: log `contact.note.rate_limited` คืน `note.rate_limited` พร้อม `retryAfterSeconds`
-2. ไม่พบลูกค้าคืน `contact.not_found`
+2. ไม่พบผู้ใช้คืน `contact.not_found`
 3. `notes.insert({ id: ids.noteId(), contactId, text, createdAt: now })` 4. log `contact.note.added` (`contactId` เท่านั้น ไม่มีข้อความ)
 
 ## DeleteContactNote
@@ -854,11 +880,11 @@ Test: unreadCount 3 → 0 และ updatedSeq เพิ่ม, ไม่มี�
 
 1. `notes.delete(contactId, noteId)` เป็น false คืน `note.not_found` 2. log `contact.note.deleted`
 
-Test (ทั้งสาม): เพิ่มแล้วรายการใหม่ไปเก่าพร้อมเวลาจาก Clock, log ไม่มีข้อความของโน้ต, ลูกค้าที่ไม่มีได้ `contact.not_found` ทั้งเพิ่มและรายการ, เพิ่มเกิน `RATE_LIMIT_NOTE_CREATE` ได้ `note.rate_limited` พร้อม `retryAfterSeconds`, ลบโน้ตของลูกค้าคนอื่นหรือที่ลบไปแล้วได้ `note.not_found`
+Test (ทั้งสาม): เพิ่มแล้วรายการใหม่ไปเก่าพร้อมเวลาจาก Clock, log ไม่มีข้อความของโน้ต, ผู้ใช้ที่ไม่มีได้ `contact.not_found` ทั้งเพิ่มและรายการ, เพิ่มเกิน `RATE_LIMIT_NOTE_CREATE` ได้ `note.rate_limited` พร้อม `retryAfterSeconds`, ลบโน้ตของผู้ใช้คนอื่นหรือที่ลบไปแล้วได้ `note.not_found`
 
 ## ListContacts
 
-**หน้าที่:** รายชื่อลูกค้าสำหรับหน้าแชท ทั้งหน้าแรก หน้าถัดไป และรอบ polling ตาม [api-contract](api-contract.md#protocol-ของ-polling) และคืนสภาพงาน AI ที่ค้าง
+**หน้าที่:** รายชื่อผู้ใช้สำหรับหน้าแชท ทั้งหน้าแรก หน้าถัดไป และรอบ polling ตาม [api-contract](api-contract.md#protocol-ของ-polling) และคืนสภาพงาน AI ที่ค้าง
 
 | | |
 | --- | --- |
@@ -874,7 +900,7 @@ Test (ทั้งสาม): เพิ่มแล้วรายการใ�
 
 Use case นี้แก้ข้อมูลในข้อ 1 เพราะ [ai-reply](../specs/ai-reply.md#งานที่ค้าง) กำหนดให้รอบ polling ของรายชื่อเป็นผู้คืนสภาพ
 
-Test: งานที่ค้างเกินเวลา → แชทรอแอดมินเหตุผล `ai_timeout`, aiState idle และมีบรรทัด `handoff.ai_timeout` หนึ่งบรรทัด, งานที่ยังไม่เกินเวลา → ไม่ถูกแตะ, ตัวกรอง unread และ needs_admin, ค้นหาไม่สนตัวพิมพ์, การแบ่งหน้าด้วย cursor ไม่ข้ามหรือซ้ำแถวที่ sortAt เท่ากัน, ข้อความของแอดมินหรือ AI ไม่เปลี่ยนลำดับ (sortAt คือข้อความล่าสุดของลูกค้า), โหมด changes คืนเฉพาะแถวที่ updatedSeq มากกว่า cursor, highWater ของหน้าแรกอ่านก่อน list
+Test: งานที่ค้างเกินเวลา → แชทรอแอดมินเหตุผล `ai_timeout`, aiState idle และมีบรรทัด `handoff.ai_timeout` หนึ่งบรรทัด, งานที่ยังไม่เกินเวลา → ไม่ถูกแตะ, ตัวกรอง unread และ needs_admin, ค้นหาไม่สนตัวพิมพ์, การแบ่งหน้าด้วย cursor ไม่ข้ามหรือซ้ำแถวที่ sortAt เท่ากัน, ข้อความของแอดมินหรือ AI ไม่เปลี่ยนลำดับ (sortAt คือข้อความล่าสุดของผู้ใช้), โหมด changes คืนเฉพาะแถวที่ updatedSeq มากกว่า cursor, highWater ของหน้าแรกอ่านก่อน list
 
 ## GetContact
 
@@ -888,7 +914,7 @@ Test: งานที่ค้างเกินเวลา → แชทรอ
 1. `contacts.findById` null คืน `contact.not_found`
 2. `{ total, byAi } = messages.countForContact(contactId)` คืน `{ contact, stats: { messageCount: total, aiMessageCount: byAi } }`
 
-Test: มีลูกค้า → stats ไม่นับบรรทัดเหตุการณ์, ไม่มี → `contact.not_found`
+Test: มีผู้ใช้ → stats ไม่นับบรรทัดเหตุการณ์, ไม่มี → `contact.not_found`
 
 ## GetMessages
 
@@ -899,13 +925,13 @@ Test: มีลูกค้า → stats ไม่นับบรรทัดเ
 | Port | `ContactRepository`, `MessageRepository`, `Clock`, `Logger` |
 | Error | `contact.not_found` |
 
-1. ไม่พบลูกค้าคืน `contact.not_found`
+1. ไม่พบผู้ใช้คืน `contact.not_found`
 1.1 คืนสภาพก่อนอ่าน (การเขียนเดียวของ use case นี้ หน้าแชท poll อยู่จึงเกิดเองภายในหนึ่งรอบ): `media = messages.failStuckMedia(contactId, now - MEDIA_STUCK_AFTER_MS)` ถ้าไม่ว่าง log `media.store.stuck_recovered` พร้อม `contactId` และ `count` แล้ว `sends = messages.failStuckDeliveries(contactId, now - SEND_STUCK_AFTER_MS)` ถ้าไม่ว่าง log `line.send.stuck_recovered` พร้อม `contactId` และ `count` แถวที่แก้ได้ `updatedSeq` ใหม่ จึงอยู่ในผลของรอบนี้
 2. `latest`: อ่าน `highWater = messages.maxUpdatedSeq(contactId)` ก่อน แล้ว `listLatest(contactId, MESSAGE_PAGE_LIMIT)` `hasMore` เป็น false
 3. `before`: `listBefore(contactId, beforeSeq, MESSAGE_PAGE_LIMIT)` และ `highWater` เป็น `0n` (หน้าเว็บไม่ใช้ค่านี้เลื่อน cursor)
 4. `changes`: `listChangedAfter(contactId, afterUpdatedSeq, POLL_PAGE_LIMIT)` `hasOlder` เป็น null และ `highWater` เหมือน `ListContacts`
 
-Test: latest คืน 50 แถวล่าสุดเรียงเก่าไปใหม่และ hasOlder ถูก, ทุกโหมดอ่านข้อความที่ถูกอ้างด้วย query เดียวและคืนเฉพาะที่รู้จัก, หน้าที่ไม่มีการอ้างได้ `quoted` ว่าง, before ไม่รวม beforeSeq, changes คืนข้อความที่สถานะเปลี่ยนแม้ seq ต่ำกว่า cursor, ลูกค้าคนอื่นไม่ปน, สื่อที่ค้างนานกว่า `MEDIA_STUCK_AFTER_MS` เป็น failed และอยู่ในรอบ changes, การส่งที่ค้างนานกว่า `SEND_STUCK_AFTER_MS` เป็น failed ด้วย `line.send_interrupted`, แถวที่ยังไม่ถึงเวลาและของลูกค้าคนอื่นไม่ถูกแก้
+Test: latest คืน 50 แถวล่าสุดเรียงเก่าไปใหม่และ hasOlder ถูก, ทุกโหมดอ่านข้อความที่ถูกอ้างด้วย query เดียวและคืนเฉพาะที่รู้จัก, หน้าที่ไม่มีการอ้างได้ `quoted` ว่าง, before ไม่รวม beforeSeq, changes คืนข้อความที่สถานะเปลี่ยนแม้ seq ต่ำกว่า cursor, ผู้ใช้คนอื่นไม่ปน, สื่อที่ค้างนานกว่า `MEDIA_STUCK_AFTER_MS` เป็น failed และอยู่ในรอบ changes, การส่งที่ค้างนานกว่า `SEND_STUCK_AFTER_MS` เป็น failed ด้วย `line.send_interrupted`, แถวที่ยังไม่ถึงเวลาและของผู้ใช้คนอื่นไม่ถูกแก้
 
 ## GetSettings
 
@@ -927,7 +953,7 @@ Test: ไม่มีแถว → ได้ค่าเริ่มต้นต
 
 | | |
 | --- | --- |
-| Input | `Partial<{ aiEnabled: boolean; aiModel: AiModelId; aiDailyBudget: NanoUsd; aiPoliteParticle: PoliteParticle; aiInstructions: string; aiName: string \| null; aiAnswerMode: AiAnswerMode; guardEnabled: boolean; guardTopics: string[]; howToText: string; welcomeEnabled: boolean; welcomeText: string }>` (field อื่นไม่มี ข้อความปฏิเสธคงที่ใน `guardRefusalText`) (route ตรวจรูปแบบแล้วตาม [api-contract](api-contract.md#patch-apisettings) และต้องมีอย่างน้อยหนึ่ง field) |
+| Input | `Partial<{ aiEnabled: boolean; aiModel: AiModelId; aiDailyBudget: NanoUsd; aiPoliteParticle: PoliteParticle; aiInstructions: string; aiName: string \| null; aiAnswerMode: AiAnswerMode; guardEnabled: boolean; guardTopics: string[]; howToText: string; welcomeEnabled: boolean; welcomeText: string }>` (field อื่นไม่มี ข้อความปฏิเสธสร้างจากหัวข้อใน `guardRefusalText`) (route ตรวจรูปแบบแล้วตาม [api-contract](api-contract.md#patch-apisettings) และต้องมีอย่างน้อยหนึ่ง field) |
 | Output | `Settings` |
 | Port | `SettingsRepository`, `Logger` |
 | Error | `settings.guard_topics_required` |
@@ -961,7 +987,7 @@ Test: แก้ field เดียวไม่กระทบ field อื่น
 7. `v.verdict = failed`: `settings.recordAiError({ code: v.error, at: now })` เหมือน error ของ port ในข้อ 5 เพื่อให้หน้าสถานะระบบแสดง แล้ว log `guard.failed` คืน `v.error` (`ai.refused`, `ai.truncated` หรือ `ai.invalid_output`)
 8. log `guard.checked` คืน `{ allowed: v.verdict === "allowed", matchedTopic: v.matchedTopic, cost }`
 
-ไม่ส่งอะไรถึงลูกค้าและไม่มีบรรทัดเหตุการณ์ แถว AiUsage ของการทดลองที่ถูกกันเป็น kind guard outcome blocked จึงถูกนับใน `guardBlockedToday` ด้วย ตาม [topic-guard](../specs/topic-guard.md#การทดลองในหน้าตั้งค่า)
+ไม่ส่งอะไรถึงผู้ใช้และไม่มีบรรทัดเหตุการณ์ แถว AiUsage ของการทดลองที่ถูกกันเป็น kind guard outcome blocked จึงถูกนับใน `guardBlockedToday` ด้วย ตาม [topic-guard](../specs/topic-guard.md#การทดลองในหน้าตั้งค่า)
 
 Test: kill switch ปิด → `ai.disabled_globally` ไม่เรียก `TopicGuard`, ไม่มีหัวข้อที่บันทึก → `settings.guard_topics_required`, งบเต็ม → `ai.budget_exhausted` ไม่เรียก `TopicGuard`, ขอบเขตหัวข้อปิดแต่มีหัวข้อ → ทดลองได้, ผ่าน → `allowed: true` พร้อม `matchedTopic` และ AiUsage kind guard outcome ok ที่ contactId null, ถูกกัน → `allowed: false` และ AiUsage outcome blocked, `matchedTopic` ไม่อยู่ในรายการ → null, คำขอใช้ `GUARD_MODEL` และ `context` ว่าง, port คืน `ai.unavailable` → error นั้นและไม่มี AiUsage, `stop = refused`, ถูกตัด หรือไม่ตรง schema → `ai.refused`, `ai.truncated` หรือ `ai.invalid_output` พร้อม AiUsage outcome failed และ lastAiError ถูกบันทึก, ถูกกัน → lastAiError ไม่ถูกบันทึก, เกิน `RATE_LIMIT_GUARD_TEST` ครั้งต่อหน้าต่างจาก IP เดียว → `settings.guard_rate_limited`, `RATE_LIMIT_SCALE` เป็น 10 → ค่าจำกัดคูณ 10, cost ที่คืนเท่ากับ cost ของแถว AiUsage
 
@@ -1003,11 +1029,12 @@ Test: ไม่มีข้อมูล → ทุกตัวเลขเป็
 
 | | |
 | --- | --- |
-| Input | `{ channelId: string; channelSecret: string; channelAccessToken: LineAccessToken }` (`channelId` ผ่าน `LINE_CHANNEL_ID_PATTERN` ของ contract แล้ว) |
+| Input | `{ channelId?: string; channelSecret?: string; channelAccessToken?: LineAccessToken }` อย่างน้อยหนึ่งค่า (`channelId` ผ่าน `LINE_CHANNEL_ID_PATTERN` ของ contract แล้ว) ค่าที่ไม่ส่งคือค่าที่บันทึกไว้ |
 | Output | `{ botName: string; basicId: string; secretStatus: "verified" \| "unchecked" }` |
 | Port | `MessagingGateway`, `SecretCipher`, `SettingsRepository`, `Clock`, `Logger` |
-| Error | `line.credentials_invalid`, `line.channel_secret_invalid`, `line.channel_mismatch`, `line.unavailable` |
+| Error | `line.credentials_invalid`, `line.channel_secret_invalid`, `line.channel_mismatch`, `line.unavailable`, `line.not_configured`, `line.credentials_unreadable` |
 
+0. เติมค่าที่ไม่ส่งจากที่บันทึกไว้: Channel ID จาก `settings.get().lineChannelId` และค่าลับจาก `loadLineAccess()` ไม่มีค่าที่บันทึกไว้ให้เติม: log `line.credentials.rejected` คืน `line.not_configured` ถอดรหัสค่าที่บันทึกไม่ได้: คืน `line.credentials_unreadable` ไม่บันทึกทั้งสองกรณี การตรวจในข้อ 1 ถึง 2 ใช้ทั้งสามค่าเสมอ การแก้ค่าเดียวจึงยังกันคู่ที่ผิดและ channel อื่นเหมือนเดิม ([ADR 0031](../adr/0031-settings-tabs-user-wording-and-neutral-prompt.md))
 1. `bot = gateway.getBotInfo(channelAccessToken)` ล้มเหลว: log `line.credentials.rejected` คืน error นั้น ไม่บันทึก
 2. `secret = gateway.verifyChannelSecret(channelId, channelSecret)` ได้ `line.channel_secret_invalid`: log `line.credentials.rejected` คืน error นั้น ไม่บันทึก ได้ `line.unavailable` (429, 5xx, timeout, เครือข่าย): ไม่ขวางการบันทึก `secretStatus = unchecked` สำเร็จพร้อมบอทของ channel (`secret.bot`) ที่ `botUserId` ไม่เท่ากับ `bot.botUserId`: token เป็นของ channel อื่น webhook ทุกครั้งจะตรวจ signature ไม่ผ่าน จึง log `line.credentials.rejected` (`errorCode: line.channel_mismatch`) คืน `line.channel_mismatch` ไม่บันทึก สำเร็จและบอทตรงกัน: `secretStatus = verified` สำเร็จแต่อ่านบอทของ channel ไม่ได้ (`bot: null`): `unchecked`
 3. `settings.saveLineCredentials({ channelSecretEnc: cipher.encrypt(secret), channelAccessTokenEnc: cipher.encrypt(token) }, bot, { channelId, secretVerifiedAt: verified ? now : null })`
@@ -1016,7 +1043,7 @@ Test: ไม่มีข้อมูล → ทุกตัวเลขเป็
 
 Token ที่ LINE ออกให้ตอนตรวจถูกเพิกถอนทันทีภายใน adapter ไม่ถูกคืน เก็บ หรือ log ([MessagingGateway](domain-and-ports.md#messaginggateway))
 
-Test: ทุกค่าถูก → บันทึกแบบเข้ารหัส ค่าที่เก็บไม่เท่ากับค่าจริง Channel ID ถูกเก็บ และ `lineSecretVerifiedAt` เป็นเวลาตอนบันทึก, token ของ channel อื่นกับ Channel ID และ secret ที่ถูก → `line.channel_mismatch` ไม่มีการเขียน, อ่านบอทของ channel ไม่ได้ → บันทึกด้วย `unchecked`, secret ไม่ใช่ของ Channel ID → `line.channel_secret_invalid` ไม่มีการเขียน, LINE ตรวจ secret ไม่ได้ → บันทึกด้วย `unchecked` และ `lineSecretVerifiedAt` เป็น null, token ผิด → `line.credentials_invalid` ไม่มีการเขียนและไม่ตรวจ secret, LINE ล่มตอนตรวจ token → `line.unavailable`, บันทึกแล้ว lastLineError ถูกล้าง, log ไม่มีค่า token และ secret
+Test: ทุกค่าถูก → บันทึกแบบเข้ารหัส ค่าที่เก็บไม่เท่ากับค่าจริง Channel ID ถูกเก็บ และ `lineSecretVerifiedAt` เป็นเวลาตอนบันทึก, token ของ channel อื่นกับ Channel ID และ secret ที่ถูก → `line.channel_mismatch` ไม่มีการเขียน, อ่านบอทของ channel ไม่ได้ → บันทึกด้วย `unchecked`, secret ไม่ใช่ของ Channel ID → `line.channel_secret_invalid` ไม่มีการเขียน, LINE ตรวจ secret ไม่ได้ → บันทึกด้วย `unchecked` และ `lineSecretVerifiedAt` เป็น null, token ผิด → `line.credentials_invalid` ไม่มีการเขียนและไม่ตรวจ secret, LINE ล่มตอนตรวจ token → `line.unavailable`, บันทึกแล้ว lastLineError ถูกล้าง, log ไม่มีค่า token และ secret, ส่งเฉพาะ token ใหม่ → ตรวจกับ Channel ID และ secret ที่บันทึกไว้แล้วแทนเฉพาะ token, secret ใหม่ที่ไม่ใช่ของ Channel ID ที่บันทึก → `line.channel_secret_invalid` และ secret เดิมอยู่, token ใหม่ของ channel อื่น → `line.channel_mismatch`, ถอดรหัสค่าที่บันทึกไม่ได้ → `line.credentials_unreadable`, ส่งบางค่าขณะยังไม่มีค่าที่บันทึก → `line.not_configured` ไม่มีการเขียน
 
 ## TestLineConnection
 
@@ -1054,7 +1081,7 @@ Test: ผ่าน → ชื่อบอทถูกอัปเดต lastLine
 4. `sha = hasher.sha256(bytes)`, `existing = knowledge.findBySha256(sha)`
 5. ถ้า `retryOf` ไม่เป็น null: `target = knowledge.findById(retryOf)` null คืน `knowledge.not_found`, `target.status !== "failed"` คืน `knowledge.not_retryable`, `existing` มีและ `existing.id !== retryOf` คืน `knowledge.duplicate`
 6. ถ้า `retryOf` เป็น null และ `existing` มี: `existing.status = failed` ให้ถือเป็นการลองใหม่ของแถวนั้น (`retryOf = existing.id`) ไม่เช่นนั้นคืน `knowledge.duplicate`
-7. `s = settings.get()`, `usage.sumCost(bangkokDayRange(now)) >= s.aiDailyBudget` คืน `ai.budget_exhausted` (งบนับรวมการอ่านไฟล์ตาม [usage-cost](../specs/usage-cost.md#งบต่อวัน)) ไม่ตรวจ kill switch เพราะ kill switch หยุดการตอบลูกค้า ไม่ใช่การจัดการคลัง
+7. `s = settings.get()`, `usage.sumCost(bangkokDayRange(now)) >= s.aiDailyBudget` คืน `ai.budget_exhausted` (งบนับรวมการอ่านไฟล์ตาม [usage-cost](../specs/usage-cost.md#งบต่อวัน)) ไม่ตรวจ kill switch เพราะ kill switch หยุดการตอบผู้ใช้ ไม่ใช่การจัดการคลัง
 8. `doc = retryOf ? knowledge.restartProcessing(retryOf, ...) : knowledge.create({ id: ids.documentId(), ... })` ส่ง `knowledge.duplicate` ต่อถ้าชนจากคำขอพร้อมกัน `restartProcessing` เป็น compare-and-set บน `status = failed` การลองใหม่สองครั้งพร้อมกันจึงได้การแปลงครั้งเดียว ครั้งที่แพ้ได้ `knowledge.not_retryable` ถ้าคำขอไม่ได้ส่ง `retryOf` มาเอง (ข้อ 6) ครั้งที่แพ้ได้ `knowledge.duplicate` เพราะพบแถวที่ processing แล้ว เหมือนกรณีที่ไม่ได้มาพร้อมกัน
 9. log `knowledge.ingest.started` คืน `{ document: doc, followUp: { documentId: doc.id, bytes, model: s.aiModel } }`
 
@@ -1135,7 +1162,7 @@ Port: `KnowledgeRepository` (และ `Clock`, `Logger` สำหรับ `Lis
 
 | Use case | Input | Output | Error |
 | --- | --- | --- | --- |
-| `GetUsageReport` | `{ month: string }` (route ตรวจรูปแบบ `YYYY-MM` แล้ว) | ดูด้านล่าง (แถวของลูกค้ามี `pictureUrl` จาก `UsageByContactRow`) | ไม่มี |
+| `GetUsageReport` | `{ month: string }` (route ตรวจรูปแบบ `YYYY-MM` แล้ว) | ดูด้านล่าง (แถวของผู้ใช้มี `pictureUrl` จาก `UsageByContactRow`) | ไม่มี |
 | `GetContactUsage` | `{ contactId: ContactId; month: string }` | `AiUsageRecord[]` | ไม่มี |
 
 Port: `UsageRepository` และ `config.priceTable`
@@ -1149,9 +1176,9 @@ Port: `UsageRepository` และ `config.priceTable`
 
 "จำนวนครั้งที่ AI ตอบ" ในตารางคือจำนวนครั้งที่เรียกโมเดลเพื่อตอบ (แถว kind reply ทุก outcome) และ "ราคาเฉลี่ยต่อข้อความที่ AI ตอบ" หารต้นทุนการตอบทั้งหมดด้วยจำนวนครั้งที่ outcome เป็น ok ข้อความที่ถูกกันด้วยขอบเขตหัวข้อไม่นับเป็น "AI ตอบ" การคัดกรองอยู่ในแถว `guard` แยก
 
-`GetContactUsage`: `usage.listForContact(contactId, bangkokMonthRange(month))` ลูกค้าที่ไม่มีอยู่ได้รายการว่าง ไม่เป็น error
+`GetContactUsage`: `usage.listForContact(contactId, bangkokMonthRange(month))` ผู้ใช้ที่ไม่มีอยู่ได้รายการว่าง ไม่เป็น error
 
-Test: เดือนที่ไม่มีข้อมูล → ทุกยอดเป็น 0 และค่าเฉลี่ยเป็น null, แถวที่สร้าง 2026-11-30T17:30Z นับเป็นเดือน 2026-12 ตามเวลาไทย, ค่าเฉลี่ยหารด้วยจำนวน ok ไม่ใช่ทุก outcome, ingest แยกจากลูกค้า, แถว kind guard อยู่ใน `guard` ไม่อยู่ในแถวของลูกค้าและรวมใน totalCost, แถว kind reply outcome blocked นับใน replyCount แต่ไม่นับใน okCount, Contact ที่ถูกลบตาม runbook ขึ้นเป็นแถวที่ contactId null
+Test: เดือนที่ไม่มีข้อมูล → ทุกยอดเป็น 0 และค่าเฉลี่ยเป็น null, แถวที่สร้าง 2026-11-30T17:30Z นับเป็นเดือน 2026-12 ตามเวลาไทย, ค่าเฉลี่ยหารด้วยจำนวน ok ไม่ใช่ทุก outcome, ingest แยกจากผู้ใช้, แถว kind guard อยู่ใน `guard` ไม่อยู่ในแถวของผู้ใช้และรวมใน totalCost, แถว kind reply outcome blocked นับใน replyCount แต่ไม่นับใน okCount, Contact ที่ถูกลบตาม runbook ขึ้นเป็นแถวที่ contactId null
 
 ## GetSystemStatus
 

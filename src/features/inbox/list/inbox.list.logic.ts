@@ -64,23 +64,6 @@ export function nextRowIndex(key: string, current: number, count: number): numbe
   }
 }
 
-/** Tab to select after ArrowLeft or ArrowRight; wraps around. Null for any other key. */
-export function nextTabIndex(key: string, current: number, count: number): number | null {
-  if (count <= 0) return null;
-  switch (key) {
-    case 'ArrowRight':
-      return (current + 1) % count;
-    case 'ArrowLeft':
-      return (current - 1 + count) % count;
-    case 'Home':
-      return 0;
-    case 'End':
-      return count - 1;
-    default:
-      return null;
-  }
-}
-
 /**
  * The row that is in the tab order: the one that has focus, else the selected chat, else the
  * first. Null when the list is empty.

@@ -36,3 +36,4 @@ export type { AllPorts, RequestContext, UseCase, UseCaseConfig } from './types';
 export * from './handle-rich-menu-action.use-case';
 export * from './publish-rich-menu.use-case';
 export * from './send-welcome.use-case';
+export * from './refresh-contact-profile.use-case';

@@ -16,7 +16,7 @@
 | ต้นทาง | ทุก method ที่ไม่ใช่ `GET` หรือ `HEAD` ต้องมี header `Origin` เป็น origin แบบ http(s) ที่ตรงกับ origin ของคำขอเอง (scheme จาก `x-forwarded-proto` หรือ `request.url`, host จาก `x-forwarded-host` หรือ `Host`) หรือกับ origin ของ `APP_BASE_URL` ยกเว้น webhook ไม่มี `Origin`, `Origin: null` หรือไม่ตรงทั้งสองตอบ 403 `request.origin_forbidden` proxy.ts และตัวห่อ route ใช้ `isAllowedOrigin` ใน `src/composition/request-origin.ts` ตัวเดียวกัน ([ADR 0025](../adr/0025-same-origin-or-app-base-url.md)) |
 | Request id | ทุก response มี `x-request-id` ที่ route สร้างด้วย `IdGenerator.requestId()` |
 | การตรวจ | ตรวจ path, query และ body ด้วย zod ใน `src/contracts/` ไม่ผ่านตอบ 400 `request.invalid` field ที่ไม่รู้จักใน JSON body ถือว่าไม่ผ่าน (`strict`) ทุกสตริงของคำขอ (path, query, body รวมสตริงที่ซ้อนใน object หรือ array และชื่อไฟล์ PDF) ที่มี U+0000 ตอบ 400 `request.invalid` ตรวจที่เดียวใน `composition/http-request.ts` ด้วย `hasNulCharacter` เพราะ Postgres ไม่รับอักขระนี้ใน text |
-| Id ใน path | id ของแถว (`:id`, `:messageId`, `:noteId`) ต้องเป็น UUID ค่าที่ไม่ใช่ UUID ตอบรหัส not found ของ resource นั้น (404) เหมือน id ที่ไม่มีอยู่ ไม่ส่งต่อถึงฐานข้อมูล (`pathIdSchema`): ลูกค้า `contact.not_found`, โน้ต `note.not_found`, การส่งอีกครั้ง `message.not_found` (ทั้ง `:id` และ `:messageId`), เอกสาร `knowledge.not_found`, ค่าใช้จ่ายรายลูกค้า `contact.not_found` (id ที่ถูกรูปแบบแต่ไม่มียังได้รายการว่าง) |
+| Id ใน path | id ของแถว (`:id`, `:messageId`, `:noteId`) ต้องเป็น UUID ค่าที่ไม่ใช่ UUID ตอบรหัส not found ของ resource นั้น (404) เหมือน id ที่ไม่มีอยู่ ไม่ส่งต่อถึงฐานข้อมูล (`pathIdSchema`): ผู้ใช้ `contact.not_found`, โน้ต `note.not_found`, การส่งอีกครั้ง `message.not_found` (ทั้ง `:id` และ `:messageId`), เอกสาร `knowledge.not_found`, ค่าใช้จ่ายรายผู้ใช้ `contact.not_found` (id ที่ถูกรูปแบบแต่ไม่มียังได้รายการว่าง) |
 | ข้อผิดพลาดที่ไม่คาดคิด | ตอบ 500 `internal.unexpected` และ log `http.request.failed` |
 | Log ของคำขอ | ตัวห่อ route ใน `composition/` log `http.request.completed` ทุกคำขอ และ `http.origin.rejected` เมื่อต้นทางไม่ตรง route เองไม่เรียก Logger |
 | การจำกัดความถี่ | ตอบ 429 พร้อม header `Retry-After` เป็นวินาที |
@@ -62,7 +62,7 @@ DTO ถูกสร้างจาก entity ใน route ด้วยฟัง�
 | `typing` | `RATE_LIMIT_TYPING` | `POST /api/contacts/:id/typing` | ไม่มี ตอบ `shown: false` |
 | `guard_test` | `RATE_LIMIT_GUARD_TEST` | `POST /api/settings/guard/test` | `settings.guard_rate_limited` |
 | `note_create` | `RATE_LIMIT_NOTE_CREATE` | `POST /api/contacts/:id/notes` | `note.rate_limited` |
-| `rich_menu_tap` | `RATE_LIMIT_RICH_MENU_TAP` | `POST /api/line/webhook` ต่อ postback ของลูกค้าหนึ่งคน | ไม่มี การกดนั้นถูกทิ้ง และ webhook ยังตอบ 200 |
+| `rich_menu_tap` | `RATE_LIMIT_RICH_MENU_TAP` | `POST /api/line/webhook` ต่อ postback ของผู้ใช้หนึ่งคน | ไม่มี การกดนั้นถูกทิ้ง และ webhook ยังตอบ 200 |
 
 ## DTO ร่วม
 
@@ -85,7 +85,7 @@ interface ContactDto {
   aiReplying: boolean;                // aiState = replying
   unreadCount: number;
   lastMessage: {                      // ข้อความล่าสุดของใครก็ได้ ยกเว้น at
-    at: IsoDate;                      // เวลาข้อความล่าสุดของลูกค้า (ไม่มีใช้ createdAt) คือค่าที่รายชื่อใช้เรียง
+    at: IsoDate;                      // เวลาข้อความล่าสุดของผู้ใช้ (ไม่มีใช้ createdAt) คือค่าที่รายชื่อใช้เรียง
     by: "customer" | "admin" | "ai";
     type: "text" | "image" | "video" | "audio" | "sticker" | "other";
     text: string | null;              // ตัดแล้วไม่เกิน PREVIEW_TEXT_MAX_CHARS
@@ -111,7 +111,7 @@ interface MessageDto {
   sticker: { packageId: string; stickerId: string; imageUrl: string } | null;
   otherKind: OtherKind | null;
   eventCode: EventCode | null;
-  quote: {                            // ขาเข้าที่ลูกค้าใช้ "ตอบกลับ" ของ LINE, นอกนั้น null หาใน query เดียวกับรายการข้อความ (รวม polling)
+  quote: {                            // ขาเข้าที่ผู้ใช้ใช้ "ตอบกลับ" ของ LINE, นอกนั้น null หาใน query เดียวกับรายการข้อความ (รวม polling)
     available: boolean;               // false: ไม่รู้จักข้อความต้นทาง field อื่นเป็น null ทั้งหมด
     messageId: string | null;
     author: "customer" | "admin" | "ai" | null;
@@ -274,7 +274,7 @@ interface UploadTicketDto {
 - ข้อความใหม่ได้ `seq = updatedSeq = nextval` ทุกการแก้แถว (สถานะการส่ง, สถานะสื่อ) ได้ `updatedSeq = nextval` ใหม่ ส่วน `seq` ไม่เปลี่ยน
 - ทุกการแก้แถวของ Contact (ข้อความล่าสุด, ยังไม่อ่าน, รอแอดมิน, สวิตช์, โปรไฟล์, การติดตาม, aiState) ได้ `updatedSeq` ใหม่
 - `seq` ใช้เรียงข้อความบนหน้าจอและแบ่งหน้าย้อนหลัง `updatedSeq` ใช้เป็น cursor ของ polling
-- Cursor ของหน้าเว็บคือ `highWater` ที่สูงที่สุดที่เคยได้ ต่อหนึ่งรายการ (รายชื่อ หรือข้อความของลูกค้าหนึ่งคน)
+- Cursor ของหน้าเว็บคือ `highWater` ที่สูงที่สุดที่เคยได้ ต่อหนึ่งรายการ (รายชื่อ หรือข้อความของผู้ใช้หนึ่งคน)
 
 ### การเลื่อน cursor และการขอย้อนหลัง
 
@@ -292,12 +292,12 @@ cursor = max(cursor, response.highWater)
 
 ### การลบ
 
-แอปไม่มี endpoint ที่ลบข้อความหรือลูกค้า การลบตาม [operations](../runbooks/operations.md#ลบข้อมูลของลูกค้าหนึ่งคน) ทำในฐานข้อมูลตรง และหน้าเว็บจะเห็นหลังโหลดหน้าแรกใหม่เท่านั้น
+แอปไม่มี endpoint ที่ลบข้อความหรือผู้ใช้ การลบตาม [operations](../runbooks/operations.md#ลบข้อมูลของผู้ใช้หนึ่งคน) ทำในฐานข้อมูลตรง และหน้าเว็บจะเห็นหลังโหลดหน้าแรกใหม่เท่านั้น
 
-### รายชื่อลูกค้า
+### รายชื่อผู้ใช้
 
 1. หน้าแรก: `GET /api/contacts?filter=all` เก็บ `highWater` เป็น cursor
-2. ทุก `POLL_INTERVAL_MS`: `GET /api/contacts?afterUpdatedSeq=...` ได้ลูกค้าที่เปลี่ยนโดยไม่กรอง หน้าเว็บรวมเข้า cache แล้วกรองและเรียงเองด้วย `matchesContactFilter` และ `compareContacts` ([ui-screens](../specs/ui-screens.md#82-srcfeaturesinboxinboxlogicts)) ลูกค้าที่ไม่ตรงตัวกรองแล้วหายจากรายการ
+2. ทุก `POLL_INTERVAL_MS`: `GET /api/contacts?afterUpdatedSeq=...` ได้ผู้ใช้ที่เปลี่ยนโดยไม่กรอง หน้าเว็บรวมเข้า cache แล้วกรองและเรียงเองด้วย `matchesContactFilter` และ `compareContacts` ([ui-screens](../specs/ui-screens.md#82-srcfeaturesinboxinboxlogicts)) ผู้ใช้ที่ไม่ตรงตัวกรองแล้วหายจากรายการ
 3. `counts` ในทุกคำตอบใช้แสดงจำนวนของตัวกรองและจำนวนยังไม่อ่านในเมนู
 4. การเลื่อนลงโหลดหน้าถัดไปด้วย `before` ของคำตอบก่อนหน้า
 5. เปลี่ยนตัวกรองหรือคำค้น: โหลดหน้าแรกใหม่ cursor ของ polling ไม่เปลี่ยน
@@ -414,7 +414,7 @@ Response 200:
 }
 ```
 
-เรียงตาม `sortAt` = เวลาข้อความขาเข้าล่าสุดของลูกค้า (`Contact.lastMessageAt`) หรือ `createdAt` เมื่อยังไม่มี ใหม่ไปเก่า แล้ว `id` ใหม่ไปเก่า ข้อความของแอดมินหรือ AI, บรรทัดเหตุการณ์, การอ่าน และสวิตช์ไม่เปลี่ยนลำดับ `before` เป็น base64url ของ `{ sortAt, id }` หน้าเว็บไม่แกะค่า
+เรียงตาม `sortAt` = เวลาข้อความขาเข้าล่าสุดของผู้ใช้ (`Contact.lastMessageAt`) หรือ `createdAt` เมื่อยังไม่มี ใหม่ไปเก่า แล้ว `id` ใหม่ไปเก่า ข้อความของแอดมินหรือ AI, บรรทัดเหตุการณ์, การอ่าน และสวิตช์ไม่เปลี่ยนลำดับ `before` เป็น base64url ของ `{ sortAt, id }` หน้าเว็บไม่แกะค่า
 
 ### GET /api/contacts/:id
 
@@ -467,7 +467,7 @@ Body `{ "text": string }` ตัดช่องว่างหัวท้าย
 | --- | --- |
 | Use case | `DeleteContactNote` |
 
-`noteId` เป็น UUID Response 200 `{ "deleted": true }` Error: 404 `note.not_found` (ไม่มี หรือเป็นของลูกค้าคนอื่น)
+`noteId` เป็น UUID Response 200 `{ "deleted": true }` Error: 404 `note.not_found` (ไม่มี หรือเป็นของผู้ใช้คนอื่น)
 
 ### GET /api/contacts/:id/messages
 
@@ -533,7 +533,7 @@ Error: 404 `message.not_found`, 409 `message.not_retryable`, 409 `message.retry_
 | | |
 | --- | --- |
 | Use case | `ShowTypingToCustomer` |
-| การจำกัดความถี่ | `typing` ตาม `RATE_LIMIT_TYPING` ต่อลูกค้า (เกินแล้วไม่ error) |
+| การจำกัดความถี่ | `typing` ตาม `RATE_LIMIT_TYPING` ต่อผู้ใช้ (เกินแล้วไม่ error) |
 
 Body ว่าง Response 200 `{ "shown": boolean }` Error: 404 `contact.not_found`
 
@@ -621,7 +621,7 @@ Body ต้องมีอย่างน้อยหนึ่ง field:
 | `welcomeText` | string | ตัดช่องว่างหัวท้ายแล้ว 0 ถึง `WELCOME_TEXT_MAX_CHARS` ตัว สตริงว่างกลับไปใช้ข้อความเริ่มต้น |
 | `guardTopics` | string[] | 0 ถึง `GUARD_MAX_TOPICS` รายการ แต่ละรายการ 1 ถึง `GUARD_TOPIC_MAX_CHARS` ตัวหลังตัดช่องว่างหัวท้าย ห้ามซ้ำกัน ตรวจด้วย `normalizeGuardTopics` (`issue` ไม่เป็น null หรือมีรายการว่างไม่ผ่าน) |
 
-field อื่น รวม `guardRefusalText` ที่เคยมี ไม่ผ่าน: ข้อความปฏิเสธคงที่ใน `guardRefusalText(particle)` ([topic-guard](../specs/topic-guard.md))
+field อื่น รวม `guardRefusalText` ที่เคยมี ไม่ผ่าน: ข้อความปฏิเสธคงที่ใน `guardRefusalText(particle, topics)` ([topic-guard](../specs/topic-guard.md))
 
 Response 200 `SettingsDto` ที่อ่านใหม่หลังบันทึก: `UpdateSettings` คืน `Settings` ซึ่งไม่มี `webhookUrl`, ค่าใช้จ่ายวันนี้, `guard.blockedToday` และ `client.pollIntervalMs` route จึงเรียก `GetSettings` อีกครั้งแล้วตอบผลนั้น ซึ่งเป็นรูปเดียวกับ `GET /api/settings`
 
@@ -657,11 +657,13 @@ Error: 409 `ai.disabled_globally`, 409 `settings.guard_topics_required`, 409 `ai
 
 | Body field | ชนิด | บังคับ | ข้อกำหนด |
 | --- | --- | --- | --- |
-| `channelId` | string | ใช่ | ตัวเลข 1 ถึง `LINE_CHANNEL_ID_MAX_CHARS` หลัก (`LINE_CHANNEL_ID_PATTERN`) |
-| `channelSecret` | string | ใช่ | 1 ถึง 200 ตัว ไม่มีช่องว่าง |
-| `channelAccessToken` | string | ใช่ | 1 ถึง 1000 ตัว ไม่มีช่องว่าง |
+| `channelId` | string | ไม่ | ตัวเลข 1 ถึง `LINE_CHANNEL_ID_MAX_CHARS` หลัก (`LINE_CHANNEL_ID_PATTERN`) |
+| `channelSecret` | string | ไม่ | 1 ถึง 200 ตัว ไม่มีช่องว่าง |
+| `channelAccessToken` | string | ไม่ | 1 ถึง 1000 ตัว ไม่มีช่องว่าง |
 
-Response 200 `{ "botName": string, "basicId": string, "secretStatus": "verified" | "unchecked" }` (`unchecked`: LINE ตรวจ Channel secret ไม่ได้ตอนนี้ ค่าถูกบันทึกแล้ว) หน้าเว็บโหลด `GET /api/settings` ใหม่หลังสำเร็จ Error: 422 `line.credentials_invalid`, 422 `line.channel_secret_invalid` (Channel ID กับ Channel secret ไม่ใช่คู่กัน ไม่บันทึก), 422 `line.channel_mismatch` (Channel access token เป็นของ channel อื่น ไม่บันทึก), 503 `line.unavailable` (ตรวจ access token ไม่ได้) หน้าเว็บรอคำตอบ `CLIENT_TIMEOUT_LINE_CHECK_MS`
+ต้องมีอย่างน้อยหนึ่ง field (body ว่างได้ 400 `request.invalid`) หน้าเว็บส่งเฉพาะค่าที่แอดมินแก้ ค่าที่ไม่ส่งใช้ค่าที่บันทึกไว้ และ server ตรวจทั้งสามค่ากับ LINE เสมอ ([use-cases](use-cases.md#setlinecredentials), [ADR 0031](../adr/0031-settings-tabs-user-wording-and-neutral-prompt.md))
+
+Response 200 `{ "botName": string, "basicId": string, "secretStatus": "verified" | "unchecked" }` (`unchecked`: LINE ตรวจ Channel secret ไม่ได้ตอนนี้ ค่าถูกบันทึกแล้ว) หน้าเว็บโหลด `GET /api/settings` ใหม่หลังสำเร็จ Error: 422 `line.credentials_invalid`, 422 `line.channel_secret_invalid` (Channel ID กับ Channel secret ไม่ใช่คู่กัน ไม่บันทึก), 422 `line.channel_mismatch` (Channel access token เป็นของ channel อื่น ไม่บันทึก), 503 `line.unavailable` (ตรวจ access token ไม่ได้), 409 `line.not_configured` (ส่งบางค่าขณะยังไม่มีค่าที่บันทึกให้เติม), 409 `line.credentials_unreadable` (ถอดรหัสค่าที่บันทึกไว้ไม่ได้) หน้าเว็บรอคำตอบ `CLIENT_TIMEOUT_LINE_CHECK_MS`
 
 ### POST /api/settings/line/test
 
@@ -755,7 +757,7 @@ Response 200:
   contacts: UsageRowDto[];
   ingest: { count: number; inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; totalTokens: number; costUsd: UsdString };
   guard: { count: number; inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; totalTokens: number; costUsd: UsdString };  // การคัดกรองขอบเขตหัวข้อ รวมการทดลอง
-  totalCostUsd: UsdString;                // ลูกค้า + ingest + guard
+  totalCostUsd: UsdString;                // ผู้ใช้ + ingest + guard
   replyCount: number;
   averageCostPerReplyUsd: UsdString | null;
   /** การเรียกทุกชนิดในเดือนที่ส่งแล้วไม่ได้คำตอบ (ai.no_response) อาจถูกคิดเงินแต่ไม่อยู่ใน totalCostUsd */

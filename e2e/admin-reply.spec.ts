@@ -28,7 +28,7 @@ test('journey 2: the admin reply reaches LINE and shows as sent', async ({
   isMobile,
 }) => {
   const suffix = uniqueSuffix();
-  const name = `ลูกค้าแอดมินตอบ ${suffix}`;
+  const name = `ผู้ใช้แอดมินตอบ ${suffix}`;
 
   // 2.1
   const v = await createContactWithMessage(request, { displayName: name, text: `ถาม ${suffix}` });
@@ -113,8 +113,8 @@ test('journey 2: the list follows the customer messages, not the replies of the 
   isMobile,
 }) => {
   const suffix = uniqueSuffix();
-  const nameA = `ลูกค้าลำดับ A ${suffix}`;
-  const nameB = `ลูกค้าลำดับ B ${suffix}`;
+  const nameA = `ผู้ใช้ลำดับ A ${suffix}`;
+  const nameB = `ผู้ใช้ลำดับ B ${suffix}`;
   // Other journeys add contacts at the same time, so only the order of these two is checked.
   const isAbove = async (upper: string, lower: string): Promise<boolean> => {
     const ids = await page

@@ -82,6 +82,9 @@ export const DEFAULT_AI_MODEL: AiModelId = 'claude-sonnet-5-5';
 export const DEFAULT_AI_DAILY_BUDGET_USD = '2.00';
 export const DEFAULT_POLITE_PARTICLE: PoliteParticle = 'ค่ะ';
 export const DEFAULT_AI_ANSWER_MODE: AiAnswerMode = 'general';
+// LINE profile refresh (specs/line-messaging.md)
+/** A contact's LINE profile is fetched again at most this often, counted from the last attempt. */
+export const PROFILE_REFRESH_AFTER_MS = 24 * 60 * 60 * 1000;
 // Topic guard (specs/topic-guard.md)
 export const GUARD_MAX_TOPICS = 20;
 export const GUARD_TOPIC_MAX_CHARS = 80;
@@ -90,6 +93,8 @@ export const GUARD_MODEL: AiModelId = 'claude-haiku-5-5';
 export const GUARD_MAX_TOKENS = 2000;
 export const GUARD_TIMEOUT_MS = 10_000;
 export const GUARD_CONTEXT_TURNS = 4;
+/** Topics the refusal names; more are summed up as "และเรื่องอื่น ๆ". */
+export const GUARD_REFUSAL_MAX_TOPICS = 5;
 
 // 10.2 Rate limits (fixed window)
 export const RATE_LIMIT_UNLOCK = { limit: 5, windowMs: 60_000 } as const;

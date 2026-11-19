@@ -10,6 +10,7 @@ const row: ContactRow = {
   followStatus: 'following',
   followedAt: null,
   followStatusAt: null,
+  profileFetchedAt: null,
   aiEnabled: false,
   needsAdmin: false,
   needsAdminReason: null,
@@ -28,9 +29,11 @@ const row: ContactRow = {
 
 describe('toContact', () => {
   it('maps a row to the entity', () => {
-    // followStatusAt is a column only: setFollowStatus compares it; the entity does not carry it.
+    // followStatusAt and profileFetchedAt are columns only: setFollowStatus and
+    // claimProfileRefresh compare them; the entity does not carry them.
     const entity: Partial<typeof row> = { ...row };
     delete entity.followStatusAt;
+    delete entity.profileFetchedAt;
     expect(toContact(row)).toEqual(entity);
   });
 

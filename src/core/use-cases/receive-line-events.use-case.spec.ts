@@ -113,11 +113,15 @@ describe('ReceiveLineEvents', () => {
   /** Runs the use case with a correctly signed body. */
   const deliver = (body: string) => run({ rawBody: body, signature: gateway.sign(body) }, ctx);
 
-  const followUpsOf = async (body: string) => {
+  const allFollowUpsOf = async (body: string) => {
     const result = await deliver(body);
     if (!result.ok) throw new Error(`unexpected error ${result.error.code}`);
     return result.value.followUps;
   };
+
+  /** The jobs without `refresh_profile`, which the "profile refresh" group checks on its own. */
+  const followUpsOf = async (body: string) =>
+    (await allFollowUpsOf(body)).filter((job) => job.kind !== 'refresh_profile');
 
   const allContacts = async (): Promise<Contact[]> =>
     (await contacts.list({ filter: 'all', search: null, before: null, limit: 100 })).contacts;
@@ -811,6 +815,45 @@ describe('ReceiveLineEvents', () => {
       await followUpsOf(bodyOf(unfollowEvent()));
 
       expect(await messagesOf()).toHaveLength(1);
+    });
+  });
+
+  describe('profile refresh', () => {
+    it('fetches the profile of a first-seen contact in the request and records the attempt', async () => {
+      gateway.setProfile(USER, { displayName: 'คุณหนึ่ง', pictureUrl: null });
+      const jobs = await allFollowUpsOf(bodyOf(textEvent('hi')));
+      const c = await contactOf();
+      expect(c.displayName).toBe('คุณหนึ่ง');
+      expect(contacts.profileFetchedAtOf(c.id)).toEqual(clock.now());
+      expect(jobs.filter((j) => j.kind === 'refresh_profile')).toEqual([]);
+    });
+
+    it('records the attempt of a failed first fetch too, so the next try waits a day', async () => {
+      gateway.failNext('getProfile', 'line.profile_unavailable');
+      await allFollowUpsOf(bodyOf(textEvent('hi')));
+      const c = await contactOf();
+      expect(c.displayName).toBeNull();
+      expect(contacts.profileFetchedAtOf(c.id)).toEqual(clock.now());
+    });
+
+    it('hands an existing contact one refresh job per request, without a LINE call in the request', async () => {
+      await followUpsOf(bodyOf(textEvent('first')));
+      const c = await contactOf();
+      const profile = vi.spyOn(gateway, 'getProfile');
+      const jobs = await allFollowUpsOf(
+        bodyOf(textEvent('second'), textEvent('third'), followEvent()),
+      );
+      expect(jobs.filter((j) => j.kind === 'refresh_profile')).toEqual([
+        { kind: 'refresh_profile', contactId: c.id },
+      ]);
+      expect(profile).not.toHaveBeenCalled();
+    });
+
+    it('gives an unfollow no refresh job', async () => {
+      await followUpsOf(bodyOf(textEvent('first')));
+      expect(
+        (await allFollowUpsOf(bodyOf(unfollowEvent()))).filter((j) => j.kind === 'refresh_profile'),
+      ).toEqual([]);
     });
   });
 

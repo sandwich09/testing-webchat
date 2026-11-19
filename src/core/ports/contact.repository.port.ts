@@ -32,6 +32,12 @@ export interface ContactRepository {
     p: { displayName: string | null; pictureUrl: string | null },
   ): Promise<void>;
   /**
+   * Compare-and-set in one statement: records `now` as the time of the latest profile fetch
+   * attempt only while the stored one is null or not later than `staleBefore`. True when this
+   * call claimed the fetch; of concurrent calls for one contact exactly one gets true.
+   */
+  claimProfileRefresh(id: ContactId, now: Date, staleBefore: Date): Promise<boolean>;
+  /**
    * Compare-and-set by event time: applies only when the event that set the current status is
    * not newer than `at`, and the status changes (or, for `following`, the row has no followedAt
    * yet: a contact just created by its follow). `following` sets followedAt; `unfollowed` clears

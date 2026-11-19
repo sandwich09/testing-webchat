@@ -20,6 +20,12 @@ const SCOPE_GENERAL =
 const GREETING_NAMED = 'ให้ทักทายกลับและแนะนำตัวสั้น ๆ ในประโยคเดียว โดยบอกชื่อของคุณ แล้วถามว่ามีอะไรให้ช่วย\n';
 const GREETING_UNNAMED = 'ให้ทักทายกลับและแนะนำตัวสั้น ๆ ในประโยคเดียว แล้วถามว่ามีอะไรให้ช่วย\n';
 const FIRST_LINE = 'คุณคือผู้ช่วย AI ที่ตอบแชททาง LINE แทนแอดมินของบัญชีนี้\n';
+const NOT_A_SHOP_RULE =
+  '- อย่าสมมติหรือพูดว่าบัญชีนี้เป็นร้าน ธุรกิจ หรือองค์กรใด ๆ และอย่าพูดถึงสินค้า บริการ หรือ "ร้าน" เว้นแต่ <custom_instructions> หรือ <knowledge> บอกไว้ ถ้าต้องพูดถึงบัญชีนี้ ให้เรียกว่า "บัญชีนี้"\n';
+const SCOPE_QUESTION_GENERAL =
+  '- ถ้าถูกถามว่าคุยหรือตอบเรื่องอะไรได้บ้าง ให้บอกตามจริงว่าคุยเรื่องทั่วไปและตอบคำถามความรู้ทั่วไปได้ และถ้า <knowledge> มีข้อมูล ให้บอกเรื่องที่มีในนั้นด้วย needsAdmin เป็น false';
+const SCOPE_QUESTION_KNOWLEDGE_ONLY =
+  '- ถ้าถูกถามว่าคุยหรือตอบเรื่องอะไรได้บ้าง ให้บอกตามจริงเฉพาะเรื่องที่มีใน <knowledge> ถ้า <knowledge> ว่าง ให้บอกสั้น ๆ ว่าตอนนี้ยังไม่มีข้อมูลให้ตอบ แต่ทักทายและคุยสั้น ๆ ได้ needsAdmin เป็น false';
 
 describe('buildSystemInstructions', () => {
   it('is byte-identical for the same input', () => {
@@ -63,11 +69,16 @@ describe('buildSystemInstructions', () => {
       expect(out).toContain('- ถ้าเคยแนะนำตัวแล้ว ไม่ต้องแนะนำซ้ำ\n');
       if (mode === 'knowledge_only') {
         expect(out).toContain(SCOPE_KNOWLEDGE_ONLY);
-        expect(out).toContain('- ทักทาย ขอบคุณ และคุยสั้น ๆ ได้ตามปกติ\n- ตัวเลข เวลา');
+        expect(out).toContain(
+          '- ทักทาย ขอบคุณ และคุยสั้น ๆ ได้ตามปกติ\n' + SCOPE_QUESTION_KNOWLEDGE_ONLY + '\n- ตัวเลข เวลา',
+        );
         expect(out).not.toContain('ความรู้ทั่วไป');
       } else {
         expect(out).toContain(SCOPE_GENERAL);
-        expect(out).toContain('ให้ส่งให้แอดมิน และตั้ง needsAdmin เป็น true\n- ตัวเลข เวลา');
+        expect(out).toContain(
+          'ให้ส่งให้แอดมิน และตั้ง needsAdmin เป็น true\n' + SCOPE_QUESTION_GENERAL + '\n- ตัวเลข เวลา',
+        );
+        expect(out).not.toContain(SCOPE_QUESTION_KNOWLEDGE_ONLY);
         expect(out).not.toContain('โดยใช้ข้อมูลใน <knowledge> เท่านั้น');
       }
       // The link rule and the output block stay in every combination.
@@ -76,7 +87,7 @@ describe('buildSystemInstructions', () => {
     },
   );
 
-  it('never carries the LINE OA name, nor the word for a shop (ร้าน)', () => {
+  it('never carries the LINE OA name, nor the word for a shop (ร้าน) outside the rule against it', () => {
     const withOaName = {
       ...settings,
       lineBotName: 'ต้นหอม คาเฟ่ OA',
@@ -86,7 +97,12 @@ describe('buildSystemInstructions', () => {
       for (const aiAnswerMode of ['general', 'knowledge_only'] as const) {
         const out = buildSystemInstructions({ ...withOaName, aiName, aiAnswerMode });
         expect(out).not.toContain('ต้นหอม');
-        expect(out).not.toContain('ร้าน');
+        expect(out).toContain(NOT_A_SHOP_RULE);
+        expect(out.replace(NOT_A_SHOP_RULE, '')).not.toContain('ร้าน');
+        // Commerce-only examples could make the model assume a shop (ADR 0031).
+        for (const word of ['ราคา', 'เวลาทำการ', 'สั่งซื้อ', 'คืนเงิน', 'ส่วนลด', 'ของแถม', 'ลูกค้า']) {
+          expect(out).not.toContain(word);
+        }
       }
     }
   });

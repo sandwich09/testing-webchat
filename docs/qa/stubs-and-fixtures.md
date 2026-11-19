@@ -30,7 +30,7 @@ Stub server ที่ใช้แทน LINE และ Claude ใน Docker, ada
 | ตัวแปรของ stub | ค่าเริ่มต้น | ใช้ทำอะไร |
 | --- | --- | --- |
 | `STUB_PORT` | `4010` | |
-| `STUB_PUBLIC_URL` | `http://localhost:4010` | URL ที่ browser เปิดได้ ใช้สร้าง `pictureUrl` ของ `info` (รูปของ OA) โปรไฟล์ลูกค้าไม่ใช้ค่านี้ ข้อ 4.4 |
+| `STUB_PUBLIC_URL` | `http://localhost:4010` | URL ที่ browser เปิดได้ ใช้สร้าง `pictureUrl` ของ `info` (รูปของ OA) โปรไฟล์ผู้ใช้ไม่ใช้ค่านี้ ข้อ 4.4 |
 
 Seed ของ Docker ใส่ credential ของ LINE ปลอมไว้ใน Settings: Channel ID `1000000000`, Channel secret `stub-channel-secret` และ access token `stub-access-token` (สองค่าหลังเข้ารหัสด้วย key ของ dev ใน compose) ค่าทั้งสามประกาศใน `e2e/fixtures/line/credentials.ts` เป็น `STUB_CHANNEL_ID`, `STUB_CHANNEL_SECRET` และ `STUB_CHANNEL_ACCESS_TOKEN` ซึ่ง seed และ E2E ใช้ร่วมกัน stub เขียน Channel ID กับ secret ซ้ำไว้ในตัว (import ไฟล์นี้ไม่ได้ ข้อ 1) เป็นคู่เดียวที่ route `oauth-token` ยอมรับ Seed ตั้ง kill switch เปิด และชื่อ OA จากการทดสอบการเชื่อมต่อเป็นค่าที่ stub คืน
 
@@ -132,7 +132,7 @@ Route `oauth-token` และ `oauth-revoke` ไม่ใช้สามข้�
 | body ผิด schema ข้อ 4.3 (reply และ push) | 400 `{ "message": "The request body has 1 error(s)", "details": [{ "message": "...", "property": "/messages/<ลำดับ>" }] }` | แอปแยก 400 นี้ออกจาก token ที่ใช้ไม่ได้ และไม่ push ต่อ |
 | content ของ `messageId` ที่ใส่ไว้ด้วย `POST /__control/line/transcoding` (ใช้ก่อนกฎอื่นทุกข้อ) | 202 `{}` ไม่มีไฟล์ จนคำตอบ "ยังไม่พร้อม" หมด แล้วตามกฎข้อต่อไป | ไฟล์ที่ LINE ยังเตรียมไม่เสร็จ |
 | profile ของ `userId` ที่ขึ้นต้นด้วย `noprofile-` หรือไม่ได้ลงทะเบียนและขึ้นต้นด้วย `Unoprofile` | 404 `{ "message": "Not found" }` | ชื่อว่าง แสดงตัวอักษรแทนรูป |
-| profile ของ `userId` อื่นที่ไม่ได้ลงทะเบียน | `displayName` = `ลูกค้าทดสอบ ` + 4 ตัวท้ายของ userId ไม่มี `pictureUrl` | ค่าเริ่มต้นไม่มีรูป เพราะรูปบน origin ของ stub ถูก CSP ของแอป (`img-src`) กันและทำให้ browser ขึ้น console error |
+| profile ของ `userId` อื่นที่ไม่ได้ลงทะเบียน | `displayName` = `ผู้ใช้ทดสอบ ` + 4 ตัวท้ายของ userId ไม่มี `pictureUrl` | ค่าเริ่มต้นไม่มีรูป เพราะรูปบน origin ของ stub ถูก CSP ของแอป (`img-src`) กันและทำให้ browser ขึ้น console error |
 | content ของ `messageId` ขึ้นต้นด้วย `img` | `tiny.jpg` `Content-Type: image/jpeg` | |
 | ขึ้นต้นด้วย `vid` | `tiny.mp4` `Content-Type: video/mp4` | |
 | ขึ้นต้นด้วย `aud` | `tiny.m4a` `Content-Type: audio/x-m4a` (ค่าที่ LINE ส่งจริงต้องยืนยัน) | ข้อความเสียง |
@@ -231,7 +231,7 @@ Stub แยกชนิดคำขอตามลำดับนี้ แล�
 | บริการ | รูปแบบ | ตรงเมื่อ |
 | --- | --- | --- |
 | LINE | `{ to?: string; userId?: string; messageId?: string; replyToken?: string; channelId?: string }` | ทุก field ที่ให้มาตรงกับค่าในคำขอ (`to` ของ push, `chatId` ของ loading, `userId` ใน path ของ profile, `client_id` ของ `oauth-token`) |
-| Claude | string | ข้อความนั้นอยู่ใน text ของ `user` turn สุดท้าย หรือในชื่อไฟล์หรือข้อความของ document (คำขอของการคัดกรองมีข้อความของลูกค้าใน `<message>` ของ user turn จึงตรงด้วยข้อความเดียวกัน) |
+| Claude | string | ข้อความนั้นอยู่ใน text ของ `user` turn สุดท้าย หรือในชื่อไฟล์หรือข้อความของ document (คำขอของการคัดกรองมีข้อความของผู้ใช้ใน `<message>` ของ user turn จึงตรงด้วยข้อความเดียวกัน) |
 
 ลำดับการเลือก: รายการที่มี `match` และตรง ใช้ก่อนตามลำดับที่ใส่ (FIFO) รายการที่ไม่มี `match` ใช้เมื่อไม่มีรายการที่ตรง แต่ละรายการลด `times` ทีละหนึ่งและหายเมื่อเป็นศูนย์
 
@@ -274,13 +274,13 @@ Stub แยกชนิดคำขอตามลำดับนี้ แล�
 | `message-audio.json` | หนึ่ง event เสียง `message.id` = `aud{{messageId}}`, `duration` 4000 และ `contentProvider.type` `line` |
 | `message-file.json` | หนึ่ง event ไฟล์ |
 | `message-location.json` | หนึ่ง event ตำแหน่ง |
-| `follow.json` | ลูกค้าเพิ่มเพื่อน มี `replyToken` แอปจึงตอบด้วยการ์ดต้อนรับเมื่อสวิตช์เปิด (คำขอ `reply` เพิ่มหนึ่งรายการต่อ follow ที่ใช้ reply token ของ follow เอง ไม่กระทบ token ของข้อความ) |
-| `postback.json` | ลูกค้ากดปุ่มของ rich menu หรือการ์ดต้อนรับ `postback.data` = `{{postbackData}}` |
-| `unfollow.json` | ลูกค้าเลิกติดตาม |
+| `follow.json` | ผู้ใช้เพิ่มเพื่อน มี `replyToken` แอปจึงตอบด้วยการ์ดต้อนรับเมื่อสวิตช์เปิด (คำขอ `reply` เพิ่มหนึ่งรายการต่อ follow ที่ใช้ reply token ของ follow เอง ไม่กระทบ token ของข้อความ) |
+| `postback.json` | ผู้ใช้กดปุ่มของ rich menu หรือการ์ดต้อนรับ `postback.data` = `{{postbackData}}` |
+| `unfollow.json` | ผู้ใช้เลิกติดตาม |
 | `redelivery-duplicate.json` | event ข้อความเดียวกับ `message-text.json` ทุก field (`webhookEventId` และ `message.id` เดิม) แต่ `deliveryContext.isRedelivery: true` ใช้ส่งหลัง `message-text.json` ด้วยตัวแปรชุดเดียวกัน |
 | `unknown-type.json` | หนึ่ง event `type: "futureEventType"` |
 | `batch-with-malformed.json` | สาม event: ข้อความตัวอักษรที่ถูกต้อง, ข้อความที่ไม่มี `message.id`, สติกเกอร์ที่ถูกต้อง |
-| `burst-three-texts.json` | สาม event ข้อความตัวอักษรของลูกค้าคนเดียว `timestamp` ห่างกัน 300ms ใช้ทดสอบการรวมข้อความ |
+| `burst-three-texts.json` | สาม event ข้อความตัวอักษรของผู้ใช้คนเดียว `timestamp` ห่างกัน 300ms ใช้ทดสอบการรวมข้อความ |
 
 ### 7.3 รูปแบบ JSON
 
@@ -400,11 +400,11 @@ Helper อื่นใน `e2e/helpers/`:
 | --- | --- |
 | `stub.ts` | `stubBaseUrl()` (ค่าของ `E2E_STUB_URL`), `stubReset()`, `stubLineProfile(p)`, `stubLineFailNext(o)`, `stubLineDelayNext(o)`, `stubLineContent(c)` (`data` และ `preview` เป็น `Uint8Array` helper แปลงเป็น base64), `stubLineRequests(q)`, `stubClaudeNextReply(o)`, `stubClaudeFailNext(o)` และ `stubClaudeDelayNext(o)` (`o.endpoint` เป็น `messages` หรือ `count_tokens`), `stubClaudeCountTokens(o)`, `stubClaudeRequests(q)` (`q` รับ `purpose` ด้วย) เรียก route ข้อ 6 ที่ `E2E_STUB_URL` (ค่าเริ่มต้น `http://localhost:4010`) |
 | `auth.ts` | `AUTH_STATE_PATH` (`e2e/.auth/state.json` ที่ `global.setup.ts` เขียน), `e2eAccessCode()` (`E2E_ACCESS_CODE` หรือค่าของ compose) และ `loginByApi(context)`: `POST /api/access/unlock` ด้วย `E2E_ACCESS_CODE` และ header `Origin` เท่ากับ `baseURL` ของ Playwright (ซึ่งเท่ากับ `APP_BASE_URL` ใน compose) แล้วเก็บ cookie ใน context |
-| `contact.ts` | `createContactWithMessage(request, { displayName, text, overrides? })`: ลงทะเบียนโปรไฟล์ (ไม่มีรูป), ส่ง `follow.json` แล้ว `message-text.json` คืน `FixtureVars` ของ event ข้อความ (`replyToken`, `messageId`, `webhookEventId` ของข้อความนั้น ซึ่ง `redelivery-duplicate.json` ใช้ซ้ำได้) `overrides` เช่น `{ replyToken: "expired-…" }` และ `nextEventVars(v, overrides?)`: id และ reply token ใหม่ของ event ถัดไปจากลูกค้าคนเดิม |
+| `contact.ts` | `createContactWithMessage(request, { displayName, text, overrides? })`: ลงทะเบียนโปรไฟล์ (ไม่มีรูป), ส่ง `follow.json` แล้ว `message-text.json` คืน `FixtureVars` ของ event ข้อความ (`replyToken`, `messageId`, `webhookEventId` ของข้อความนั้น ซึ่ง `redelivery-duplicate.json` ใช้ซ้ำได้) `overrides` เช่น `{ replyToken: "expired-…" }` และ `nextEventVars(v, overrides?)`: id และ reply token ใหม่ของ event ถัดไปจากผู้ใช้คนเดิม |
 | `wait.ts` | `waitAiIdle(request, contactId)`: poll `GET /api/contacts/:id` จน `aiReplying` เป็น false และนานกว่า `AI_DEBOUNCE_MS` ของ compose ใช้ก่อนยืนยันว่า "AI ไม่ได้ถูกเรียก" |
 | `axe.ts` | `expectNoA11yViolations(page)` ด้วย `@axe-core/playwright` |
 | `test-ids.ts` | re-export จาก `src/common/test-ids.ts` ([ui-screens](../specs/ui-screens.md) ข้อ 11) |
-| `test.ts` | `test` และ `expect` ที่ทุกเส้นใช้: fixture อัตโนมัติที่ทำให้ test ตกเมื่อหน้าเว็บมี console error, page error หรือ CSP violation ยกเว้นบรรทัดที่ test อนุญาตด้วย `consoleErrors.allow(failedResourceLine(status))` สำหรับ status ที่เส้นนั้นตั้งใจทำให้เกิด (เช่น 401 ของรหัสผิด 409 ของไฟล์ซ้ำ) และตอบ URL ของ CDN สติกเกอร์ของ LINE (`stickershop.line-scdn.net`) ด้วย `e2e/fixtures/media/tiny.png` เพราะ E2E ไม่เรียกบริการภายนอกจริง |
+| `test.ts` | `test` และ `expect` ที่ทุกเส้นใช้: fixture อัตโนมัติที่ทำให้ test ตกเมื่อหน้าเว็บมี console error, page error หรือ CSP violation ยกเว้นบรรทัดที่ test อนุญาตด้วย `consoleErrors.allow(failedResourceLine(status))` สำหรับ status ที่เส้นนั้นตั้งใจทำให้เกิด (เช่น 401 ของรหัสผิด 409 ของไฟล์ซ้ำ) และตอบ URL ของ CDN สติกเกอร์ (`stickershop.line-scdn.net`) และของรูปโปรไฟล์ทั้งสอง host ของ LINE (`profile.line-scdn.net`, `sprofile.line-scdn.net`) ด้วย `e2e/fixtures/media/tiny.png` เพราะ E2E ไม่เรียกบริการภายนอกจริง และผู้ใช้ที่มีรูปของเส้นหนึ่งขึ้นในรายชื่อของเส้นอื่นที่รันพร้อมกัน |
 | `copy.ts` | `uiCopy(key, vars?)`: ถ้อยคำตาม key ของ [ui-copy](../specs/ui-copy.md) อ่านจากตารางในเอกสารนั้น เพราะกฎ boundary ของ lint ไม่ให้ `e2e/` import `src/features/*/*.constants.ts` และ `src/common/*.constants.ts` ข้อความที่มาจาก domain (`handoffText`, `DEFAULT_GUARD_REFUSAL_TEXT`) import จาก `src/core/domain` |
 | `inbox.ts` | `row`, `bubbles`, `bubbleBlock` (ฟองพร้อมผู้ส่ง เวลา และบรรทัดสถานะการส่ง), `systemLine`, `openChat`, `backToList`, `showInfoPanel`, `hideInfoPanel`, `sendText`, `toastWith(page, text, tone?)` (toast ที่มี `data-testid="toast"` และข้อความนั้น `tone` กรองด้วย `data-type` ตาม [ui-screens](../specs/ui-screens.md#10-toast)), `uniqueSuffix` |
 | `settings.ts` | `getSettings`, `patchSettings`, `listKbDocuments`, `deleteKbDocument`, `removeRichMenu` ผ่าน API ใช้เฉพาะอ่านค่าเดิมและคืนค่ารวมของระบบใน `afterEach` และ `finally` ของไฟล์ serial |
@@ -447,11 +447,11 @@ Helper อื่นใน `e2e/helpers/`:
 
 | ขั้น | ทำ | ตรวจ |
 | --- | --- | --- |
-| 1.1 | `loginByApi`, `v = newFixtureVars()`, `stubLineProfile({ userId: v.userId, displayName: "ลูกค้าทดสอบ " + suffix })` | |
+| 1.1 | `loginByApi`, `v = newFixtureVars()`, `stubLineProfile({ userId: v.userId, displayName: "ผู้ใช้ทดสอบ " + suffix })` | |
 | 1.2 | `postLineWebhook("follow.json", v)` | status 200 |
 | 1.3 | `postLineWebhook("message-text.json", { ...v, text: "สวัสดี " + suffix })` | status 200 |
 | 1.4 | เปิด `/chats` | `row(name)` มองเห็น, `contact-row-preview` มีข้อความที่ส่ง, `contact-row-unread` เป็น `1`, `data-unread="true"`, `nav-inbox-unread` มองเห็น |
-| 1.5 | กด `row(name)` | URL เป็น `/chats/<id>`, `thread-name` เป็นชื่อลูกค้า, `message-bubble[data-author="customer"]` มีข้อความที่ส่ง |
+| 1.5 | กด `row(name)` | URL เป็น `/chats/<id>`, `thread-name` เป็นชื่อผู้ใช้, `message-bubble[data-author="customer"]` มีข้อความที่ส่ง |
 | 1.6 | | `row(name)` มี `data-unread="false"` |
 | 1.7 | `postLineWebhook("redelivery-duplicate.json", sameVars)` | status 200 และหลัง `postLineWebhook("message-text.json", newText)` ข้อความใหม่ปรากฏ แล้ว `message-bubble` ที่มีข้อความเดิมยังมีหนึ่งอัน |
 | 1.8 | `postLineWebhook("batch-with-malformed.json", v2)` | status 200, ข้อความตัวอักษรและ `message-bubble[data-type="sticker"]` ปรากฏ |
@@ -460,6 +460,7 @@ Helper อื่นใน `e2e/helpers/`:
 | 1.11 | ส่ง `message-image.json` | `message-bubble[data-type="image"]` ได้ `data-media-status="ready"` และมี `<img>` |
 | 1.12 | ส่ง `message-image-gone.json` | `data-media-status="failed"`, `data-failure="download_failed"` และมีข้อความ `inbox.media.problem.download_failed` |
 | 1.13 | `expectNoA11yViolations(page)` | ไม่มี violation |
+| 1.14 | (test แยก หนึ่งครั้งต่อ host) `stubLineProfile` ที่มี `pictureUrl` บน `profile.line-scdn.net` หรือ `sprofile.line-scdn.net` ส่ง follow และข้อความ แล้วเปิด `/chats` | แถวของผู้ใช้มี `<img>` ที่ `src` เป็น URL นั้นและโหลดสำเร็จ (`naturalWidth` > 0) ไม่มี CSP violation (fixture ของ test ล้มเมื่อมี) ไม่เรียก host จริง ([pitfalls S7](../guidelines/pitfalls-and-prevention.md#s7-รูปโปรไฟล์ของ-line-ไม่ขึ้นเพราะ-host-ไม่อยู่ใน-csp)) |
 
 ### เส้นที่ 2: แอดมินตอบ
 
@@ -478,13 +479,13 @@ Helper อื่นใน `e2e/helpers/`:
 | 2.9 | พิมพ์ข้อความแล้วกด Shift+Enter | ช่องพิมพ์มีสองบรรทัด ยังไม่ส่ง |
 | 2.10 | `postLineWebhook("unfollow.json", v)` | `composer-disabled-reason` มองเห็น, `composer-input` disabled, `row(name)` มี `data-follow="unfollowed"` |
 
-Test ที่สองในไฟล์เดียวกัน (ลำดับของรายชื่อ ตรวจแค่ลำดับของสองแถวนี้ เพราะเส้นอื่นเพิ่มลูกค้าพร้อมกัน):
+Test ที่สองในไฟล์เดียวกัน (ลำดับของรายชื่อ ตรวจแค่ลำดับของสองแถวนี้ เพราะเส้นอื่นเพิ่มผู้ใช้พร้อมกัน):
 
 | ขั้น | ทำ | ตรวจ |
 | --- | --- | --- |
-| 2.11 | `createContactWithMessage` ลูกค้า A แล้วลูกค้า B เปิดแชทของ A | |
+| 2.11 | `createContactWithMessage` ผู้ใช้ A แล้วผู้ใช้ B เปิดแชทของ A | |
 | 2.12 | แอดมินตอบ A แล้วกลับไปรายชื่อ | `row(A)` มีข้อความที่ตอบ และ `row(B)` ยังอยู่เหนือ `row(A)` |
-| 2.13 | ลูกค้า A ส่งข้อความใหม่ (`postLineWebhook("message-text.json", nextEventVars(vA))`) | `row(A)` มีข้อความใหม่ และขึ้นเหนือ `row(B)` โดยไม่โหลดหน้าใหม่ |
+| 2.13 | ผู้ใช้ A ส่งข้อความใหม่ (`postLineWebhook("message-text.json", nextEventVars(vA))`) | `row(A)` มีข้อความใหม่ และขึ้นเหนือ `row(B)` โดยไม่โหลดหน้าใหม่ |
 
 ### เส้นที่ 3: AI ตอบแทน
 
@@ -492,18 +493,18 @@ Test ที่สองในไฟล์เดียวกัน (ลำดั�
 
 | ขั้น | ทำ | ตรวจ |
 | --- | --- | --- |
-| 3.1 | `createContactWithMessage` เปิดแชท | `thread-ai-switch` มี `aria-checked="false"` (ลูกค้าใหม่เริ่มปิด) |
+| 3.1 | `createContactWithMessage` เปิดแชท | `thread-ai-switch` มี `aria-checked="false"` (ผู้ใช้ใหม่เริ่มปิด) |
 | 3.2 | กด `thread-ai-switch` | `aria-checked="true"`, `thread-subline` มี `inbox.thread.aiHelping` |
 | 3.3 | `stubClaudeNextReply({ match: q, json: { reply: "ร้านเปิด 08:00 ถึง 18:00 ค่ะ", needsAdmin: false, handoffReason: null } })` โดย `q = "ร้านเปิดกี่โมง " + suffix` | |
-| 3.4 | `postLineWebhook("message-text.json", { ...v2, text: q })` (ลูกค้าเดิม event ใหม่) | `message-bubble[data-author="ai"]` มีข้อความที่สั่งไว้, `message-sender` เป็น `inbox.message.senderAi` |
+| 3.4 | `postLineWebhook("message-text.json", { ...v2, text: q })` (ผู้ใช้เดิม event ใหม่) | `message-bubble[data-author="ai"]` มีข้อความที่สั่งไว้, `message-sender` เป็น `inbox.message.senderAi` |
 | 3.5 | `stubClaudeRequests({ match: q })` | หนึ่งคำขอ, `body.output_config.effort` เป็น `"low"`, `system[1].text` ขึ้นต้นด้วย `<knowledge>`, `messages` turn สุดท้ายก่อนข้อความระบบเป็น `user` ที่มี `q` |
 | 3.6 | `stubLineRequests` ของ `reply` หรือ `push` ถึง `v.userId` | มีข้อความของ AI |
 | 3.7 | `stubClaudeNextReply({ match: q2, json: { reply: "เรื่องนี้ขอให้แอดมินมาตอบนะคะ", needsAdmin: true, handoffReason: "not_in_knowledge" } })` แล้วส่ง `q2` | `message-bubble[data-author="ai"]` ใหม่มีข้อความ "ขออนุญาตให้แอดมินมาตอบเรื่องนี้นะคะ" (ไม่ใช่ `reply` ที่สั่งไว้), `system-line[data-event-code="handoff.ai_not_in_knowledge"]` มองเห็นใต้ฟองนั้น, `contact-tab-needs-admin` มีจำนวนอย่างน้อย 1, `row(name)` มี `data-needs-admin="true"` |
 | 3.8 | `postLineWebhook("burst-three-texts.json", v3)` พร้อม `stubClaudeNextReply({ match: lastText })` | เมื่อ `waitAiIdle` แล้ว `stubClaudeRequests` ที่มีข้อความชุดนี้มีหนึ่งคำขอ และ turn สุดท้ายมีทั้งสามข้อความรวมกัน |
 | 3.9 | แอดมินส่งข้อความเอง | `thread-ai-switch` เป็น `aria-checked="false"`, `info-ai-note` เป็น `inbox.ai.noteOff`, `system-line[data-event-code="ai.turned_off_by_admin"]` มองเห็น และ `row(name)` มี `data-needs-admin="false"` |
-| 3.10 | ลูกค้าส่ง `q3` แล้ว `waitAiIdle` | `stubClaudeRequests({ match: q3 })` ว่าง |
+| 3.10 | ผู้ใช้ส่ง `q3` แล้ว `waitAiIdle` | `stubClaudeRequests({ match: q3 })` ว่าง |
 | 3.11 | ส่ง `message-image.json` หลังเปิดสวิตช์อีกครั้ง | `system-line[data-event-code="handoff.customer_sent_image"]` มองเห็น |
-| 3.12 | หน้าตั้งค่า ส่วนค่าใช้จ่าย AI | `usage-row` ของลูกค้ามีราคาเท่ากับผลรวมของคำตอบที่ stub ตอบตามโมเดลที่ตั้งอยู่ ($0.0032 ต่อครั้งของ Sonnet 5.5 ซึ่งเป็นค่าเริ่มต้น หรือ $0.0064 ของ Opus 5.5) |
+| 3.12 | หน้าตั้งค่า ส่วนค่าใช้จ่าย AI | `usage-row` ของผู้ใช้มีราคาเท่ากับผลรวมของคำตอบที่ stub ตอบตามโมเดลที่ตั้งอยู่ ($0.0032 ต่อครั้งของ Sonnet 5.5 ซึ่งเป็นค่าเริ่มต้น หรือ $0.0064 ของ Opus 5.5) |
 
 ### เส้นที่ 4: Kill switch และ Channel ID
 
@@ -511,14 +512,14 @@ Test ที่สองในไฟล์เดียวกัน (ลำดั�
 
 | ขั้น | ทำ | ตรวจ |
 | --- | --- | --- |
-| 4.1 | สร้างลูกค้า เปิดสวิตช์ AI ของลูกค้า | `thread-ai-switch` `aria-checked="true"` |
-| 4.2a | เปิด `/settings` focus `settings-model` กด Enter แล้ว End แล้ว Escape จากนั้นคลิก `usage-month` แล้วคลิก `usage-month-option` ตัวที่สอง และเรียก `expectDocumentNotScrollable` | listbox เปิดพร้อม `settings-model-option` สามตัว ตัวที่ `aria-selected="true"` คือค่าที่บันทึก, End ทำให้ตัวสุดท้ายมี `data-active` และเป็น `aria-activedescendant`, Escape ปิด listbox `aria-expanded="false"` focus อยู่ที่ปุ่ม และ `data-value` ไม่เปลี่ยน, `usage-month` มี `data-value` ของเดือนที่เลือกและ listbox ปิด, document ไม่เลื่อน |
+| 4.1 | สร้างผู้ใช้ เปิดสวิตช์ AI ของผู้ใช้ | `thread-ai-switch` `aria-checked="true"` |
+| 4.2a | เปิด `/settings?tab=ai` focus `settings-model` กด Enter แล้ว End แล้ว Escape จากนั้นกดแท็บ `settings-tab[data-tab="usage"]` คลิก `usage-month` แล้วคลิก `usage-month-option` ตัวที่สอง เรียก `expectDocumentNotScrollable` และกดแท็บ `ai` กลับ | listbox เปิดพร้อม `settings-model-option` สามตัว ตัวที่ `aria-selected="true"` คือค่าที่บันทึก, End ทำให้ตัวสุดท้ายมี `data-active` และเป็น `aria-activedescendant`, Escape ปิด listbox `aria-expanded="false"` focus อยู่ที่ปุ่ม และ `data-value` ไม่เปลี่ยน, `usage-month` มี `data-value` ของเดือนที่เลือกและ listbox ปิด, document ไม่เลื่อน |
 | 4.2 | กด `settings-kill-switch` | `aria-checked="false"` และ toast `settings.ai.killSwitchOffToast` |
-| 4.3 | เปิด `/chats` แล้วแชทของลูกค้า เรียก `expectDocumentNotScrollable` ทั้งสองหน้า (project desktop ตรวจที่ 1535×920 อีกครั้ง) | `thread-ai-switch` disabled และ `aria-checked="false"`, `thread-ai-label` เป็น `inbox.ai.labelKilled`, `info-ai-switch` disabled, `info-ai-note` เป็น `inbox.ai.noteKilled` |
-| 4.4 | ลูกค้าส่ง `q` แล้ว `waitAiIdle` | `stubClaudeRequests({ match: q })` ว่าง |
+| 4.3 | เปิด `/chats` แล้วแชทของผู้ใช้ เรียก `expectDocumentNotScrollable` ทั้งสองหน้า (project desktop ตรวจที่ 1535×920 อีกครั้ง) | `thread-ai-switch` disabled และ `aria-checked="false"`, `thread-ai-label` เป็น `inbox.ai.labelKilled`, `info-ai-switch` disabled, `info-ai-note` เป็น `inbox.ai.noteKilled` |
+| 4.4 | ผู้ใช้ส่ง `q` แล้ว `waitAiIdle` | `stubClaudeRequests({ match: q })` ว่าง |
 | 4.5 | กลับหน้าตั้งค่า เปิด `settings-kill-switch` | |
 | 4.6 | เปิดแชทเดิม | `thread-ai-switch` enabled และ `aria-checked="true"` (ค่าเดิมกลับมา) |
-| 4.7 | เปิด `/settings` ส่วน LINE ใส่ `12ab` ใน `line-channel-id` แล้วกด `line-save` จากนั้นใส่ `STUB_CHANNEL_ID`, `STUB_CHANNEL_SECRET` และ `STUB_CHANNEL_ACCESS_TOKEN` แล้วกด `line-save` และโหลดหน้าใหม่ | ก่อนแก้ `line-channel-id` เป็น `STUB_CHANNEL_ID` ของ seed และ `line-secret-status` `data-status="verified"`, ค่าผิดได้ `settings.line.error.channelIdInvalid` (`{max}` = `LINE_CHANNEL_ID_MAX_CHARS`) โดยไม่มีคำขอ, บันทึกได้ toast `settings.line.savedToast` และ stub มีคำขอ `oauth-token` หนึ่งครั้งที่ตอบ 200, หลังโหลดใหม่ `line-channel-id` ยังเป็นค่าเดิม ช่อง secret และ token ว่าง และ `line-secret-status` เป็น `verified` |
+| 4.7 | เปิด `/settings?tab=line` กด `line-channel-id-edit` ใส่ `12ab` แล้วกด `line-save` กด `line-channel-id-edit` อีกครั้ง (ยกเลิก) จากนั้นกด `line-access-token-edit` ใส่ `STUB_CHANNEL_ACCESS_TOKEN` กด `line-save` และโหลดหน้าใหม่ | ก่อนแก้ `line-channel-id` เป็น `STUB_CHANNEL_ID` ของ seed และ disabled, `line-channel-secret` และ `line-access-token` disabled และไม่มีค่าจริง, `line-save` disabled, `line-secret-status` `data-status="verified"`; ปุ่มดินสอเปิดช่องที่ว่างและมี focus, ค่าผิดได้ `settings.line.error.channelIdInvalid` (`{max}` = `LINE_CHANNEL_ID_MAX_CHARS`) โดยไม่มีคำขอ, ยกเลิกแล้วช่องกลับเป็นค่าที่บันทึกและ disabled; body ของ `PUT /api/settings/line-credentials` มีเฉพาะ `channelAccessToken`, toast `settings.line.savedToast`, stub มีคำขอ `oauth-token` หนึ่งครั้งที่ตอบ 200 (server ตรวจกับ Channel ID และ secret ที่บันทึกไว้), หลังบันทึกทุกช่องล็อก, หลังโหลดใหม่ `line-channel-id` ยังเป็นค่าเดิม ช่องลับ disabled และ `line-secret-status` เป็น `verified` |
 | 4.8 | finally | kill switch เปิดอยู่ |
 
 ### เส้นที่ 5: ส่งรูป
@@ -527,7 +528,7 @@ Test ที่สองในไฟล์เดียวกัน (ลำดั�
 
 | ขั้น | ทำ | ตรวจ |
 | --- | --- | --- |
-| 5.1 | สร้างลูกค้า เปิดแชท | |
+| 5.1 | สร้างผู้ใช้ เปิดแชท | |
 | 5.2 | `setInputFiles` ของ `composer-file-input` ด้วย `tiny.jpg` | `attachment-tray` ผ่าน `data-state` เป็น `ready`, `attachment-preview` มีรูป |
 | 5.3 | กด `composer-send` | `message-bubble[data-type="image"]` ได้ `data-status="sent"`, `attachment-tray` หาย |
 | 5.4 | `stubLineRequests` ของ `reply` หรือ `push` ถึง `v.userId` | `messages[0].type` เป็น `image`, มี `originalContentUrl` และ `previewImageUrl` ที่ต่างกัน และ `GET` ทั้งสอง URL ได้ 200 กับ `image/jpeg` |
@@ -547,12 +548,12 @@ Test ที่สองในไฟล์เดียวกัน (ลำดั�
 | ขั้น | ทำ | ตรวจ |
 | --- | --- | --- |
 | 6.1 | `marker = "KB-MARKER-" + suffix`, `stubClaudeNextReply({ kind: "extract", text: "Tonhom Cafe\n" + marker })` และ `stubClaudeDelayNext({ ms: 1500 })` (ไม่ใส่ `match` เพราะคำขอแปลง PDF มีแต่ byte ของ PDF ไม่มีชื่อไฟล์ตาม [ai-prompt ข้อ 7](../specs/ai-prompt.md#7-prompt-ของการแปลง-pdf) และไฟล์ serial รันทีละเส้น การแปลงครั้งถัดไปจึงเป็นของขั้นนี้) | |
-| 6.2 | เปิด `/settings` `setInputFiles` ของ `kb-upload-input` ด้วย `tiny.pdf` | `kb-row[data-file-name="tiny.pdf"]` ปรากฏ `data-status="processing"` แล้วเป็น `ready` |
+| 6.2 | เปิด `/settings?tab=knowledge` `setInputFiles` ของ `kb-upload-input` ด้วย `tiny.pdf` | `kb-row[data-file-name="tiny.pdf"]` ปรากฏ `data-status="processing"` แล้วเป็น `ready` |
 | 6.3 | | `kb-usage-text` เปลี่ยนจากก่อนอัปโหลด |
 | 6.4 | กด `kb-row-view` | `kb-text-dialog` มองเห็น, `kb-text-content` มี `marker` กด `kb-text-close` แล้ว focus กลับที่ `kb-row-view` |
 | 6.5 | อัปโหลด `tiny.pdf` ซ้ำ | `kb-upload-error` มีรหัสไฟล์ซ้ำจาก [error-catalog](../architecture/error-catalog.md) และตารางยังมีแถวเดียว |
 | 6.6 | อัปโหลด `not-a-pdf.pdf` | `kb-upload-error[data-code="not_pdf"]` และไม่มีคำขอ `POST /api/knowledge/documents` |
-| 6.7 | สร้างลูกค้า เปิด AI ของลูกค้า ส่งคำถาม `q` | `stubClaudeRequests({ match: q })` มีคำขอที่ `system[1].text` มี `<document name="tiny.pdf">` และ `marker` |
+| 6.7 | สร้างผู้ใช้ เปิด AI ของผู้ใช้ ส่งคำถาม `q` | `stubClaudeRequests({ match: q })` มีคำขอที่ `system[1].text` มี `<document name="tiny.pdf">` และ `marker` |
 | 6.8 | กด `kb-row-delete` | `kb-delete-dialog` มองเห็น focus อยู่ที่ `kb-delete-cancel` |
 | 6.9 | กด `kb-delete-confirm` | แถวหาย, toast `settings.kb.deletedToast` และ `kb-delete-dialog` ออกจาก DOM (หลัง animation ปิด Radix จึงเอา `aria-hidden` ออกจากส่วนอื่นของหน้า ข้อ 6.11 จึงไม่เจอ `aria-hidden-focus`) |
 | 6.10 | `stubClaudeCountTokens({ value: 60000 })` แล้วอัปโหลด `tiny.pdf` | แถวไม่ถูกเพิ่มเป็น `ready` และมีข้อความเกินเพดานจาก error catalog |
@@ -564,7 +565,7 @@ Test ที่สองในไฟล์เดียวกัน (ลำดั�
 
 | ขั้น | ทำ | ตรวจ |
 | --- | --- | --- |
-| 7.1 | สร้างลูกค้าด้วย `replyToken = "expired-" + hex` | |
+| 7.1 | สร้างผู้ใช้ด้วย `replyToken = "expired-" + hex` | |
 | 7.2 | `stubLineFailNext({ endpoint: "push", match: { to: v.userId }, status: 400, body: { message: "stub failure" } })` | |
 | 7.3 | ส่งข้อความ `m` | `message-bubble` ของ `m` ได้ `data-status="failed"`, `message-error` มองเห็นและมี `data-code`, `message-retry` มองเห็น |
 | 7.4 | `stubLineRequests({ endpoint: "push", to: v.userId })` | หนึ่งคำขอ เก็บ `xLineRetryKey` เป็น `k` ซึ่งเท่ากับ `lineRetryKeyOf(data-message-id)` (UUID version 5 จาก SHA-256 ของ id ใน `e2e/helpers/stub.ts` เขียนแยกจาก adapter) และไม่เท่ากับ id |
@@ -595,19 +596,20 @@ Test ที่สองในไฟล์เดียวกัน (ลำดั�
 
 ### เส้นที่ 9: ขอบเขตหัวข้อ
 
-`test.describe("เส้นที่ 9")` ในไฟล์ `e2e/global-state.serial.spec.ts` project `serial-desktop` และ `serial-mobile` (แตะค่ารวมของระบบ ต้องการ kill switch เปิด) ข้อความปฏิเสธที่คาดคือ `guardRefusalText(คำลงท้ายที่บันทึกไว้)` (seed ใช้ `ค่ะ`)
+`test.describe("เส้นที่ 9")` ในไฟล์ `e2e/global-state.serial.spec.ts` project `serial-desktop` และ `serial-mobile` (แตะค่ารวมของระบบ ต้องการ kill switch เปิด) ข้อความปฏิเสธที่คาดคือ `guardRefusalText(คำลงท้ายที่บันทึกไว้, หัวข้อที่บันทึกไว้)` (seed ใช้ `ค่ะ`)
 
 | ขั้น | ทำ | ตรวจ |
 | --- | --- | --- |
-| 9.1 | เปิด `/settings` อ่าน `guard-blocked-today` เก็บเป็น `before` (ค่าอาจไม่เป็น 0 เพราะ project อื่นรันก่อน) | `settings-section-guard` อยู่ถัดจาก `settings-section-ai` และ `guard-topics-counter` แสดงจำนวนหัวข้อเดิม |
+| 9.1 | เปิด `/settings?tab=knowledge` อ่าน `guard-blocked-today` เก็บเป็น `before` (ค่าอาจไม่เป็น 0 เพราะ project อื่นรันก่อน) | `settings-tab-panel` มีการ์ด `settings-section-kb` แล้ว `settings-section-guard` ตามลำดับ และ `guard-topics-counter` แสดงจำนวนหัวข้อเดิม |
 | 9.2 | กด `guard-topic-remove` ของหัวข้อแรกจนรายการว่าง พิมพ์ `มุกตลกไทย` ใน `guard-topic-input` กด Enter แล้วพิมพ์ ` มุกจากภาพยนตร์ ` กด `guard-topic-add` จากนั้นพิมพ์ `มุกตลกไทย` ซ้ำแล้วกด Enter และล้างช่อง แล้วกด `guard-switch` | หลังเพิ่มแต่ละครั้ง `guard-topic-input` ว่างและมี focus, `guard-topic` สองแถวตามลำดับ (`data-topic`), `guard-topics-counter` แสดง 2, หัวข้อซ้ำได้ `guard-topics-error` `data-code="duplicate_topic"` โดยข้อความในช่องยังอยู่และ `GET /api/settings` มีสองหัวข้อ, `guard-switch` มี `aria-checked="true"` |
-| 9.3 | `createContactWithMessage` เปิดสวิตช์ AI ของลูกค้า แล้ว `stubClaudeNextReply({ match: qa, kind: "guard", json: { allowed: true, matchedTopic: "มุกตลกไทย" } })` และ `stubClaudeNextReply({ match: qa, kind: "reply", json: { reply: "มุกทดสอบ " + suffix, needsAdmin: false, handoffReason: null } })` โดย `qa = "เล่ามุกหน่อย " + suffix` | |
+| 9.3 | `createContactWithMessage` เปิดสวิตช์ AI ของผู้ใช้ แล้ว `stubClaudeNextReply({ match: qa, kind: "guard", json: { allowed: true, matchedTopic: "มุกตลกไทย" } })` และ `stubClaudeNextReply({ match: qa, kind: "reply", json: { reply: "มุกทดสอบ " + suffix, needsAdmin: false, handoffReason: null } })` โดย `qa = "เล่ามุกหน่อย " + suffix` | |
 | 9.4 | ส่ง `qa` | `message-bubble[data-author="ai"]` มี `"มุกทดสอบ " + suffix`, `stubClaudeRequests({ match: qa, purpose: "guard" })` มีหนึ่งคำขอที่ `body.model` เป็น `GUARD_MODEL` และ `stubClaudeRequests({ match: qa, purpose: "reply" })` มีหนึ่งคำขอที่ `system[0].text` มี `<topic_guard>` |
-| 9.5 | `stubClaudeNextReply({ match: qb, json: { allowed: false, matchedTopic: null } })` โดย `qb = "ร้านเปิดกี่โมง " + suffix` แล้วส่ง `qb` | `stubLineRequests` ของ `reply` หรือ `push` ถึง `v.userId` มีข้อความเท่ากับ `guardRefusalText(คำลงท้ายที่บันทึกไว้)`, `message-bubble[data-author="ai"]` ใหม่มีข้อความนั้นและ `message-sender` เป็น `inbox.message.senderAi`, `system-line[data-event-code="guard.blocked"]` มองเห็นใต้ฟองนั้น |
+| 9.5 | `stubClaudeNextReply({ match: qb, json: { allowed: false, matchedTopic: null } })` โดย `qb = "ร้านเปิดกี่โมง " + suffix` แล้วส่ง `qb` | `stubLineRequests` ของ `reply` หรือ `push` ถึง `v.userId` มีข้อความเท่ากับ `guardRefusalText(คำลงท้ายที่บันทึกไว้, หัวข้อที่บันทึกไว้)`, `message-bubble[data-author="ai"]` ใหม่มีข้อความนั้นและ `message-sender` เป็น `inbox.message.senderAi`, `system-line[data-event-code="guard.blocked"]` มองเห็นใต้ฟองนั้น |
 | 9.6 | `waitAiIdle` | `stubClaudeRequests({ match: qb, purpose: "reply" })` ว่าง, `row(name)` มี `data-needs-admin="false"` และ `thread-ai-switch` ยังเป็น `aria-checked="true"` |
 | 9.6a | คำทักทาย: `stubClaudeNextReply({ match: hello, kind: "guard", json: { allowed: true, matchedTopic: null } })` (fixture คำตอบของคำทักทายที่ผ่าน) และ `kind: "reply"` ที่ตอบ `intro` โดย `hello = "สวัสดีค่ะ " + suffix` แล้วส่ง `hello` | `message-bubble[data-author="ai"]` มี `intro`, คำขอ `guard` หนึ่งคำขอ และคำขอ `reply` หนึ่งคำขอที่ `system[0].text` มีบรรทัดคำทักทายของ `<topic_guard>` |
 | 9.6b | คำทักทายพร้อมคำขอนอกหัวข้อ: `stubClaudeNextReply({ match: helloWeather, json: { allowed: false, matchedTopic: null } })` (fixture คำตอบของคำทักทายพ่วงคำขอที่ถูกกัน) โดย `helloWeather = "สวัสดีค่ะ ขอพยากรณ์อากาศ " + suffix` แล้วส่ง | ข้อความปฏิเสธมีสองฟอง และ `stubClaudeRequests({ match: helloWeather, purpose: "reply" })` ว่าง |
-| 9.7 | เปิด `/settings` | `guard-blocked-today` แสดงค่า `before` + 2 (9.5 และ 9.6b) |
+| 9.6c | คำถามว่าคุยเรื่องอะไรได้บ้าง: `stubClaudeNextReply({ match: meta, kind: "guard", json: { allowed: true, matchedTopic: null } })` และ `kind: "reply"` ที่ตอบ `listing` โดย `meta = "คุยเรื่องอะไรได้บ้าง " + suffix` แล้วส่ง `meta` | `message-bubble[data-author="ai"]` มี `listing` และคำขอ `reply` หนึ่งคำขอที่ `system[0].text` มีบรรทัดของ `<topic_guard>` ที่ให้บอกหัวข้อ ข้อความปฏิเสธของ 9.5 มีชื่อหัวข้อทั้งสองในเครื่องหมาย “ ” |
+| 9.7 | เปิด `/settings?tab=knowledge` | `guard-blocked-today` แสดงค่า `before` + 2 (9.5 และ 9.6b) |
 | 9.8 | finally: ปิด `guard-switch` ทางหน้าจอ และคืนหัวข้อเดิมด้วย `patchSettings` | `guard-switch` `aria-checked="false"` ขอบเขตหัวข้อปิดก่อนเส้นอื่นของไฟล์นี้ |
 
 ข้อ 9.7 ตรวจ "เพิ่มขึ้น" แทน "เป็น 1" เพราะตัวนับเป็นยอดของทั้งวันและเส้นนี้รันทั้งใน `serial-desktop` และ `serial-mobile`
@@ -618,9 +620,9 @@ Test ที่สองในไฟล์เดียวกัน (ลำดั�
 
 | ขั้น | ทำ | ตรวจ |
 | --- | --- | --- |
-| 10.1 | `createContactWithMessage` แล้วแอดมินพิมพ์ตอบ `answer` | ฟองของแอดมิน `data-status="sent"` และคำขอ `reply` ที่ใช้ reply token ของลูกค้ามี `sentIds` |
-| 10.2 | ส่ง `message-text-quote.json` สามครั้ง: อ้าง `sentIds[0]`, อ้าง `messageId` ของข้อความแรกของลูกค้า และอ้าง id ที่ไม่มี | status 200 |
-| 10.3 | | `message-quote` ของข้อความแรก `data-available="true"` ชื่อ `inbox.quote.label` ที่มี `inbox.message.senderYou` และ `answer`, ของข้อความที่สองมีชื่อลูกค้าและข้อความแรก, ของข้อความที่สาม `data-available="false"` ข้อความ `inbox.quote.unavailable` |
+| 10.1 | `createContactWithMessage` แล้วแอดมินพิมพ์ตอบ `answer` | ฟองของแอดมิน `data-status="sent"` และคำขอ `reply` ที่ใช้ reply token ของผู้ใช้มี `sentIds` |
+| 10.2 | ส่ง `message-text-quote.json` สามครั้ง: อ้าง `sentIds[0]`, อ้าง `messageId` ของข้อความแรกของผู้ใช้ และอ้าง id ที่ไม่มี | status 200 |
+| 10.3 | | `message-quote` ของข้อความแรก `data-available="true"` ชื่อ `inbox.quote.label` ที่มี `inbox.message.senderYou` และ `answer`, ของข้อความที่สองมีชื่อผู้ใช้และข้อความแรก, ของข้อความที่สาม `data-available="false"` ข้อความ `inbox.quote.unavailable` |
 | 10.4 | กด `message-quote` ของข้อความแรก | ฟองของแอดมินมี `data-highlight="true"` |
 
 ### เส้นที่ 11: โน้ตของแอดมิน
@@ -634,7 +636,7 @@ Test ที่สองในไฟล์เดียวกัน (ลำดั�
 | 11.3 | โหลดหน้าใหม่แล้วเปิดแผง | โน้ตยังอยู่ |
 | 11.4 | `stubLineRequests({ since })` และ `stubClaudeRequests({ since })` | ไม่มี body ใดมีข้อความของโน้ต |
 | 11.5 | กด `info-note-delete` แล้ว `info-note-delete-confirm` | `info-notes-empty` |
-| 11.6 | test ที่สอง: สร้างลูกค้าสองคน เปิดแชทคนแรก พิมพ์โน้ตค้างไว้ แล้วเปิดแชทคนที่สองจากรายชื่อ (desktop คลิกแถวขณะแชทเปิดอยู่ mobile ปิดแผงแล้วกลับรายชื่อ) | ช่องโน้ตของคนที่สองว่าง |
+| 11.6 | test ที่สอง: สร้างผู้ใช้สองคน เปิดแชทคนแรก พิมพ์โน้ตค้างไว้ แล้วเปิดแชทคนที่สองจากรายชื่อ (desktop คลิกแถวขณะแชทเปิดอยู่ mobile ปิดแผงแล้วกลับรายชื่อ) | ช่องโน้ตของคนที่สองว่าง |
 | 11.7 | เพิ่มโน้ต ตอบ `DELETE` ครั้งแรกด้วย 503 (`page.route`) กดลบแล้วยืนยัน | dialog แสดง `role="alert"` กด Escape แล้วเปิด dialog ใหม่ ไม่มี alert |
 
 ### เส้นที่ 12: ปุ่มพับเมนู
@@ -653,9 +655,9 @@ Test ที่สองในไฟล์เดียวกัน (ลำดั�
 
 | ขั้น | ทำ | ตรวจ |
 | --- | --- | --- |
-| 14.1 | หน้าตั้งค่า กด `rich-menu-publish` | toast `settings.richMenu.publishedToast`, `rich-menu-status` เป็น `published`, stub บันทึก `richmenu-create`, `richmenu-upload` (service `line-data`, `image/png`) และ `richmenu-default` ตามลำดับ body ของการสร้างเป็น 2500×843 สาม postback |
+| 14.1 | เปิด `/settings?tab=line` กด `rich-menu-publish` ในการ์ด `settings-section-rich-menu` | toast `settings.richMenu.publishedToast`, `rich-menu-status` เป็น `published`, stub บันทึก `richmenu-create`, `richmenu-upload` (service `line-data`, `image/png`) และ `richmenu-default` ตามลำดับ body ของการสร้างเป็น 2500×843 สาม postback |
 | 14.2 | แก้ `settings-how-to` แล้วบันทึก | ค่าเริ่มต้นในช่องเท่ากับ `defaultHowToText` ของคำลงท้าย และ toast `common.toast.saved` |
-| 14.3 | สร้างลูกค้า เปิดแชท ส่ง `postback.json` ด้วย `tw1:how_to` | บรรทัด `customer.tapped_how_to` "ลูกค้ากดปุ่ม วิธีทดสอบ" และฟอง AI ที่เป็นข้อความที่แก้ ส่งด้วย reply token ของ postback |
+| 14.3 | สร้างผู้ใช้ เปิดแชท ส่ง `postback.json` ด้วย `tw1:how_to` | บรรทัด `customer.tapped_how_to` "ผู้ใช้กดปุ่ม วิธีทดสอบ" และฟอง AI ที่เป็นข้อความที่แก้ ส่งด้วย reply token ของ postback |
 | 14.4 | `tw1:admin` | บรรทัด `customer.tapped_admin` และ `handoff.customer_asked_admin` ฟอง `adminRequestedText` สวิตช์ AI ปิด |
 | 14.5 | stub ตอบคำทักทายเมื่อเห็น "เพื่อเริ่มคุย" แล้ว `tw1:ai_on` | บรรทัด `customer.tapped_ai_on` ฟองคำทักทาย สวิตช์ AI เปิด และ user turn สุดท้ายของคำขอ Claude มี `AI_START_MARKER` |
 | 14.6 | หน้าตั้งค่า กด `rich-menu-remove` แล้ว `settings-how-to-reset` | toast, สถานะ `not_published`, stub บันทึก `richmenu-default-clear` แล้ว `richmenu-delete` และช่องกลับเป็นค่าเริ่มต้น |
@@ -666,11 +668,31 @@ Test ที่สองในไฟล์เดียวกัน (ลำดั�
 
 | ขั้น | ทำ | ตรวจ |
 | --- | --- | --- |
-| 15.1 | หน้าตั้งค่า แก้ `settings-welcome-text` แล้วบันทึก | `settings-welcome-switch` เปิด ตัวอย่าง `welcome-preview` มีข้อความใหม่ |
+| 15.1 | เปิด `/settings?tab=line` แก้ `settings-welcome-text` ในการ์ด `settings-section-welcome` แล้วบันทึก | `settings-welcome-switch` เปิด ตัวอย่าง `welcome-preview` มีข้อความใหม่ |
 | 15.2 | ส่ง `follow.json` ของผู้ใช้ใหม่ | stub มีคำขอ `reply` หนึ่งรายการด้วย reply token ของ follow ข้อความเป็น `flex` มีข้อความที่แก้ และปุ่มใน footer เป็น postback `tw1:ai_on`, `tw1:admin`, `tw1:how_to` ตามลำดับ |
 | 15.3 | เปิดแชท | `welcome-bubble` หนึ่งกล่อง มี `inbox.welcome.label` ข้อความที่แก้ และชื่อปุ่มทั้งสาม |
 | 15.4 | ส่ง `postback.json` `tw1:how_to` | บรรทัด `customer.tapped_how_to` (ตัวจัดการเดียวกับ rich menu) |
 | 15.5 | ปิดสวิตช์ แล้ว follow ของผู้ใช้อีกคน | ไม่มีคำขอ `reply` ด้วย reply token นั้น |
+
+### เส้นที่ 16: แท็บของหน้าตั้งค่าและช่องที่ไม่ขยับ
+
+ไฟล์ `e2e/settings-tabs.spec.ts` project `desktop` และ `mobile` ไม่บันทึกค่าใด จึงรันพร้อมเส้นอื่นได้ (การบันทึกค่าของ LINE อยู่ในขั้น 4.7)
+
+| ขั้น | ทำ | ตรวจ |
+| --- | --- | --- |
+| 16.1 | เปิด `/settings` | `settings-tab-panel` `data-tab="ai"`, แท็บห้าแท็บตามลำดับ `ai`, `knowledge`, `line`, `usage`, `status` ชื่อตาม `settings.tabs.*`, มีการ์ด `settings-section-ai` และ `settings-section-ai-persona` และไม่มี `settings-section-line` (mount เฉพาะแท็บที่เปิด) |
+| 16.2 | กดแท็บ `line` | URL เป็น `/settings?tab=line` และ panel มี `settings-section-line`, `settings-section-rich-menu`, `settings-section-welcome` |
+| 16.3 | focus แท็บ `line` กด ArrowRight, End, ArrowRight, ArrowLeft | focus และแท็บที่เปิดไป `usage`, `status`, วนไป `ai` แล้วกลับ `status` |
+| 16.4 | ย้อนกลับ ย้อนกลับ ไปข้างหน้า แล้วกดแท็บ `knowledge` และโหลดหน้าใหม่ | แท็บตามประวัติ, หลังโหลดใหม่ยังเป็น `knowledge` มีการ์ด `settings-section-kb` และ `settings-section-guard` และข้อความ `settings.ai.answerMode` มีครั้งเดียว |
+| 16.5 | เปิด `/settings?tab=nope` | เปิด `ai` |
+| 16.6 | วัดความกว้างของ document และ `expectNoA11yViolations` | ไม่เลื่อนแนวนอน ไม่มี violation |
+| 16.7 | (test แยก) `page.route` เปลี่ยนคำตอบของ `GET /api/settings` ให้ `line.configured` false แล้วเปิด `/settings` | เปิดแท็บ `line` URL ไม่เปลี่ยน, `line-setup-steps` มองเห็น, สามช่องเปิดและว่างโดยไม่มีปุ่มดินสอ, `line-save` disabled จนพิมพ์ค่า และ `/settings?tab=usage` ยังเปิด `usage` |
+| 16.8 | (test แยก) เปิด `/settings?tab=line` | `line-webhook-url` เป็น `readonly`, `line-channel-id` เป็น `STUB_CHANNEL_ID`, สองช่องลับ disabled แสดง `settings.line.savedMask`, `line-channel-secret-edit` ชื่อ `settings.line.edit`, `line-save` disabled |
+| 16.9 | กด `line-channel-secret-edit` แล้วพิมพ์ | ช่องเปิด ว่าง มี focus เป็น `type="password"` ปุ่มชื่อ `settings.line.cancelEdit` และ `line-save` enabled เมื่อมีค่า |
+| 16.10 | กดปุ่มเดิม (ยกเลิก) | ช่องกลับเป็น disabled แสดง mask และ `line-save` disabled |
+| 16.11 | (test แยก) เปิด `/settings?tab=ai` | `settings-ai-name-save` มองเห็น disabled `data-dirty="false"` |
+| 16.12 | พิมพ์ต่อท้ายชื่อ | ปุ่ม enabled `data-dirty="true"` และกล่องของ `settings-ai-name` ไม่เปลี่ยนตำแหน่งหรือขนาด |
+| 16.13 | พิมพ์ค่าที่บันทึกกลับ | ปุ่ม disabled อีกครั้ง และ `settings-budget-save`, `settings-instructions-save` มองเห็นแบบ disabled |
 
 ### เส้นที่ 13: ข้อความเสียงขาเข้า
 

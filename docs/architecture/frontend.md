@@ -22,8 +22,8 @@
 | หน้า | เนื้อหา |
 | --- | --- |
 | หน้ายินดีต้อนรับ | แสดงเมื่อยังไม่มี cookie ของรหัสเข้าใช้ ดู [access-gate](../specs/access-gate.md) |
-| แชท | รายชื่อลูกค้า, ห้องแชท, แผงข้อมูลลูกค้า ดู [webchat-inbox](../specs/webchat-inbox.md) |
-| ตั้งค่า | AI ตอบแทน, ขอบเขตหัวข้อ, LINE Official Account, คลังความรู้, ค่าใช้จ่าย AI, สถานะระบบ ดู [admin-backoffice](../specs/admin-backoffice.md) |
+| แชท | รายชื่อผู้ใช้, ห้องแชท, แผงข้อมูลผู้ใช้ ดู [webchat-inbox](../specs/webchat-inbox.md) |
+| ตั้งค่า | ห้าแท็บ: AI, ความรู้และขอบเขต, LINE, ค่าใช้จ่าย, สถานะระบบ (`?tab=`) ดู [admin-backoffice](../specs/admin-backoffice.md) และ [ui-screens ข้อ 9.2](../specs/ui-screens.md#92-โครงร่วม) |
 
 ทุกหน้าหลังเข้าระบบมีแถบเมนูซ้ายที่พับได้: แชท (พร้อมจำนวนยังไม่อ่าน), ตั้งค่า, ออกจากระบบ และปุ่มพับเมนู
 
@@ -33,7 +33,7 @@
 - 720 ถึง 1040px: ซ่อนแผงข้อมูล
 - แคบกว่า 720px: เมนูเป็นแถบด้านบน และแสดงรายชื่อหรือห้องแชททีละอย่าง
 
-URL บอกว่าเปิดแชทของลูกค้าคนไหน จึง refresh แล้วอยู่ที่เดิม
+URL บอกว่าเปิดแชทของผู้ใช้คนไหน จึง refresh แล้วอยู่ที่เดิม
 
 โครงหน้าสูงเท่าหน้าต่างพอดี document ไม่เลื่อน เฉพาะคอลัมน์ด้านใน (รายชื่อ แชท แผงข้อมูล คอลัมน์ตั้งค่า) เลื่อนเอง ([ui-screens ข้อ 1.4](../specs/ui-screens.md#14-ช่วงความกว้างจอ))
 
@@ -50,7 +50,7 @@ src/features/
     inbox.send.logic.ts             การส่งแบบ optimistic และการรวมหน้าของแชท (inbox.hooks.ts และ thread ใช้)
     inbox.hooks.ts                  hook ที่มากกว่าหนึ่งพื้นที่ใช้: useContacts, useSendMessage, useNow
     inbox.constants.ts              ข้อความบนหน้าจอและค่าคงที่
-    list/                           รายชื่อลูกค้า
+    list/                           รายชื่อผู้ใช้
       ContactList.tsx  ContactSearch.tsx  ContactListTabs.tsx  ContactRow.tsx  ContactListSkeleton.tsx
       inbox.list.logic.ts
     thread/                         ห้องแชท แผงข้อมูล และ lightbox

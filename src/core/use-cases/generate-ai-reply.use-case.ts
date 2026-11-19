@@ -271,7 +271,11 @@ export const makeGenerateAiReply: (
     const fresh = await recheckBeforeSend(c.id, d);
     if (fresh === null) return { kind: 'cancelled' };
     const { s2, c2 } = fresh;
-    const message = await insertAiText(c.id, guardRefusalText(s2.aiPoliteParticle), trace);
+    const message = await insertAiText(
+      c.id,
+      guardRefusalText(s2.aiPoliteParticle, s2.guardTopics),
+      trace,
+    );
     await messages.insertEvent({
       id: ids.messageId(),
       contactId: c.id,

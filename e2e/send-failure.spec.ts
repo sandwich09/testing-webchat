@@ -18,7 +18,7 @@ test('journey 7: a failed send shows the error and the retry sends it with the s
   request,
 }) => {
   const suffix = uniqueSuffix();
-  const name = `ลูกค้าส่งไม่สำเร็จ ${suffix}`;
+  const name = `ผู้ใช้ส่งไม่สำเร็จ ${suffix}`;
 
   // 7.1: the reply token is refused by the stub, so every answer goes out as a push.
   const v = await createContactWithMessage(request, {
