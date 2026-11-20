@@ -167,10 +167,20 @@ footer.site{border-top:1px solid var(--border);font-size:13.5px;color:var(--mute
 @media(prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
 .refs{font-size:.875rem;color:var(--muted-foreground)}
 .tbl td:first-child code{white-space:nowrap}
-.card.go{background:color-mix(in srgb,var(--primary) 8%,var(--background));box-shadow:0 0 0 1px color-mix(in srgb,var(--primary) 30%,transparent);cursor:pointer;transition:background .15s}
-.card.go:hover{background:color-mix(in srgb,var(--primary) 15%,var(--background));box-shadow:0 0 0 1px var(--primary)}
-.card.go b{font-weight:600}
-.card.go em{font-style:normal;font-size:13.5px;font-weight:600;color:var(--primary);margin-top:8px;text-decoration:underline;text-underline-offset:3px}
+.card.go{position:relative;gap:12px;padding:14px;background:var(--card);cursor:pointer;box-shadow:0 0 0 1px color-mix(in srgb,var(--foreground) 10%,transparent),0 2px 4px rgba(0,0,0,.05),0 8px 20px -8px rgba(0,0,0,.16);transition:box-shadow .15s,transform .15s}
+.card.go:hover{transform:translateY(-2px);box-shadow:0 0 0 1px var(--primary),0 4px 8px rgba(0,0,0,.05),0 14px 28px -10px color-mix(in srgb,var(--primary) 40%,transparent)}
+.card.go:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.card.go .ic{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;background:color-mix(in srgb,var(--primary) 10%,var(--background));color:var(--primary)}
+.card.go .tx{display:flex;flex-direction:column;gap:2px;min-width:0}
+.card.go .tx b{font-weight:600;color:var(--foreground)}
+.card.go .tx span{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card.go .go-ic{position:absolute;top:14px;right:14px;color:var(--muted-fg);transition:color .15s,transform .15s}
+.card.go:hover .go-ic{color:var(--primary);transform:translate(1px,-1px)}
+.card.go svg{display:block}
+.stepgo{display:inline-grid;place-items:center;width:26px;height:26px;margin-left:6px;vertical-align:-6px;padding:0;border:0;border-radius:8px;cursor:pointer;background:color-mix(in srgb,var(--primary) 10%,var(--background));color:var(--primary);transition:background .15s}
+.stepgo:hover{background:color-mix(in srgb,var(--primary) 20%,var(--background))}
+.stepgo:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.stepgo svg{display:block}
 </style>
 
 <div class="hdr">
@@ -204,14 +214,14 @@ footer.site{border-top:1px solid var(--border);font-size:13.5px;color:var(--mute
 <article id="p-quickstart" data-tab="Get started" data-cat="" data-noeyebrow data-title="Try it">
   <p class="lead">ลองทดสอบง่ายๆ ตามขั้นตอน</p>
   <div class="cards">
-    <button class="card go" type="button" data-line-open><b>LINE OA</b><span>@900pclxg</span><em>ดู QR code</em></button>
-    <a class="card go" href="https://testing-webchat-nu.vercel.app/" target="_blank" rel="noopener"><b>Webchat</b><span>testing-webchat-nu.vercel.app</span><em>เปิด Webchat</em></a>
-    <a class="card go" href="https://github.com/sandwich09/testing-webchat" target="_blank" rel="noopener"><b>GitHub</b><span>sandwich09/testing-webchat</span><em>เปิด repo</em></a>
+    <button class="card go" type="button" data-line-open aria-label="LINE OA ดู QR code"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg></span><span class="tx"><b>LINE OA</b><span>@900pclxg</span></span><span class="go-ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20v.01M17 20h4v-3"/></svg></span></button>
+    <a class="card go" href="https://testing-webchat-nu.vercel.app/" target="_blank" rel="noopener"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 9h20"/><path d="M6 6.5h.01M9 6.5h.01"/></svg></span><span class="tx"><b>Webchat</b><span>testing-webchat-nu.vercel.app</span></span><span class="go-ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></span></a>
+    <a class="card go" href="https://github.com/sandwich09/testing-webchat" target="_blank" rel="noopener"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></svg></span><span class="tx"><b>GitHub</b><span>sandwich09/testing-webchat</span></span><span class="go-ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></span></a>
   </div>
   <p>Webchat มีหน้าใส่รหัสกั้นไว้ รหัสผมแนบไปในอีเมลฉบับเดียวกับลิงก์หน้านี้ ไม่ได้เก็บไว้ใน repo</p>
   <ol class="stepper">
-    <li><b>เพิ่มเพื่อน LINE OA จากมือถือ</b><span>จะมีการ์ดต้อนรับเด้งมาพร้อมปุ่มสามปุ่ม</span></li>
-    <li><b>เปิด Webchat แล้วใส่รหัส</b><span>ชื่อกับรูปโปรไฟล์ LINE ของคุณจะโผล่ในรายชื่อทางซ้าย</span></li>
+    <li><b>เพิ่มเพื่อน LINE OA จากมือถือ <button type="button" class="stepgo" data-line-open aria-label="ดู QR code ของ LINE OA" title="ดู QR code"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20v.01M17 20h4v-3"/></svg></button></b><span>จะมีการ์ดต้อนรับเด้งมาพร้อมปุ่มสามปุ่ม</span></li>
+    <li><b>เปิด Webchat แล้วใส่รหัส <a class="stepgo" href="https://testing-webchat-nu.vercel.app/" target="_blank" rel="noopener" aria-label="เปิด Webchat ในแท็บใหม่" title="เปิด Webchat"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a></b><span>ชื่อกับรูปโปรไฟล์ LINE ของคุณจะโผล่ในรายชื่อทางซ้าย</span></li>
     <li><b>พิมพ์อะไรก็ได้จาก LINE</b><span>สองสามวินาทีข้อความจะขึ้นใน Webchat ส่งรูป สติกเกอร์ หรืออัดเสียงมาด้วยก็ได้</span></li>
     <li><b>กดที่ชื่อตัวเองใน Webchat แล้วตอบกลับ</b><span>ข้อความจะไปขึ้นใน LINE ถ้าอยากส่งรูปหรือวิดีโอ กดไอคอนรูปภาพข้างช่องพิมพ์</span></li>
     <li><b>กลับไปที่ LINE แล้วกด "คุยกับ AI"</b><span>ลองถามราคาเมนูกาแฟดู ผมใส่เมนูร้านกาแฟสมมติไว้ในคลังความรู้ จากนั้นลองถามเรื่องที่ไม่เกี่ยว จะเห็นว่ามันไม่เดา</span></li>
