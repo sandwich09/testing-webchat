@@ -167,6 +167,10 @@ footer.site{border-top:1px solid var(--border);font-size:13.5px;color:var(--mute
 @media(prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
 .refs{font-size:.875rem;color:var(--muted-foreground)}
 .tbl td:first-child code{white-space:nowrap}
+.card.go{background:color-mix(in srgb,var(--primary) 8%,var(--background));box-shadow:0 0 0 1px color-mix(in srgb,var(--primary) 30%,transparent);cursor:pointer;transition:background .15s}
+.card.go:hover{background:color-mix(in srgb,var(--primary) 15%,var(--background));box-shadow:0 0 0 1px var(--primary)}
+.card.go b{font-weight:600}
+.card.go em{font-style:normal;font-size:13.5px;font-weight:600;color:var(--primary);margin-top:8px;text-decoration:underline;text-underline-offset:3px}
 </style>
 
 <div class="hdr">
@@ -200,9 +204,9 @@ footer.site{border-top:1px solid var(--border);font-size:13.5px;color:var(--mute
 <article id="p-quickstart" data-tab="Get started" data-cat="" data-noeyebrow data-title="Try it">
   <p class="lead">ลองทดสอบง่ายๆ ตามขั้นตอน</p>
   <div class="cards">
-    <button class="card" type="button" data-line-open><b>LINE OA</b><span>@900pclxg</span></button>
-    <a class="card" href="https://testing-webchat-nu.vercel.app/"><b>Webchat</b><span>testing-webchat-nu.vercel.app</span></a>
-    <a class="card" href="https://github.com/sandwich09/testing-webchat"><b>GitHub</b><span>sandwich09/testing-webchat</span></a>
+    <button class="card go" type="button" data-line-open><b>LINE OA</b><span>@900pclxg</span><em>ดู QR code</em></button>
+    <a class="card go" href="https://testing-webchat-nu.vercel.app/" target="_blank" rel="noopener"><b>Webchat</b><span>testing-webchat-nu.vercel.app</span><em>เปิด Webchat</em></a>
+    <a class="card go" href="https://github.com/sandwich09/testing-webchat" target="_blank" rel="noopener"><b>GitHub</b><span>sandwich09/testing-webchat</span><em>เปิด repo</em></a>
   </div>
   <p>Webchat มีหน้าใส่รหัสกั้นไว้ รหัสผมแนบไปในอีเมลฉบับเดียวกับลิงก์หน้านี้ ไม่ได้เก็บไว้ใน repo</p>
   <ol class="stepper">
