@@ -6,3 +6,4 @@ test-results/
 src/adapters/prisma/generated/
 prisma/migrations/
 **/*.md
+report/

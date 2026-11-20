@@ -11,6 +11,7 @@ Built for the Robolingo webchat assignment. The screens are in Thai; the design 
 | LINE OA to test with | https://lin.ee/TcT6CYw |
 | Webchat | https://testing-webchat-nu.vercel.app/ |
 | GitHub repository | https://github.com/sandwich09/testing-webchat |
+| Report site (walkthrough, architecture, test results) | https://sandwich09.github.io/testing-webchat/ |
 
 The access code of the production webchat is not in this repository; it is sent to the reviewer separately.
 
